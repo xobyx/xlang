@@ -23,8 +23,8 @@
 }
 type * new_type_stack(type_stack* n)
  {
-        type* f= (type*)malloc(sizeof(type));
-		memset(f, 0, sizeof(type));
+        type* f= (type*)calloc(1,sizeof(type));
+		//f->id=n->size;
 		int_type(f);
 		type_stack_push(n,f);
 		return f;

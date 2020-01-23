@@ -214,15 +214,15 @@ typedef struct var
 {
 
 
-
+	
 	char* name ;
 	struct type* var_type;
 
 	union
 	{
 		int  a;
-		void* value; 
-		struct type * value_type ;
+		void* values; 
+		struct type_instance * value_type ;
 		int * value_int ;
 		long * value_long ;
 		float * value_float ;
@@ -274,16 +274,17 @@ typedef struct func_stack
 }func_stack;
 
 
-enum w_type { sup=0, child };
+enum w_type { super=0, child };
 
 typedef struct type
 {
 	
-
-
-	char* name;
 	struct var_stack propertys;
 	func_stack functions;
+
+	int id;
+	char* name;
+	
 	struct type* base;
 	struct type* stack_next;
 	var* context;
@@ -292,6 +293,18 @@ typedef struct type
 	
 }type;
 
+typedef struct type_instance
+{
+	
+
+	
+	
+	struct var_stack propertys;
+	func_stack functions;
+
+
+	
+}type_instance;
 
 #define type_ btype.value
 #define flag_ fflag.value

@@ -44,14 +44,14 @@ func xd = {
 };
 type_stack akak = {.top=T_NEW, .root=T_LONG, .size=8};
 type SIMPLE_TYPE[8] = {
-	{.name="long", .propertys={0}, .functions={0, 0, 0}, .base=0, .context=0, .stack_next=T_STRING},
-	{.name="string", .propertys={0}, .functions={.root=&x, .top=&xd, 2}, .base=0, .context=0, .stack_next=T_CHAR},
-	{.name="char", .propertys={0}, .functions={0, 0, 0}, .base=0, .context=0, .stack_next=T_INT},
-	{.name="int", .propertys={0}, .functions={0, 0, 0}, .base=0, .context=0, .stack_next=T_BOOL},
-	{.name="bool", .propertys={0}, .functions={0, 0, 0}, .base=0, .context=0, .stack_next=T_FLOAT},
-	{.name="float", .propertys={0}, .functions={0, 0, 0}, .base=0, .context=0, .stack_next=T_ARRAY},
-	{.name="_array", .propertys={0}, .functions={0, 0, 0}, .base=0, .context=0, .stack_next=T_NEW},
-	{.name="new", .propertys={0}, .functions={0, 0, 0}, .base=0, .context=0, .stack_next=0},
+	{.id=0,.name="long", .propertys={0}, .functions={0, 0, 0}, .base=0, .context=0, .stack_next=T_STRING},
+	{.id=1,.name="string", .propertys={0}, .functions={.root=&x, .top=&xd, 2}, .base=0, .context=0, .stack_next=T_CHAR},
+	{.id=2,.name="char", .propertys={0}, .functions={0, 0, 0}, .base=0, .context=0, .stack_next=T_INT},
+	{.id=3,.name="int", .propertys={0}, .functions={0, 0, 0}, .base=0, .context=0, .stack_next=T_BOOL},
+	{.id=4,.name="bool", .propertys={0}, .functions={0, 0, 0}, .base=0, .context=0, .stack_next=T_FLOAT},
+	{.id=5,.name="float", .propertys={0}, .functions={0, 0, 0}, .base=0, .context=0, .stack_next=T_ARRAY},
+	{.id=6,.name="_array", .propertys={0}, .functions={0, 0, 0}, .base=0, .context=0, .stack_next=T_NEW},
+	{.id=7,.name="new", .propertys={0}, .functions={0, 0, 0}, .base=0, .context=0, .stack_next=0},
 
 
 };
@@ -260,29 +260,61 @@ node* getLastType(node* in, const node_type b)
 }
 
 
+void do_work1(var* calc, var* me, int index)
+{
+	if (strcmp(me->var_type->name, "int") == 0)
+	{
+		me->value_int[index] = *calc->value_int;
+	}
+	else if (strcmp(me->var_type->name, "float") == 0)
+	{
+		me->value_float[index] = *calc->value_float;
+	}
+	else if (strcmp(me->var_type->name, "long") == 0)
+	{
+		me->value_long[index] = *calc->value_long;
+	}
+	else if (strcmp(me->var_type->name, "char") == 0)
+	{
+		me->value_char_ptr[index] = *calc->value_char_ptr;
+	}
+	else if (strcmp(me->var_type->name, "bool") == 0)
+	{
+		me->value_int[index] = *calc->value_int;
+	}
+	else if (strcmp(me->var_type->name, "string") == 0)
+	{
+		me->val_str_ptr[index] = *calc->val_str_ptr;
+	}
+	else
+	{
+		me->value_type[index] = *calc->value_type;
+	}
+}
+
 void set_value(var* context, func* temp, node** cx)
 {
 	bool array_copy = false;
-	if ((*cx)->next->type_ == equles || ((*cx)->next->type_ == s_index && getFirstType(*cx, s_index_c)->next->type_ ==
-		equles))
+	if ((*cx)->next->type_ == equles ||
+		(*cx)->next->type_ == s_index && getFirstType(*cx, s_index_c)->next->type_ == equles)
 	{
-		var* res = new_temp_var(NULL);
+		var* calc = new_temp_var(NULL);
 		var* me = NULL;
 
 		int index = 0;
 
 		if (context != NULL)
 		{
-			me = fget_var_by_name(&((type*)context->value)->propertys, (char*)(*cx)->value);
+			me = fget_var_by_name(&((type*)context->value)->propertys,(*cx)->value_char_ptr);
 		}
 		else if (temp != NULL)
 		{
-			me = fget_var_by_name(&temp->fun_p, (char*)(*cx)->value);
+			me = fget_var_by_name(&temp->fun_p, (*cx)->value_char_ptr);
 		}
 
 		if (me == NULL)
 		{
-			me = get_var_by_name((char*)(*cx)->value);
+			me = get_var_by_name((*cx)->value_char_ptr);
 		}
 
 
@@ -300,18 +332,19 @@ void set_value(var* context, func* temp, node** cx)
 		}
 		else if (me->size > 1)
 		{
-			res->size = me->size;
+			calc->size = me->size;
 			array_copy = true;
 		}
+		
 		if ((*cx)->next->type_ == equles)
 		{
-			res->var_type = me->var_type;
+			calc->var_type = me->var_type;
 
 
 			//c = calculate(res, c->next->next, temp);
-			*cx = calculate((*cx)->next->next, temp, context, endl, NULL, res);
+			*cx = calculate((*cx)->next->next, temp, context, endl, NULL, calc);
 
-			if ((*cx) == NULL)
+			if (*cx == NULL)
 			{
 				return;
 			}
@@ -319,37 +352,10 @@ void set_value(var* context, func* temp, node** cx)
 		if (array_copy)
 		{
 			free(me->value);
-			me->value = res->value;
+			me->value = calc->value;
 			return;
 		}
-		if (strcmp(me->var_type->name, "int") == 0)
-		{
-			((int*)me->value)[index] = *(int*)res->value;
-		}
-		else if (strcmp(me->var_type->name, "float") == 0)
-		{
-			*((float*)me->value + index) = *(float*)res->value;
-		}
-		else if (strcmp(me->var_type->name, "long") == 0)
-		{
-			*((long*)me->value + index) = *(long*)res->value;
-		}
-		else if (strcmp(me->var_type->name, "char") == 0)
-		{
-			*((char*)me->value + index) = *(char*)res->value;
-		}
-		else if (strcmp(me->var_type->name, "bool") == 0)
-		{
-			*((int*)me->value + index) = *(int*)res->value;
-		}
-		else if (strcmp(me->var_type->name, "string") == 0)
-		{
-			*((char**)me->value + index) = *(char**)res->value;
-		}
-		else
-		{
-			*((type*)me->value + index) = *(type*)res->value;
-		}
+		do_work1(calc, me, index);
 		if ((*cx)->type_ != endl)
 		{
 			*cx = getFirstType(*cx, endl);
@@ -556,7 +562,9 @@ var* new_temp_var(type* typ)
 
 type* new_type()
 {
-	return new_type_stack(types);
+	type* local= new_type_stack(types);
+	local->id = types->size -1 ;
+	return local;
 }
 
 
