@@ -35,15 +35,15 @@ int eql(const char* n,const char* x);
 /*XLANG*/ bool static_flag_check2x(node_type* m);
 /*XLANG*/ node* static_flag_op2(node_type v,node* n, bool added);
 /*XLANG*/ node* getRoot(node* j);
-/*XLANG*/ type* copy_type_a(type* src, bool func_cpy);
-void copy_type(type* src,type* dstn ,bool func_cpy);
+
+void instance_type(type* src, bool func_cpy, void* dstn);
 node* getFirstType_with_value(node* in, node_type b, void* value);
 node* getFirstType(node* in, node_type b);
 node* getFirstType_backword_from(node* in, node_type b);
 node* getLastType(node* in, node_type b);
 void set_value(var* context, func* temp, node** cx);
 //void fprintf(func* temp);
-bool var_bool_value(var* m);
+
 
 
 var* new_var(char* name, type* vtype);

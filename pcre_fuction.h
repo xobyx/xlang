@@ -23,7 +23,7 @@ inline char** get_lines_array(char* subject)
 	int ovector[OVECCOUNT];
 	int subject_length = (int)strlen(subject);
 	int rc;
-	int i;
+
 	char* pattern = "^(.*)";//"^(.+)$";
 	re = pcre_compile(
 		pattern, /* the pattern */

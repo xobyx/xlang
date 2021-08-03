@@ -53,7 +53,7 @@ static const char one_c [] = {
 };
 typedef unsigned short i16;
 
-typedef enum node_type //: i16
+typedef enum node_type_enum //: i16
 {
 	itype = 0x0001,
 	keyword = 0x0002,
@@ -62,77 +62,47 @@ typedef enum node_type //: i16
 	operators_n = 0x0010,
 	equles = 0x0020,
 	endl = 0x0040,
-	s_index = 0x0080,
-	// }
-	parentheses1 = 0x0100,
-	// {
-	parentheses1c = 0x0200,
-	// ,
-	comma = 0x0400,
-	// []
-	s_index_c = 0x0800,
-	// (
-	parentheses4 = 0x1000,
-	//)
-	parentheses4c = 0x2000,
-	//.
-	dot = 0x4000,
-	
-	twodot = 0x8000,
-	//:
-	PARS = (parentheses1 | parentheses1c | parentheses4 | parentheses4c | s_index_c | s_index),
-	// )
-	/**
-	 * \brief not equles,
-	 */
-	HAVE_VAR_VALUE=value | var_name | keyword | itype | operators_n,
+	s_index = 0x0080,	
+	parentheses1 = 0x0100,//{	
+	parentheses1_c = 0x0200,	// ,
+	comma = 0x0400,	// []
+	s_index_c = 0x0800,	// (
+	parentheses4 = 0x1000,	//)
+	parentheses4_c = 0x2000,	//.
+	dot = 0x4000,	
+	twodot = 0x8000,	//:
+	pars = (parentheses1 | parentheses1_c | parentheses4 | parentheses4_c | s_index_c | s_index),	
+	have_var_value=value | var_name | keyword | itype | operators_n,
 	a=value | var_name,
-	NON_ONE_CHAR =0x000F,
+	non_one_char =0x000F,
 }node_type;
 
+static const char* fuk[]={0,0,0,0,0,0,0,0,0,0,"function_def","function_call","fucnction_parm","var_def","var_call","class_def","class_base_def"};
 
-inline const char* parse_obj_str(enum node_type p)
+
+typedef enum var_name_def
 {
-	switch (p)
-	{
-	case itype: return "itype";
-	case keyword: return "keyword";
-	case var_name: return "var_name";
-	case value: return "value";
-	case operators_n: return "operators_n";
-	case equles: return "equles";
-	case endl: return "endl";
-	case s_index: return "s_index";
-	case parentheses1: return "parentheses1";
-	case parentheses1c: return "parentheses1c";
-	case comma: return "comma";
-	case s_index_c: return "s_index_c";
-	case parentheses4: return "parentheses4";
-	case parentheses4c: return "parentheses4c";
-	case dot: return "dot";
-	case twodot: return "twodot";
-	case PARS: return "PARS";
-	case HAVE_VAR_VALUE: return "HAVE_VAR_VALUE";
-	case a: return "a";
-	case NON_ONE_CHAR: return "NON_ONE_CHAR";
-		/* etc... */
-	default: ;
-	}
-	return NULL;
-}
+function_def=10,//f
+function_call,//a
+fucnction_parm,//p
+var_def,//
+var_call,//
+class_def,//k
+class_base_def//x
 
+}var_name_def;
 
-typedef enum  f_type
+typedef enum  function_type
 {
 	f_main=0,
 	constr=1,
 	class_function=2
 }f_type;
 
-typedef union nType
+typedef union 
 {
 	i16 value;
-	enum node_type name;
+	enum node_type_enum name;
 
 	struct
 	{
@@ -153,8 +123,8 @@ typedef union nType
 		i16 dot:1; //(
 		i16 twodot:1; //(
 		//i16 mbool:1;
-	} nnType;
-}nType;
+	} node_type_bit;
+}node_type_raw;
 
 #define F 1
 
@@ -164,19 +134,21 @@ typedef struct node
 	
 
 	int id;
-	nType btype;
-	nType fflag;
+	node_type_raw btype;
+	node_type_raw fflag;
 	int line ;
 
 	struct node* parent;
 	struct  node* next;
+	int opt_type;
 
 	union
 	{
 		
-		void* value; 
+		void* value_raw; 
 		struct type * value_type ;
 		int * value_int ;
+		short value_short;
 		char * value_char_ptr;
 		char ** value_string;
 		int  _ptr_;
@@ -188,10 +160,11 @@ typedef struct node
 	struct node* stack_next;
 	//void* op; ///used in com if_helper///types in parse///functionn
 	struct node* ref_node; ///if __ {[( close;
+	struct node* root;
 	union
 	{
 		
-		void* opt; 
+		void* opt_raw; 
 		struct type * opt_type_ptr ;
 		int * opt_int_ptr ;
 		char * opt_char_ptr;
@@ -316,7 +289,7 @@ typedef struct type_instance
 	x.next=NULL;\
 	x.isFlag=false;
 
-#define tp btype.nnType
+#define tp btype.node_type_bit
 
 
 
@@ -413,6 +386,40 @@ enum key_word_enum2
 #define FCAST(PT,P,X)  P#PT(x)
 typedef struct fl {node_type wait_type;node* waiting_node;}fl;
 
+
+inline const char* parse_obj_str(struct node* nod)
+{
+	switch (nod->btype.name)
+	{
+	case itype: return "itype";
+	case keyword: return "keyword";
+	case var_name:
+	{
+		
+	return fuk[nod->_opt_ptr_];
+	}
+	case value: return "value";
+	case operators_n: return "operators_n";
+	case equles: return "equles";
+	case endl: return "endl";
+	case s_index: return "s_index";
+	case parentheses1: return "parentheses1";
+	case parentheses1_c: return "parentheses1c";
+	case comma: return "comma";
+	case s_index_c: return "s_index_c";
+	case parentheses4: return "parentheses4";
+	case parentheses4_c: return "parentheses4c";
+	case dot: return "dot";
+	case twodot: return "twodot";
+	case pars: return "PARS";
+	case have_var_value: return "HAVE_VAR_VALUE";
+	case a: return "a";
+	case non_one_char: return "NON_ONE_CHAR";
+		/* etc... */
+	default: ;
+	}
+	return NULL;
+}
 #ifdef __cplusplus
 } /* extern "C" */
 

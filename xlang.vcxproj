@@ -132,7 +132,7 @@
     <ClInclude Include="var_stack.h" />
   </ItemGroup>
   <ItemGroup>
-    <Library Include="..\..\pcre-win-build-master\build-VS2017\Debug\libpcre.lib" />
+    <Library Include="..\..\..\..\..\_old\Users\xobyx\Documents\Visual Studio 2012\Projects\pcre-win-build-master\build-VS2017\Debug\libpcre.lib" />
     <Library Include="pcre\libui.lib" />
   </ItemGroup>
   <ItemGroup>

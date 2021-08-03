@@ -1,5 +1,5 @@
 ﻿#include "debuge.h"
-
+#include "http.h"
 
 
 //extern node_type staic_flag[];
@@ -34,21 +34,25 @@ int _cprintf(Debug* x, byte color, const char* format, ...)
 
 void _do_work(Debug* x, node* temp)
 {
-	x->cprintf(x, 0x8F, "%s", parse_obj_str(temp->btype.name));
-	if (temp->opt != NULL && temp->type_ == value)
-		x->cprintf(x, 0x05, " (%s)", ((type*)temp->opt)->name);
+	x->cprintf(x, 0x8F, "%s", parse_obj_str(temp));
+	if ( temp->type_ == value && temp->opt_raw != NULL )
+		x->cprintf(x, 0x05, " (%s)", ((type*)temp->opt_raw)->name);
 	x->checknode(x, temp);
 	if (temp->ref_node != NULL)
 		x->addnode(x, temp);
-	if ((temp->btype.value) & (HAVE_VAR_VALUE))
+	if ((temp->btype.value) & (have_var_value))
 	{
 		printf(" [ ");
 		if (temp->type_ == itype)
-			x->cprintf(x, 0x02, "%s", ((type*)temp->value)->name);
+			x->cprintf(x, 0x02, "%s", ((type*)temp->value_raw)->name);
+		if (temp->type_ == var_name)
+		{
+			x->cprintf(x, 0x02, "%s",temp->value_char_ptr);
+		}
 		else if (temp->type_ == keyword)
-			x->cprintf(x, 0x02, "%s", key_word[(int)temp->value]);
+			x->cprintf(x, 0x02, "%s", key_word[(int)temp->value_raw]);
 		else
-			x->cprintf(x, 0x02, "%s", temp->value != NULL ? (char*)temp->value : "NONE");
+			x->cprintf(x, 0x02, "%s", temp->value_raw != NULL ? (char*)temp->value_raw : "NONE");
 		printf(" ]");
 	}
 	x->cprintf(x, 0x04, temp->type_ == endl ? "\n" : " --> ");
@@ -127,7 +131,7 @@ void _addnode(Debug* x, node* y)
 			x->stack[i].color.bf.background = x->color_index;
 			x->stack[i].t = x->t++;
 			x->color_index++;
-			cprintf(x, x->stack[i].color.bf_color, " %d ", x->stack[i].t);
+			x->cprintf(x, x->stack[i].color.bf_color, " %d ", x->stack[i].t);
 			x->color_index = x->color_index > 15 ? 10 : x->color_index;
 
 			break;
@@ -142,7 +146,7 @@ void _checknode(Debug* x, node* y)
 		if (x->stack[i].m == y)
 		{
 			x->stack[i].m = NULL;
-			cprintf(x, x->stack[i].color.bf_color, "% d ", x->stack[i].t);
+			x->cprintf(x, x->stack[i].color.bf_color, "% d ", x->stack[i].t);
 			return;
 		}
 	}

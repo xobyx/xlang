@@ -27,13 +27,13 @@ typedef struct y
 	node* m;
 	short t;
 } y;
-
-typedef void (*print_line_debuge_)(struct Debug* x, node* bx, int line);
-typedef void (*do_work_)(struct Debug* x, node* temp);
-typedef void (*test_color_)(struct Debug* x);
-typedef int (*cprintf_)(struct Debug* x,byte color, const char* format,...);
-typedef void (*addnode_)(struct Debug* x, node* y);
-typedef void (*checknode_)(struct Debug* x, node* y);
+typedef struct Debug Debug;
+typedef void (*print_line_debuge_)(Debug* x, node* bx, int line);
+typedef void (*do_work_)(Debug* x, node* temp);
+typedef void (*test_color_)(Debug* x);
+typedef int (*cprintf_)(Debug* x,byte color, const char* format,...);
+typedef void (*addnode_)(Debug* x, node* y);
+typedef void (*checknode_)(Debug* x, node* y);
 
 typedef struct Debug
 {

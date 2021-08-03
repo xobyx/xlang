@@ -11,11 +11,11 @@
 }
  void int_node(node * n)
 {
-	n->value=NULL;
+	n->value_raw=NULL;
 	n->next =NULL;
 	n->parent =NULL;
-	n->value =NULL;
-	n->opt=NULL;
+	n->value_raw =NULL;
+	n->opt_raw=NULL;
 	n->stack_parent=NULL;
 	n->stack_next=NULL;
 	n->type_=0;
@@ -61,7 +61,7 @@
 		//if(bi->opt!=0)free(bi->opt);
 		if((bi->btype.value & a) !=0)
 		{
-			free(bi->value);
+			free(bi->value_raw);
 		}
 	    
 

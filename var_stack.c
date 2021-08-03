@@ -51,7 +51,7 @@ void var_clean_stack(var_stack* s)
 			{
 				free(*(bi->val_str_ptr+i));
 			}
-		free(bi->value);
+		free(bi->values);
 		free(bi);
 		s->size--;
 	}
@@ -65,6 +65,6 @@ void free_temp_var(var* bi)
 		{
 			free(*(bi->val_str_ptr+i));
 		}
-	free(bi->value);
+	free(bi->values);
 	free(bi);
 }

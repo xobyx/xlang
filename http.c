@@ -112,22 +112,22 @@ return getHttp(method,link ,size ,mHeaders);
 }
 void http(func* s)
 {
-char * met=     *(char**)s->fun_p.root->value;
-char * link=    *(char**)s->fun_p.root->stack_next->value;
-int  size=        *(int*)s->fun_p.root->stack_next->stack_next->value;
-char ** headers= (char**)s->fun_p.root->stack_next->stack_next->stack_next->value;
+char * met=     *(char**)s->fun_p.root->values;
+char * link=    *(char**)s->fun_p.root->stack_next->values;
+int  size=        *(int*)s->fun_p.root->stack_next->stack_next->values;
+char ** headers= (char**)s->fun_p.root->stack_next->stack_next->stack_next->values;
 
 char* buff= getHttp(met,link,size,headers);
 
-s->func_return.value=get_pptr_string(buff);
+s->func_return.val_str_ptr=get_pptr_string(buff);
 
 }
 
 
 type * get_type()
 {
-	type  a;
-	a.name="http";
+	type*  a;
+	a->name="http";
 	//a.functions.root= 
 	///func* function = add_function(&a.functions,":http", &a,4,http,0,0);
 	//function->function_type= f_type::constr;
@@ -137,7 +137,7 @@ type * get_type()
 	//////function->function_type= f_type::class_function;
 	
 	
-	return &a;
+	return a;
 
 }
 

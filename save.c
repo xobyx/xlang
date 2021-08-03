@@ -9,7 +9,7 @@ void s_compile_(node_stack* stack);
 void save_file(char* file, node_stack* a, unsigned int MD5_hash[4])
 {
 	node* top = a->root;
-	node_stack c;
+	
 
 	FILE* f = fopen(file, "wb");
 	if (!f) return;
@@ -25,8 +25,8 @@ void save_file(char* file, node_stack* a, unsigned int MD5_hash[4])
 
 		//int y = int(top);
 	//	fwrite(&y, 4, 1, f);////id
-		fwrite(&top->btype, sizeof(nType), 1, f);
-		fwrite(&top->fflag, sizeof(nType), 1, f);
+		fwrite(&top->btype, sizeof(node_type_raw), 1, f);
+		fwrite(&top->fflag, sizeof(node_type_raw), 1, f);
 		fwrite(&top->is_flagged, 1, 1, f);
 		fwrite(&top->line, 4, 1, f);
 		if (top->next != NULL)
@@ -49,10 +49,10 @@ void save_file(char* file, node_stack* a, unsigned int MD5_hash[4])
 		}
 
 		int msize = 0;
-		if (top->value != NULL)
+		if (top->value_raw != NULL)
 		{
 			
-			if ((top->btype.value & NON_ONE_CHAR) == 0)
+			if ((top->btype.value & non_one_char) == 0)
 				msize = 1;
 			else if(top->type_==keyword)
 			    msize=1;
@@ -60,22 +60,22 @@ void save_file(char* file, node_stack* a, unsigned int MD5_hash[4])
 				//if(top->btype.value ==index || top->btype.value==size)
 				//	msize=4;
 
-				msize = strlen((char*)top->value);
+				msize = strlen((char*)top->value_raw);
 
 			fwrite(&msize, 4, 1, f);
-			int yb=(int)top->value;
-			fwrite(top->type_==keyword?&yb:top->value, msize, 1, f);
+			int yb=(int)top->value_raw;
+			fwrite(top->type_==keyword?&yb:top->value_raw, msize, 1, f);
 		}
 		else
 		{
 			fwrite(&msize, 4, 1, f);
 		}
 		int r_size = 0;
-		if (top->opt != NULL)
+		if (top->opt_raw != NULL)
 		{
-			r_size = strlen((char*)top->opt);
+			r_size = strlen((char*)top->opt_raw);
 			fwrite(&r_size, 4, 1, f);
-			fwrite(top->opt, r_size, 1, f);
+			fwrite(top->opt_raw, r_size, 1, f);
 		}
 		else
 		{
@@ -112,8 +112,8 @@ void read_file_parse(FILE* f, node_stack* nodes)
 		int id = 0;
 		fread(&id, 4, 1, f);
 		top->id = id;
-		fread(&top->btype, sizeof(nType), 1, f);
-		fread(&top->fflag, sizeof(nType), 1, f);
+		fread(&top->btype, sizeof(node_type_raw), 1, f);
+		fread(&top->fflag, sizeof(node_type_raw), 1, f);
 		fread(&top->is_flagged, 1, 1, f);
 		fread(&top->line, 4, 1, f);
 
@@ -137,12 +137,12 @@ void read_file_parse(FILE* f, node_stack* nodes)
 			fread(m_value, msize, 1, f);
 			if (top->btype.value)//& (index|size))
 			{
-				top->value = (int*)m_value;
+				top->value_raw = (int*)m_value;
 			}
 			else if(top->type_==keyword)
-				top->value = m_value;
+				top->value_raw = m_value;
 			else
-				top->value = m_value;
+				top->value_raw = m_value;
 		}
 
 		int r_size = 0;
@@ -153,7 +153,7 @@ void read_file_parse(FILE* f, node_stack* nodes)
 
 			memset(r_buff, 0, r_size + 1);
 			fread(r_buff, r_size, 1, f);
-			top->opt = r_buff;
+			top->opt_raw = r_buff;
 		}
 
 		int ref_node=0;
@@ -237,7 +237,7 @@ void s_compile_(node_stack* stack)
 #endif
 
 
-		if(x->type_ != var_name || x->value == NULL || !eql((char*)x->value,"import", false))COMPILE_1_P(i);
+		if(x->type_ != var_name || x->value_raw == NULL || !eql((char*)x->value_raw,"import"))COMPILE_1_P(i);
 		
 	}
 }

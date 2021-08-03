@@ -222,7 +222,7 @@ void start_compile()
 	double time_taken = ((double)t2) / CLOCKS_PER_SEC; // in seconds
 
 	printf("\nstart_parse_lines took %f seconds to execute \n", time_taken);
-	get_auto_comp("xran");
+	
 #ifndef DEBUG_P
 	save_file(comp, nodes, calc_md5);  /////save
 
