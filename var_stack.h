@@ -5,7 +5,7 @@
  void var_stack_init(var_stack * S) ;
  void int_var(var * n);
 
-var * new_var_on_stack(var_stack* stack, char* name, type* vtype);
+var * new_var_on_stack(var_stack* stack, char* name, type_def* vtype);
  
  void var_stack_push(var_stack * s, var * el) ;
 

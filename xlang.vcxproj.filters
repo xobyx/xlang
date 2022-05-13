@@ -65,8 +65,7 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <Library Include="pcre\libui.lib" />
-    <Library Include="..\..\..\..\..\_old\Users\xobyx\Documents\Visual Studio 2012\Projects\pcre-win-build-master\build-VS2017\Debug\libpcre.lib" />
+    <Library Include="..\..\..\..\..\_old\Users\xobyx\Documents\Visual Studio 2012\Projects\pcre-win-build-master\build-VS2017\Debug\libpcre-static.lib" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="compile.c">

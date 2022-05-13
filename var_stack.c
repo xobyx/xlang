@@ -6,19 +6,19 @@ void var_stack_init(var_stack* s)
 	s->size = 1;
 	s->top = NULL;
 	s->root = NULL;
-	s->m_class = NULL;
+	s->stack_holder = NULL;
 }
 
 void int_var(var* n)
 {
 }
 
-var* new_var_on_stack(var_stack* stack, char* vname, type* vtype)
+var* new_var_on_stack(var_stack* stack, char* vname, type_def* vtype)
 {
 	var* f = (var*)malloc(sizeof(var));
 	memset(f, 0, sizeof(var));
 	f->name=vname;
-	f->var_type=vtype;
+	f->type_define=vtype;
 	f->size = 1;
 	//int_var(f);
 	var_stack_push(stack, f);
@@ -46,7 +46,7 @@ void var_clean_stack(var_stack* s)
 		x = bi->stack_next;
 		//if(bi->value!=0)free(bi->value);
 		//if(bi->opt!=0)free(bi->opt);
-		if (bi->var_type->name == T_STRING->name)
+		if (bi->type_define->type_name == T_STRING->type_name)
 			for (int i = 0; i < bi->size; i++)
 			{
 				free(*(bi->val_str_ptr+i));
@@ -60,7 +60,7 @@ void var_clean_stack(var_stack* s)
 void free_temp_var(var* bi)
 {
 	
-	if (bi->var_type->name == T_STRING->name)
+	if (bi->type_define->type_name == T_STRING->type_name)
 		for (int i = 0; i < bi->size; i++)
 		{
 			free(*(bi->val_str_ptr+i));

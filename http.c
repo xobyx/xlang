@@ -5,7 +5,7 @@
 
 #include <time.h>
 char headers[] =
-	"%s /%s HTTP/1.1\r\n\
+"%s /%s HTTP/1.1\r\n\
 	Host: %s\r\n\
 	Connection: keep-alive\r\n\
 	Cache-Control: max-age=0\r\n\
@@ -16,49 +16,49 @@ char headers[] =
 const struct URL* parseURL(char* link)
 {
 
-	 
-
-  int succ_parsing = 0; // Whether the parsing has been
-   // Page field of the uri if found
-
-  
- 
-  
-  
 
 
-		memset(IKK.ip, 0, 100);
-		memset(IKK.page, 0, 200);
-      
-      IKK.port = 80;
-      succ_parsing = 0;
-
-      // Set the proper tmp_source char*
-   
-
-      // Parsing the tmp_source char*
-      if (sscanf(link, "http://%99[^:]:%i/%199[^\n]", IKK.ip, &IKK.port, IKK.page) == 3) { succ_parsing = 1;}
-      else if (sscanf(link, "http://%99[^/]/%199[^\n]", IKK.ip, IKK.page) == 2) { succ_parsing = 1;}
-      else if (sscanf(link, "http://%99[^:]:%i[^\n]", IKK.ip, &IKK.port) == 2) { succ_parsing = 1;}
-      else if (sscanf(link, "http://%99[^\n]", IKK.ip) == 1) { succ_parsing = 1;}
-
-      // Properly attaching the ip+page to a host
-      if (succ_parsing) {
-		  return &IKK;
-    }
-	  
-	  return NULL;
+	int succ_parsing = 0; // Whether the parsing has been
+	 // Page field of the uri if found
 
 
-}	
 
-char* getHttp(char* method,char* link ,int size ,char** mHeaders)
+
+
+
+
+	memset(IKK.ip, 0, 100);
+	memset(IKK.page, 0, 200);
+
+	IKK.port = 80;
+	succ_parsing = 0;
+
+	// Set the proper tmp_source char*
+
+
+	// Parsing the tmp_source char*
+	if (sscanf(link, "http://%99[^:]:%i/%199[^\n]", IKK.ip, &IKK.port, IKK.page) == 3) { succ_parsing = 1; }
+	else if (sscanf(link, "http://%99[^/]/%199[^\n]", IKK.ip, IKK.page) == 2) { succ_parsing = 1; }
+	else if (sscanf(link, "http://%99[^:]:%i[^\n]", IKK.ip, &IKK.port) == 2) { succ_parsing = 1; }
+	else if (sscanf(link, "http://%99[^\n]", IKK.ip) == 1) { succ_parsing = 1; }
+
+	// Properly attaching the ip+page to a host
+	if (succ_parsing) {
+		return &IKK;
+	}
+
+	return NULL;
+
+
+}
+
+char* getHttp(char* method, char* link, int size, char** mHeaders)
 {
 	WSADATA wsaData;
-	WSAStartup(MAKEWORD(2,2), &wsaData);
-	char* resv =(char*)malloc(1000);
-	const struct URL* temp= parseURL(link);
-	if(temp==NULL)return NULL;
+	WSAStartup(MAKEWORD(2, 2), &wsaData);
+	char* resv = (char*)malloc(1000);
+	const struct URL* temp = parseURL(link);
+	if (temp == NULL)return NULL;
 
 	char header_buff[500];
 
@@ -73,24 +73,24 @@ char* getHttp(char* method,char* link ,int size ,char** mHeaders)
 
 	// get ready to connect
 	status = getaddrinfo(temp->ip, "80", &hints, &res);
-	if(res!=NULL)
+	if (res != NULL)
 	{
 
 
-		sprintf(header_buff,headers,method,temp->page,temp->ip);
+		sprintf(header_buff, headers, method, temp->page, temp->ip);
 
-		for(int i=0;i<size;i++)
+		for (int i = 0; i < size; i++)
 		{
-			strcat(header_buff,mHeaders[i]);
-			strcat(header_buff,"\r\n");
+			strcat(header_buff, mHeaders[i]);
+			strcat(header_buff, "\r\n");
 
 
 		}
-		strcat(header_buff,"\r\n");
+		strcat(header_buff, "\r\n");
 		SOCKET x = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-		int i1=connect(x,res->ai_addr,res->ai_addrlen);	
-		int i2=send(x,header_buff,strlen(header_buff),0);
-		int i3=recv(x,resv,10000-1,0);
+		int i1 = connect(x, res->ai_addr, res->ai_addrlen);
+		int i2 = send(x, header_buff, strlen(header_buff), 0);
+		int i3 = recv(x, resv, 10000 - 1, 0);
 
 		freeaddrinfo(res);
 
@@ -98,7 +98,7 @@ char* getHttp(char* method,char* link ,int size ,char** mHeaders)
 	}
 	else
 	{
-		
+
 
 	}
 	WSACleanup();
@@ -106,28 +106,30 @@ char* getHttp(char* method,char* link ,int size ,char** mHeaders)
 
 }
 
-char* Request(char* method,char* link ,int size ,char** mHeaders)
+char* Request(char* method, char* link, int size, char** mHeaders)
 {
-return getHttp(method,link ,size ,mHeaders);
+	return getHttp(method, link, size, mHeaders);
 }
-void http(func* s)
+void http(fcall* cs)
 {
-char * met=     *(char**)s->fun_p.root->values;
-char * link=    *(char**)s->fun_p.root->stack_next->values;
-int  size=        *(int*)s->fun_p.root->stack_next->stack_next->values;
-char ** headers= (char**)s->fun_p.root->stack_next->stack_next->stack_next->values;
+	int i = cs->parm_count_c;
 
-char* buff= getHttp(met,link,size,headers);
+	char * met = *cs->func_parmeters[cs->parm_count_c - i--].val_str_ptr;
+	char * link = *cs->func_parmeters[cs->parm_count_c - i--].val_str_ptr;
+	int  size = *cs->func_parmeters[cs->parm_count_c - i--].value_int;
+	char ** headers = cs->func_parmeters[cs->parm_count_c - i--].val_str_ptr;
 
-s->func_return.val_str_ptr=get_pptr_string(buff);
+	char* buff = getHttp(met, link, size, headers);
+
+	cs->_return.val_str_ptr = get_pptr_string(buff);
 
 }
 
 
-type * get_type()
+type_def * get_type()
 {
-	type*  a;
-	a->name="http";
+	type_def*  a;
+	a->type_name = "http";
 	//a.functions.root= 
 	///func* function = add_function(&a.functions,":http", &a,4,http,0,0);
 	//function->function_type= f_type::constr;
@@ -135,8 +137,8 @@ type * get_type()
 	////type* vs[]= {T_STRING,T_STRING,T_INT,T_ARRAY};
 	/////func* functionn = add_function(&a.functions,"Request", T_STRING,4,http,v,vs);
 	//////function->function_type= f_type::class_function;
-	
-	
+
+
 	return a;
 
 }

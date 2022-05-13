@@ -65,7 +65,7 @@ inline char** get_lines_array(char* subject)
 
 		rc = pcre_exec(
 			re, /* the compiled pattern */
-			NULL, /* no extra data - we didn't. study the pattern */
+			NULL, /* no extra data - we .type_idn't. study the pattern */
 			subject, /* the subject string */
 			subject_length, /* the length of the subject */
 			start_offset, /* starting offset in the subject */
@@ -188,7 +188,7 @@ find* isMatchF(char* pattern, char* subject, int flags)
 
 	rc = pcre_exec(
 		re, /* the compiled pattern */
-		NULL, /* no extra data - we didn't study the pattern */
+		NULL, /* no extra data - we .type_idn't study the pattern */
 		subject, /* the subject string */
 		subject_length, /* the length of the subject */
 		0, /* start at offset 0 in the subject */

@@ -15,12 +15,12 @@ __pragma(warning(disable: 4996));
 #define DEBUG_P 1
 //#include <stdlib.h>  
 //#include <crtdbg.h>
-#include "targetver.h"
+#define PCRE_STATIC 1
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "pcre/include/pcre.h"
+#include "pcre.h"
 #include "types.h"
 #include "stack.h"
 #include "var_stack.h"

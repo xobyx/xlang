@@ -7,7 +7,9 @@ __  __   ___   | |__    _   _  __  __
                          __/ |       
                         |___/        */
 #include "xlang_main.h"
+#if defined (_MSC_VER)
 #include <direct.h>
+#endif
 #include <time.h>
 clock_t t;
 //C:\Tests\t.xb
@@ -35,7 +37,20 @@ unsigned int calc_md5[4];
 unsigned int saved_md5[4];
 char* buff;
 char* comp;
-
+#ifdef __GNUC__||__MINGW64__
+#define errno_t int
+#define _chdir chdir
+int fopen_s(FILE **f, const char *name, const char *mode) {
+    int ret = 1;
+  //  assert(f);
+    *f = fopen(name, mode);
+    /* Can't be sure about 1-to-1 mapping of errno and MS' errno_t */
+    if (!*f)
+        ret = 0;
+    return ret;
+}
+#define gets_s(x,y) gets(x)
+#endif
 int GetDir(char* fullPath, char* dir)
 {
 	
@@ -101,6 +116,7 @@ void change_dir(char** argv)
 	memset(dir, 0, 1024);
 	GetDir(argv[1], dir);
 	_chdir(dir);
+
 	free(dir);
 }
 
@@ -188,7 +204,7 @@ int main(const int argc, char** argv)
 		fclose(cf);
 
 	t = clock() - t;
-	double time_taken = ((double)t) / CLOCKS_PER_SEC; // in seconds
+	const double time_taken = ((double)t) / CLOCKS_PER_SEC; // in seconds
 
 	printf("\ntook %f seconds to execute \n", time_taken);
 	printf("\nvar num: %d , temp var num: %d", varss->size, t_varss->size);
@@ -232,30 +248,39 @@ void start_compile()
 	//	free(buff);
 }
 
-void get_auto_comp(char* y, char** u)
+void get_auto_comp(char* input, char** sugg)
 {
 	//char* y =(char*)malloc(strlen(ys)+1);
 	//strset(y,0);
 	//strcpy(y,ys);
 	//char* u =(char*)malloc(sizeof(char)*124);
 	//memset(u,0,124);
-	if (y != NULL) 
+	if (input != NULL) 
 		for (var* i = varss->root; i != NULL; i = i->stack_next)
 		{
-			if (i->name != NULL && strstr(i->name, y) != 0)
+			if (i->name != NULL && strstr(i->name, input) != 0)
 			{
-				strcat(*u, "var:");
-				strcat(*u, i->name);
-				strcat(*u, "\n");
+				strcat(*sugg, "var:");
+				strcat(*sugg, i->name);
+				strcat(*sugg, "\n");
 			}
 		}
-	for (func* i = funcs->root; i != NULL; i = i->stack_next)
+	for (func_deftion* i = funcs->root; i != NULL; i = i->stack_next)
 	{
-		if (i->func_name != NULL && strstr(i->func_name, y) != 0)
+		if (i->func_name != NULL && strstr(i->func_name, input) != 0)
 		{
-			strcat(*u, "function:");
-			strcat(*u, i->func_name);
-			strcat(*u, "\n");
+			strcat(*sugg, "function:");
+			strcat(*sugg, i->func_name);
+			strcat(*sugg, "\n");
+		}
+	}
+	for (type_def* i = types->root; i != NULL; i = i->stack_next)
+	{
+		if (i->type_name != NULL && strstr(i->type_name, input) != 0)
+		{
+			strcat(*sugg, "type:");
+			strcat(*sugg, i->type_name);
+			strcat(*sugg, "\n");
 		}
 	}
 	//char * ux =(char*)malloc(strlen(u)+1);

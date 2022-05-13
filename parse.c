@@ -153,9 +153,9 @@ void parse_line(char* buff, node* n_node, const int line)
 	{
 		n_node->type_=dot;
 	}
-	if (n_node->tp.itype)
+	if (n_node->btype.node_type_bit.itype)
 	{
-		type* m_type = NULL;
+		type_def* m_type = NULL;
 		find* mfind = match("^(\\b\\w+)", buff);
 		if (mfind->isFind)
 			m_type = get_type_by_name(mfind->bn);
@@ -166,7 +166,7 @@ void parse_line(char* buff, node* n_node, const int line)
 			//d->opt= new int(1);
 
 			n_node->type_ = itype;
-			n_node->value_raw = m_type;
+			n_node->value_type = m_type;
 
 			
 			next->type_ = var_name | s_index;  // itype->var_name->(->itype->var_name) 
@@ -179,7 +179,7 @@ void parse_line(char* buff, node* n_node, const int line)
 				next->flag_ = parentheses4_c;
 			}
 
-			parse_line(buff + strlen(m_type->name), next, line);
+			parse_line(buff + strlen(m_type->type_name), next, line);
 			return;
 		}
 		else
@@ -189,8 +189,8 @@ void parse_line(char* buff, node* n_node, const int line)
 			//exit(-1);
 		}
 	}
-	n_node->tp.itype = 0;
-	if ((*buff == '[' && n_node->tp.s_index) || ( *buff == ']'&&n_node->tp.s_index_c))	
+	n_node->btype.node_type_bit.itype = 0;
+	if ((*buff == '[' && n_node->btype.node_type_bit.s_index) || ( *buff == ']'&&n_node->btype.node_type_bit.s_index_c))
 	{
 		if (*buff == '[')
 		{
@@ -250,7 +250,7 @@ void parse_line(char* buff, node* n_node, const int line)
 			return;
 		}
 	}
-	if (*buff == '{' && n_node->tp.parentheses1)
+	if (*buff == '{' && n_node->btype.node_type_bit.parentheses1)
 	{
 		
 			n_node->type_ = parentheses1;
@@ -284,17 +284,18 @@ void parse_line(char* buff, node* n_node, const int line)
 			return;
 		
 	}
-	if (*buff == '}' && n_node->tp.parentheses1c)
+	if (*buff == '}' && n_node->btype.node_type_bit.parentheses1c)
 	{
 		
 			
 			node * open= static_flag_op2(parentheses1_c,n_node, false);
+			n_node->ref_node=open;
 			n_node->type_ = parentheses1_c;
 			n_node->value_raw = getchar_x(*buff);
 
 			mbool = false;
 
-			next->type_ = endl | comma;
+			next->type_ = endl | comma | itype|  keyword|var_name;
 			next->flag_ = parentheses1/*,} */;
 			next->is_flagged = true;
 
@@ -302,7 +303,7 @@ void parse_line(char* buff, node* n_node, const int line)
 			return;
 		
 	}
-	if (*buff == ',' && n_node->tp.comma)
+	if (*buff == ',' && n_node->btype.node_type_bit.comma)
 	{
 		
 			n_node->type_ = comma;
@@ -316,7 +317,7 @@ void parse_line(char* buff, node* n_node, const int line)
 			return;
 		
 	}
-	if ((*buff == '(' && n_node->tp.parentheses4)|| (*buff == ')'&& n_node->tp.parentheses4c) )
+	if ((*buff == '(' && n_node->btype.node_type_bit.parentheses4)|| (*buff == ')'&& n_node->btype.node_type_bit.parentheses4c) )
 	{
 		if (*buff == '(')
 		{
@@ -349,7 +350,7 @@ void parse_line(char* buff, node* n_node, const int line)
 					//WHY
 					next->type_ = value | var_name | parentheses4_c;
 					next->flag_ = comma;
-					n_node->parent->_opt_ptr_ = function_call;//"a";//the type
+					n_node->parent->_opt_ptr_ = function_call;//changed form var call
 					n_node->_opt_ptr_ = function_call;//a
 				}
 			}
@@ -367,6 +368,7 @@ void parse_line(char* buff, node* n_node, const int line)
 			n_node->type_ = parentheses4_c;
 			
 			node* pp = static_flag_op2(parentheses4_c,n_node, false);
+			n_node->ref_node = pp;
 			n_node->value_raw = getchar_x(*buff);
 			//FIXME:
 			if (pp != NULL && pp->_opt_ptr_ == function_def)
@@ -399,7 +401,7 @@ void parse_line(char* buff, node* n_node, const int line)
 			return;
 		}
 	}
-	if (n_node->tp.keword)
+	if (n_node->btype.node_type_bit.keword)
 	{
 		int i=0;
 		for (i = 0; i < 10; i++)
@@ -421,19 +423,24 @@ void parse_line(char* buff, node* n_node, const int line)
 				{
 					if (i==_else_)
 					{
-						if (n_node->stack_parent->parent->type_ != parentheses1_c)
+						if ((n_node->parent!=NULL&&n_node->parent->type_ == parentheses1_c))
 						{
-							printf("ERROR: no if body");
-							exit(-1);
+                            n_node->ref_node=n_node->parent->ref_node->parent->ref_node->parent;
+						}
+						else if(n_node->stack_parent->parent->type_ == parentheses1_c)
+						{
+							n_node->ref_node = get_first_type_with_value(get_root(n_node->stack_parent->parent), keyword,(void*)_eif_);
+							if (n_node->ref_node == NULL)
+							{
+								n_node->ref_node = get_first_type_with_value(get_root(n_node->stack_parent->parent), keyword,(void*)_if_ );
+							}
+
 						}
 						else
 						{
-							n_node->ref_node = getFirstType_with_value(getRoot(n_node->stack_parent->parent), keyword,(void*)_eif_);
-							if (n_node->ref_node == NULL)
-							{
-								n_node->ref_node = getFirstType_with_value(getRoot(n_node->stack_parent->parent), keyword,(void*)_if_ );
-							}
-
+                            printf("ERROR: no if body");
+                            exit(-1);
+                        }
 
 							next->flag_ = var_name | value;
 							next->type_ = parentheses1;
@@ -442,7 +449,7 @@ void parse_line(char* buff, node* n_node, const int line)
 							next->is_flagged = true;
 							parse_line(buff + strlen(key_word[i]), next, line);
 							return;
-						}
+
 					}
 					if (i==_eif_)
 					{
@@ -452,10 +459,10 @@ void parse_line(char* buff, node* n_node, const int line)
 						}
 						else
 						{
-							n_node->ref_node = getFirstType_with_value(getRoot(n_node->stack_parent->parent), keyword,(void*)_eif_);
+							n_node->ref_node = get_first_type_with_value(get_root(n_node->stack_parent->parent), keyword,(void*)_eif_);
 							if (n_node->ref_node == NULL)
 							{
-								n_node->ref_node = getFirstType_with_value(getRoot(n_node->stack_parent->parent), keyword,(void*)_if_);
+								n_node->ref_node = get_first_type_with_value(get_root(n_node->stack_parent->parent), keyword,(void*)_if_);
 
 								//TODO:
 							}
@@ -514,7 +521,7 @@ void parse_line(char* buff, node* n_node, const int line)
 			}
 		}
 	}
-	if (n_node->tp.value)//if(d->type_==(var_name|value))
+	if (n_node->btype.node_type_bit.value)//if(d->type_==(var_name|value))
 	{
 		n_node->next = next;
 		next->parent = n_node;
@@ -621,9 +628,9 @@ void parse_line(char* buff, node* n_node, const int line)
 			}
 		}
 	}
-	n_node->tp.value = 0;
+	n_node->btype.node_type_bit.value = 0;
 	//TODO :if(d->type_==var_name|d->parent->type_==itype)
-	if (n_node->tp.var_name)
+	if (n_node->btype.node_type_bit.var_name)
 	{
 		//?([0-9|A-Z|a-z_]+[_0-9|A-Z|a-z]+)[ \n]
 		find* mfind = match("^(:?\\b\\w+)", buff);//var name
@@ -687,8 +694,8 @@ void parse_line(char* buff, node* n_node, const int line)
 			}
 
 
-			//if(d->parent->tp.size)equles|endl;
-			//if(d->parent->tp.comma)equles|endl;
+			//if(d->parent->btype.node_type_bit.size)equles|endl;
+			//if(d->parent->btype.node_type_bit.comma)equles|endl;
 
 			next->type_ = (equles | endl | operators_n | s_index |
 				parentheses4 | dot);
@@ -706,8 +713,8 @@ void parse_line(char* buff, node* n_node, const int line)
 			return;
 		}
 	}
-	n_node->tp.var_name = 0;
-	if (*buff=='.' && n_node->tp.dot)
+	n_node->btype.node_type_bit.var_name = 0;
+	if (*buff=='.' && n_node->btype.node_type_bit.dot)
 	{
 		n_node->type_ = dot;
 		next->type_ = var_name;
@@ -842,7 +849,9 @@ void pre_parse_line(char* buff, const int line)
 char* line[500] ={0};
 int i;
 char* diro;
-
+#ifdef  __GNUC__|| __MINGW64__
+#define strcpy_s(x,y,z) strcpy(x,z)
+#endif
 void start_parse_lines(char* buffe, bool active)
 {
 	size_t size1 = strlen(buffe) + 1;

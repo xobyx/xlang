@@ -175,6 +175,7 @@ void setup_ref(node_stack* stack)
 	{
 		if (n->parent != NULL)
 		{
+
 			n->parent = find_with_id_b(n,(int)n->parent, stack);
 			//	n->parent->next =n;
 		}

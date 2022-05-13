@@ -2,7 +2,7 @@
 #include "xlang_main.h"
 
 
-/*XLANG*/ type SIMPLE_TYPE[8];
+/*XLANG*/extern type_def SIMPLE_TYPE[];
 //#define T(O) get_type_by_name((char*)O)
 
 
@@ -14,8 +14,8 @@
 /*XLANG*/ char* get_filebuff(FILE* sf);
 
 
-
-
+extern fl staic_flag2[] ;
+extern int fi;
 
 //const static char* sbase_types_name [] = {"long","string","char","int","bool","float","_array","new"};
 #define T_LONG (SIMPLE_TYPE)
@@ -25,61 +25,64 @@
 #define T_BOOL (SIMPLE_TYPE+4)
 #define T_FLOAT (SIMPLE_TYPE+5)
 #define T_ARRAY (SIMPLE_TYPE+6)
-#define T_NEW  (SIMPLE_TYPE+7)
+#define T_OBJECT  (SIMPLE_TYPE+7)
+#define T_NEW_INC  (SIMPLE_TYPE+8)
 
-func_stack base_function;
+static func_stack base_function;
 
-/*XLANG*/ var* get_obj_var(node** nop, var* context, func** outp);
+/*XLANG*/ var* get_type_inc_obj_var(node** nop, var* context, func_deftion ** outp);
 int eql(const char* n,const char* x);
 
 /*XLANG*/ bool static_flag_check2x(node_type* m);
 /*XLANG*/ node* static_flag_op2(node_type v,node* n, bool added);
-/*XLANG*/ node* getRoot(node* j);
+/*XLANG*/ node* get_root(node* j);
 
-void instance_type(type* src, bool func_cpy, void* dstn);
-node* getFirstType_with_value(node* in, node_type b, void* value);
-node* getFirstType(node* in, node_type b);
-node* getFirstType_backword_from(node* in, node_type b);
-node* getLastType(node* in, node_type b);
-void set_value(var* context, func* temp, node** cx);
+void instance_type(type_def* src, void* dstn, int size);
+void copy_object(struct type_instance* src, void* dstn, int size);
+node* get_first_type_with_value(node* in, node_type b, void* value);
+node* get_first_type(node* in, node_type b);
+node* get_first_type_backword_from(node* in, node_type b);
+node* get_last_type(node* in, node_type b);
+void set_value(var* context, fcall* temp, node** cx);
 //void fprintf(func* temp);
 
 
 
-var* new_var(char* name, type* vtype);
-var* new_temp_var(type* typ);
-func* new_func();
-type* new_type();
-func * get_func_by_name_with_var(var * a,char* name);
-func * get_func_by_name(char* name);
+var* new_var(char* name, type_def* vtype);
+var* new_temp_var(type_def* typ);
+func_deftion* new_func();
+type_def* new_type();
+func_deftion * get_obj_function(var * a,char* name);
+func_deftion* get_func_by_name(char* name);
 ///XLANGC type* get_type_by_name(char* name);
 void install_default_functions();
 void install_default_types();
-void get_var_value(func* temp, node* c, var** m);
-func* copy_func(func* i);
-var * get_var_by_name(char* name);
-var * fget_var_by_name(var_stack* y,char* name);
-//var* sfget_var_by_name(var_stack* y, char* name,int* out);
-void* install_memory_with_type(type * tc,int s);
+
+fcall* create_fcall(func_deftion* i);
+var * get_globle_var_by_name(char* name);
+var * get_var_by_name_on_stack(char* name,var_stack* y);
+var* fget_var_by_name_fc(char* name,fcall* y);
+var* all_get_var_by_name(char* name, fcall * called_function, var* called_var);
+void* install_memory_with_type(type_def * tc,const int s);
 void* install_memory(var * n);
-node* calculate(node* m, func* funct, var* contxt, node_type stop, node* end, var* out);
-node* calculate4(var* ms, node* m, node_type z, func* km);
-node* calculate3(var* ms, node* m, func* km);
+node* calculate(node * cnode, fcall * calling_function, var * calling_object, node_type stop_in_type, node * stop_in_node, var * calc_result);
+node* calculate4(var* ms, node* m, node_type z, fcall* km);
+node* calculate3(var* ms, node* m, fcall* km);
 
 node* get_close_part(node* t);
 
 /*XLANG*/ char** get_pptr_string(char* t);
 fl* static_flag_check2();
-void call_func_in(func* d);
-void print(func* temp);
+void call_func_in(fcall* d);
+void print(fcall* temp);
 
-bool is_base_type(type* t);
+bool is_base_type(type_def* t);
 
 
-func* add_function_gloable(char* name, type* return_type, int pcount, const def_function fe, char** par_name,
-                           type** par_type);
-/*XLANG*/ func* add_function(func_stack* s, char* name, type* return_type, int pcount, const def_function fe, char** par_name,
-                   type** par_type);
+func_deftion* add_function_gloable(char* name, type_def* return_type, int pcount, const function_node fe, char** par_name,
+                           type_def** par_type);
+/*XLANG*/ func_deftion* add_function(func_stack* s, char* name, type_def* return_type, int pcount, const function_node fe, char** par_name,
+                   type_def** par_type);
 
 #define S(X, B) strcat(X,B)
 char* parse_obj_to_str(node_type t);

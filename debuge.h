@@ -1,6 +1,8 @@
 ﻿#pragma once
 #include "types.h"
+#if defined (_MSC_VER)
 #include <windows.h>
+#endif
 
 typedef struct parse_obj_dict
 {
@@ -37,9 +39,12 @@ typedef void (*checknode_)(Debug* x, node* y);
 
 typedef struct Debug
 {
+#if defined (_MSC_VER)
 	CONSOLE_SCREEN_BUFFER_INFO csbiInfo;
 	HANDLE hConsole;
 	WORD wOldColorAttrs;
+#endif
+
 
 
 	node* save;

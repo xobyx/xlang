@@ -14,4 +14,4 @@ struct URL
 	}static IKK;
 
 
-void http(func* s);
+void http(fcall * s);

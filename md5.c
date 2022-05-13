@@ -15,7 +15,7 @@ void md5(uint8_t *initial_msg, size_t initial_len) {
     // Message (to prepare)
     uint8_t *msg = NULL;
  
-    // Note: All variables are unsigned 32 bit and wrap modulo 2^32 when calculating
+    // Note: All variables are unsigned 32 bit and wrap modulo 2^32 when calc_resultulating
  
     // r specifies the per-round shift amounts
  
@@ -50,7 +50,7 @@ void md5(uint8_t *initial_msg, size_t initial_len) {
  
     // Pre-processing: adding a single 1 bit
     //append "1" bit to message    
-    /* Notice: the input bytes are considered as bits strings,
+    /* Notice: the input bytes are con.type_idered as bits strings,
        where the first bit is the most significant bit of the byte.[37] */
  
     // Pre-processing: padding with zeros

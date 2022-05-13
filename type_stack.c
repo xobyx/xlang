@@ -9,7 +9,7 @@
 	
 	
 }
- void int_type(type * n)
+ void int_type(type_def * n)
 {
 	
 	
@@ -21,16 +21,16 @@
 
 
 }
-type * new_type_stack(type_stack* n)
+type_def * new_type_stack(type_stack* n)
  {
-        type* f= (type*)calloc(1,sizeof(type));
-		//f->id=n->size;
+        type_def* f= (type_def*)calloc(1,sizeof(type_def));
+		//f-.type_id=n->size;
 		int_type(f);
 		type_stack_push(n,f);
 		return f;
 
  }
- void type_stack_push(type_stack * stk, type * el) {
+ void type_stack_push(type_stack * stk, type_def * el) {
     // Increment number of elements.
 	stk->size++;
 	if(stk->root==NULL) stk->root=el;
@@ -46,8 +46,8 @@ type * new_type_stack(type_stack* n)
 
  void type_clean_stack(type_stack* s)
  {
-	type*x=NULL;
-	for (type * bi = s->root;bi!=NULL;bi=x)
+	type_def*x=NULL;
+	for (type_def * bi = s->root;bi!=NULL;bi=x)
 	{
 		x=bi->stack_next;		
 		//if(bi->value!=0)free(bi->value);
