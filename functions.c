@@ -1524,6 +1524,7 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 					///FIXME: 
 					((type_instance*)memory)[i++] = name_var->value_type_instsance[in];
 				}
+				in=0; //reset index
 			}
 			else //v2 op != NULL
 			{

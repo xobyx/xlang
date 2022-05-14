@@ -1,7 +1,6 @@
 /Debug
-
 /Release
-
+/bin
 /pcre
 
 /.vscode
