@@ -130,11 +130,11 @@ find* isMatchF(char* pattern, char* subject, int flags)
 	pcre* re;
 	const char* error;
 
-	unsigned char* name_table;
+//	unsigned char* name_table;
 	int erroffset;
 	int find_all;
-	int namecount;
-	int name_entry_size;
+//	int namecount;
+//	int name_entry_size;
 	int ovector[OVECCOUNT];
 	int subject_length;
 	int rc, i;

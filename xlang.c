@@ -24,7 +24,7 @@ type_stack* types;
 func_stack* t_funcs;
 Debug * debuge;
 bool read_file = true;
-
+int print_parse_log =1;
 
 #define STR_VALUE(val) #val
 #define STR(name) STR_VALUE(name)

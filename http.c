@@ -24,27 +24,27 @@ const struct URL* parseURL(char* link)
 
 
 
+	struct URL* IKK = (struct URL*)malloc(sizeof(struct URL));
 
 
+	memset(IKK->ip, 0, 100);
+	memset(IKK->page, 0, 200);
 
-	memset(IKK.ip, 0, 100);
-	memset(IKK.page, 0, 200);
-
-	IKK.port = 80;
+	IKK->port = 80;
 	succ_parsing = 0;
 
 	// Set the proper tmp_source char*
 
 
 	// Parsing the tmp_source char*
-	if (sscanf(link, "http://%99[^:]:%i/%199[^\n]", IKK.ip, &IKK.port, IKK.page) == 3) { succ_parsing = 1; }
-	else if (sscanf(link, "http://%99[^/]/%199[^\n]", IKK.ip, IKK.page) == 2) { succ_parsing = 1; }
-	else if (sscanf(link, "http://%99[^:]:%i[^\n]", IKK.ip, &IKK.port) == 2) { succ_parsing = 1; }
-	else if (sscanf(link, "http://%99[^\n]", IKK.ip) == 1) { succ_parsing = 1; }
+	if (sscanf(link, "http://%99[^:]:%i/%199[^\n]", IKK->ip, &IKK->port, IKK->page) == 3) { succ_parsing = 1; }
+	else if (sscanf(link, "http://%99[^/]/%199[^\n]", IKK->ip, IKK->page) == 2) { succ_parsing = 1; }
+	else if (sscanf(link, "http://%99[^:]:%i[^\n]", IKK->ip, &IKK->port) == 2) { succ_parsing = 1; }
+	else if (sscanf(link, "http://%99[^\n]", IKK->ip) == 1) { succ_parsing = 1; }
 
 	// Properly attaching the ip+page to a host
 	if (succ_parsing) {
-		return &IKK;
+		return IKK;
 	}
 
 	return NULL;

@@ -54,3 +54,4 @@ extern func_stack* t_funcs;
 /*XLANG*/  void   get_auto_comp(char* y, char** u);
 	// TODO: reference additional headers your program requires here
 
+extern int print_parse_log;

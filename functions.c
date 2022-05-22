@@ -1630,7 +1630,7 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 		}
 		else if (mnode->type_ == operators_n || is_double_equle(mnode))
 		{
-			if (*(char*)mnode->value_raw == '+' && *(char*)mnode->next->value_raw == '+')
+			if (!is_double_equle(mnode) &&(*(char*)mnode->value_raw == '+' && *(char*)mnode->next->value_raw == '+'))
 			{
 				if (last_var_name != NULL)
 				{

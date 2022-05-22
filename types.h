@@ -152,7 +152,7 @@ typedef struct node
 		char * value_char_ptr;
 		char ** value_string;
 		int  _ptr_;
-		int value_keyword;
+		key_word_enum value_keyword;
 
 	};
 
@@ -316,13 +316,6 @@ typedef struct type_instance
 
 //F parse_obj
 
-enum key_word_enum2
-{
-	IF,
-	FOR,
-	WHILE,
-	DO
-};
 
 
 #define pgmVar(px) ((var*)(px)->parent->rev)

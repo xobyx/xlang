@@ -73,7 +73,7 @@ void save_file(char* file, node_stack* a, unsigned int MD5_hash[4])
 			}
 			else if(top->type_==value)
 			{
-				if(top->opt_type_ptr == T_INT ||top->opt_type_ptr == T_BOOL ||
+				/*if(top->opt_type_ptr == T_INT ||top->opt_type_ptr == T_BOOL ||
 				top->opt_type_ptr == T_FLOAT ||top->opt_type_ptr == T_LONG)
 				{
 				msize = 4;
@@ -85,7 +85,14 @@ void save_file(char* file, node_stack* a, unsigned int MD5_hash[4])
 				msize = strlen(top->value_char_ptr);
 				fwrite(&msize, 4, 1, f);
 				fwrite(top->value_char_ptr,msize, 1, f);
-				}
+				}*/
+				msize = strlen(top->value_char_ptr);
+				fwrite(&msize, 4, 1, f);
+				fwrite(top->value_char_ptr,msize, 1, f);
+
+
+				////value will not be type_instance [var_name] 
+
 
 
 			}
@@ -189,19 +196,31 @@ void read_file_parse(FILE* f, node_stack* nodes)
 		read=fread(&msize, 4, 1, f);
 		if (msize != 0)
 		{
-			byte * m_value = (byte*)malloc(msize + 1);
-			memset(m_value, 0, msize + 1);
+			
 
 
-			read=fread(&m_value, msize, 1, f);
-			if (top->btype.value)//& (index|size))
+			
+			if (top->type_==value||top->type_==var_name||top->type_==operators_n)//& (index|size))
 			{
-				top->value_raw = (int*)m_value;
+				byte * m_value = (byte*)malloc(msize + 1);
+				memset(m_value, 0, msize + 1);
+				read=fread(m_value, msize, 1, f);
+				top->value_raw = m_value;
 			}
 			else if(top->type_==keyword)
-				top->value_keyword =*(int*) m_value;
-			else
-				top->value_raw = m_value;
+			{
+				read=fread(&top->value_keyword, msize, 1, f);
+				
+			}
+			else if(top->type_==itype)
+			{
+				int type_id=0;
+				read=fread(&type_id, msize, 1, f);
+				top->value_type= SIMPLE_TYPE+ type_id;
+			
+			}
+			//else
+			//	top->value_raw = m_value;
 		}
 
 		int mopt;
