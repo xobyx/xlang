@@ -1,8 +1,8 @@
 #pragma once
 #include "xlang_main.h"
 
-static char* s_parm_name[4] = {"a","b","c","d"};
-static type_instance* s_parm_type[4] = {0};
+//static char* s_parm_name[4] = {"a","b","c","d"};
+//static type_instance* s_parm_type[4] = {0};
 
 char* getHttp(char* method,char* link ,int size ,char** mHeaders);
 struct URL
@@ -11,7 +11,7 @@ struct URL
         int port;
         char page[200];
 
-	}static IKK;
+	};
 
 
 void http(fcall * s);

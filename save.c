@@ -2,14 +2,13 @@
 
 
 void setup_ref(node_stack* stack);
-node* find_with_id_b(node * s,int m, node_stack* stack);
-node* find_with_id_f(node * s,int m, node_stack* stack);
+
 void s_compile_(node_stack* stack);
 
 void save_file(char* file, node_stack* a, unsigned int MD5_hash[4])
 {
 	node* top = a->root;
-	
+
 
 	FILE* f = fopen(file, "wb");
 	if (!f) return;
@@ -21,7 +20,8 @@ void save_file(char* file, node_stack* a, unsigned int MD5_hash[4])
 	{
 		//fwrite(top,sizeof(node),1,f);
 
-		fwrite(&r, 1, 1, f);
+		fwrite(&r, 1, 1, f);   // 0xff
+		fwrite(&top->id, 4, 1, f);
 
 		//int y = int(top);
 	//	fwrite(&y, 4, 1, f);////id
@@ -29,9 +29,10 @@ void save_file(char* file, node_stack* a, unsigned int MD5_hash[4])
 		fwrite(&top->fflag, sizeof(node_type_raw), 1, f);
 		fwrite(&top->is_flagged, 1, 1, f);
 		fwrite(&top->line, 4, 1, f);
+
 		if (top->next != NULL)
 		{
-			int u = (int)top->next;
+			int u = top->next->id;
 			fwrite(&u, 4, 1, f);
 		}
 		else
@@ -40,7 +41,7 @@ void save_file(char* file, node_stack* a, unsigned int MD5_hash[4])
 		}
 		if (top->parent != NULL)
 		{
-			int u = (int)top->parent;
+			int u = top->parent->id;
 			fwrite(&u, 4, 1, f);
 		}
 		else
@@ -49,42 +50,77 @@ void save_file(char* file, node_stack* a, unsigned int MD5_hash[4])
 		}
 
 		int msize = 0;
-		if (top->value_raw != NULL)
+		if (true)//top->value_raw != NULL)
 		{
-			
-			if ((top->btype.value & non_one_char) == 0)
-				msize = 1;
+			if(top->type_==operators_n)
+                       {
+                        msize=1;
+			fwrite(&msize, 4, 1, f);
+			fwrite(top->value_char_ptr, msize, 1, f);
+			}
 			else if(top->type_==keyword)
-			    msize=1;
+			{
+			msize=4;
+			fwrite(&msize, 4, 1, f);
+			fwrite(&top->value_keyword,msize, 1, f);
+			}
+			else if(top->type_==var_name)
+			{
+			msize = strlen((char*)top->value_raw);
+			fwrite(&msize, 4, 1, f);
+			fwrite(top->value_char_ptr,msize, 1, f);
+
+			}
+			else if(top->type_==value)
+			{
+				if(top->opt_type_ptr == T_INT ||top->opt_type_ptr == T_BOOL ||
+				top->opt_type_ptr == T_FLOAT ||top->opt_type_ptr == T_LONG)
+				{
+				msize = 4;
+				fwrite(&msize, 4, 1, f);
+				fwrite(top->value_int,msize, 1, f);
+				}
+				else if(top->opt_type_ptr == T_STRING)
+				{
+				msize = strlen(top->value_char_ptr);
+				fwrite(&msize, 4, 1, f);
+				fwrite(top->value_char_ptr,msize, 1, f);
+				}
+
+
+			}
+			else if(top->type_==itype)
+			{
+
+			msize = 4;
+			fwrite(&msize, 4, 1, f);
+			fwrite(&top->value_type->type_id,msize, 1, f);
+			}
 			else
-				//if(top->btype.value ==index || top->btype.value==size)
-				//	msize=4;
-
-				msize = strlen((char*)top->value_raw);
-
+			{
 			fwrite(&msize, 4, 1, f);
-			int yb=(int)top->value_raw;
-			fwrite(top->type_==keyword?&yb:top->value_raw, msize, 1, f);
+			}
+
 		}
-		else
-		{
-			fwrite(&msize, 4, 1, f);
-		}
+
 		int r_size = 0;
-		if (top->opt_raw != NULL)
+		//opt
+			//r_size = strlen((char*)top->opt_raw);
+		fwrite(&top->opt_type, 4, 1, f); // op_type
+		if(top->opt_type==1) //value
 		{
-			r_size = strlen((char*)top->opt_raw);
-			fwrite(&r_size, 4, 1, f);
-			fwrite(top->opt_raw, r_size, 1, f);
+
+		fwrite(&top->opt_type_ptr->type_id, 4, 1, f);
 		}
 		else
 		{
-			fwrite(&r_size, 4, 1, f);
+		fwrite(&top->opt_name_type, 4, 1, f); //var name
 		}
+
 
 		if (top->ref_node != NULL)
 		{
-			int u = (int)top->ref_node;
+			int u = top->ref_node->id;
 			fwrite(&u, 4, 1, f);
 		}
 		else
@@ -97,132 +133,119 @@ void save_file(char* file, node_stack* a, unsigned int MD5_hash[4])
 
 	fclose(f);
 }
+node * node_by_idx(int id,node_stack* nodes)
+{
+	for(node* n=nodes->root;n!=NULL;n=n->next)
+	{
+		if(n->id==id) return n;
+	}
+	return NULL;
+}
+int ac[][2]={{1,1}};
 
 void read_file_parse(FILE* f, node_stack* nodes)
 {
 	int i=0;
-	
+	int read=0;
+
 	while (!feof(f))
 	{
 		char v=0;
-		fread(&v, 1, 1, f);
+		read=fread(&v, 1, 1, f);
 		if(v==0) break;
 		i++;
-		node* top = new_node(nodes);	
+
+
 		int id = 0;
-		fread(&id, 4, 1, f);
+		read=fread(&id, 4, 1, f);
+		node* top = get_node_id(nodes,id);
+
 		top->id = id;
-		fread(&top->btype, sizeof(node_type_raw), 1, f);
-		fread(&top->fflag, sizeof(node_type_raw), 1, f);
-		fread(&top->is_flagged, 1, 1, f);
-		fread(&top->line, 4, 1, f);
+
+		read=fread(&top->btype, 4, 1, f);
+		read=fread(&top->fflag, 4, 1, f);
+		read=fread(&top->is_flagged, 1, 1, f);
+		read=fread(&top->line, 4, 1, f);
+		//read=fread(&top->id, 4, 1, f);
 
 		int next_id = 0;
-		fread(&next_id, 4, 1, f);
-		top->next = (node*)next_id;
-
-		int parent_id = 0;
-		fread(&parent_id, 4, 1, f);
-		top->parent = (node*)parent_id;
-
+		read=fread(&next_id, 4, 1, f);
+		if(next_id!=0)
+		{
+			node* next = get_node_id(nodes,next_id);
+			next->id=next_id;
+			top->next = next;
+        }
+        int parent_id = 0;
+        read=fread(&parent_id, 4, 1, f);
+        if(parent_id!=0)
+        {
+			node* parent =  get_node_id(nodes,parent_id);
+			top->parent = parent;
+			parent->id=parent_id;
+        }
 
 		int msize = 0;
-		fread(&msize, 4, 1, f);
+		read=fread(&msize, 4, 1, f);
 		if (msize != 0)
 		{
-			char* m_value = (char*)malloc(msize + 1);
+			byte * m_value = (byte*)malloc(msize + 1);
 			memset(m_value, 0, msize + 1);
 
 
-			fread(m_value, msize, 1, f);
+			read=fread(&m_value, msize, 1, f);
 			if (top->btype.value)//& (index|size))
 			{
 				top->value_raw = (int*)m_value;
 			}
 			else if(top->type_==keyword)
-				top->value_raw = m_value;
+				top->value_keyword =*(int*) m_value;
 			else
 				top->value_raw = m_value;
 		}
 
-		int r_size = 0;
-		fread(&r_size, 4, 1, f);
-		if (r_size != 0)
+		int mopt;
+		read=fread(&top->opt_type, 4, 1, f); //opt
+		read=fread(&mopt, 4, 1, f);
+		if (top->opt_type == 1)
 		{
-			void* r_buff = malloc(r_size + 1);
 
-			memset(r_buff, 0, r_size + 1);
-			fread(r_buff, r_size, 1, f);
-			top->opt_raw = r_buff;
+			top->opt_type_ptr = SIMPLE_TYPE+ mopt;
+		}
+		else
+		{
+            top->opt_name_type =(var_name_def) mopt;
 		}
 
-		int ref_node=0;
-		fread(&ref_node, 4, 1, f);
-		top->ref_node = (node*)ref_node;
-		ftell(f);
+		int ref_node_id=0;
+		read=fread(&ref_node_id, 4, 1, f);
+
+		if(ref_node_id!=0)
+		{
+		node* ref_node = get_node_id(nodes,ref_node_id);
+
+		top->ref_node = ref_node;
+		ref_node->id=ref_node_id;
+		}
+		else
+		{
+		top->ref_node= NULL;
+		}
+		read=ftell(f);
 	}
 
 
-	fclose(f);
-	setup_ref(nodes);
+
+	//setup_ref(nodes);
 
 	s_compile_(nodes);
 }
 
-void setup_ref(node_stack* stack)
-{
-	for (node* n = stack->top; n != NULL; n = n->stack_parent)
-	{
-		if (n->parent != NULL)
-		{
-
-			n->parent = find_with_id_b(n,(int)n->parent, stack);
-			//	n->parent->next =n;
-		}
-		if (n->next !=  NULL)
-		{
-			n->next = find_with_id_f(n,(int)n->next, stack);
-			//	n->next->parent =n;
-		}
-		if (n->ref_node!= NULL)
-		{
-			n->ref_node = find_with_id_b(NULL,(int)n->ref_node, stack);
-			//	n->next->parent =n;
-		}
-		//else if(n->parent!=NULL)
-		//	s_compile__n(n);
-	}
-
-	//debuge k;
-	//k.print_line_debuge(nodes->top->stack_parent,0);
-	//s_compile__n(nodes->top->stack_parent);
-}
-
-node* find_with_id_b(node * s,int m, node_stack* stack)
-{
-	for (node* n =s==NULL? stack->top:s; n != NULL; n = n->stack_parent)
-	{
-		if (n->id == m)
-			return n;
-	}
-
-	return NULL;
-}
-node* find_with_id_f(node * s,int m, node_stack* stack)
-{
-	for (node* n =s==NULL? stack->root:s; n != NULL; n = n->stack_next)
-	{
-		if (n->id == m)
-			return n;
-	}
-
-	return NULL;
-}
 
 //static debuge b;
 void s_compile_(node_stack* stack)
 {
-	
+
 	node* i;
 	for (node* x = stack->root; x != NULL; x = i->stack_next)
 	{
@@ -233,12 +256,12 @@ void s_compile_(node_stack* stack)
 		}
 
 
-#ifdef DEBUG_P 
+#ifdef DEBUG_P
 //  b.print_line_debuge(i, 0);
 #endif
 
 
 		if(x->type_ != var_name || x->value_raw == NULL || !eql((char*)x->value_raw,"import"))COMPILE_1_P(i);
-		
+
 	}
 }

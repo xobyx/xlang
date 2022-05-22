@@ -11,11 +11,11 @@ AR = ar
 LD = g++
 WINDRES = windres
 
-INC = 
+INC =
 CFLAGS = -Wall
-RESINC = 
+RESINC =
 LIBDIR = -Lpcre/.libs
-LIB = 
+LIB =
 LDFLAGS = -Wl,-Bstatic -lpcre -Wl,-Bdynamic
 
 INC_DEBUG = $(INC)
@@ -26,8 +26,8 @@ LIBDIR_DEBUG = $(LIBDIR)
 LIB_DEBUG = $(LIB)
 LDFLAGS_DEBUG = $(LDFLAGS)
 OBJDIR_DEBUG = obj/Debug
-DEP_DEBUG = 
-OUT_DEBUG = bin/Debug/xlang2
+DEP_DEBUG =
+OUT_DEBUG = bin/Debug/xlang
 
 INC_RELEASE = $(INC)
 CFLAGS_RELEASE = $(CFLAGS) -O2
@@ -37,8 +37,8 @@ LIBDIR_RELEASE = $(LIBDIR)
 LIB_RELEASE = $(LIB)
 LDFLAGS_RELEASE = $(LDFLAGS) -s
 OBJDIR_RELEASE = obj/Release
-DEP_RELEASE = 
-OUT_RELEASE = bin/Release/xlang2
+DEP_RELEASE =
+OUT_RELEASE = bin/Release/xlang
 
 OBJ_DEBUG = $(OBJDIR_DEBUG)/xlang.o $(OBJDIR_DEBUG)/var_stack.o $(OBJDIR_DEBUG)/type_stack.o $(OBJDIR_DEBUG)/stack.o $(OBJDIR_DEBUG)/save.o $(OBJDIR_DEBUG)/compile.o $(OBJDIR_DEBUG)/parse.o $(OBJDIR_DEBUG)/md5.o $(OBJDIR_DEBUG)/functions.o $(OBJDIR_DEBUG)/func_stack.o $(OBJDIR_DEBUG)/debuge.o #$(OBJDIR_DEBUG)/http.o
 
@@ -48,11 +48,11 @@ all: debug release
 
 clean: clean_debug clean_release
 
-before_debug: 
+before_debug:
 	test -d bin/Debug || mkdir -p bin/Debug
 	test -d $(OBJDIR_DEBUG) || mkdir -p $(OBJDIR_DEBUG)
 
-after_debug: 
+after_debug:
 
 debug: before_debug out_debug after_debug
 
@@ -95,16 +95,16 @@ $(OBJDIR_DEBUG)/func_stack.o: func_stack.c
 $(OBJDIR_DEBUG)/debuge.o: debuge.c
 	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c debuge.c -o $(OBJDIR_DEBUG)/debuge.o
 
-clean_debug: 
+clean_debug:
 	rm -f $(OBJ_DEBUG) $(OUT_DEBUG)
 	rm -rf bin/Debug
 	rm -rf $(OBJDIR_DEBUG)
 
-before_release: 
+before_release:
 	test -d bin/Release || mkdir -p bin/Release
 	test -d $(OBJDIR_RELEASE) || mkdir -p $(OBJDIR_RELEASE)
 
-after_release: 
+after_release:
 
 release: before_release out_release after_release
 
@@ -147,7 +147,7 @@ $(OBJDIR_RELEASE)/func_stack.o: func_stack.c
 $(OBJDIR_RELEASE)/debuge.o: debuge.c
 	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c debuge.c -o $(OBJDIR_RELEASE)/debuge.o
 
-clean_release: 
+clean_release:
 	rm -f $(OBJ_RELEASE) $(OUT_RELEASE)
 	rm -rf bin/Release
 	rm -rf $(OBJDIR_RELEASE)

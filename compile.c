@@ -38,7 +38,7 @@ void define_new_class_prop( char* name,type_def* contern_class,type_def* new_var
 }
 void define_new_var_onfunction(char* name,fcall * mfun, type_def* new_var_type, var** out_var)
 {
-	
+
 		var* svar = fget_var_by_name_fc(name,mfun);
 		if (svar != NULL )//&& svar->type_define != NULL && new_var_type != NULL && new_var_type == svar->type_define)
 		{
@@ -50,24 +50,24 @@ void define_new_var_onfunction(char* name,fcall * mfun, type_def* new_var_type, 
 
 		else
 		{
-			
+
 			mfun->func_parmeters[mfun->parm_count_c].name=name;
-			mfun->func_parmeters[mfun->parm_count_c].type_define=new_var_type;			
+			mfun->func_parmeters[mfun->parm_count_c].type_define=new_var_type;
 			*out_var = &mfun->func_parmeters[mfun->parm_count_c];
 			mfun->parm_count_c++;
 		}
-	
+
 }
 void define_new_var_globle(var** out_var, type_def* new_var_type, char* name)
 {
 	//incde function
-	
 
-		
+
+
 			var* var = new_var(name, new_var_type);
 			*out_var = var;
-		
-	
+
+
 }
 
 node* add_new_func_code(node* c, type_def* container_class)
@@ -76,7 +76,7 @@ node* add_new_func_code(node* c, type_def* container_class)
 
 	const bool cons = c->value_type == T_NEW_INC;
 	func_deftion* m = container_class == NULL || cons ? new_func() : container_class->d_functions[container_class->d_function_size++];
-	
+
 	memset(m, 0, sizeof(func_deftion));
 	m->return_type = cons ? container_class : c->value_type;
 	m->function_type = cons ? constr : f_main;
@@ -106,7 +106,7 @@ node* add_new_func_code(node* c, type_def* container_class)
 		exit(-1);
 	}
 
-	type_def ** function_protype_parms = m->start_func_parmeters;
+
 	int i=0;
 	/* TODO: check end */
 	while (c != close)
@@ -117,10 +117,10 @@ node* add_new_func_code(node* c, type_def* container_class)
 		///	new_var_on_stack(function_protype_parms++, (char*)c->next->value_raw, c->value_type);
 			m->start_func_parmeters[i]=  c->value_type;
 			m->start_func_parmeters_name[i]=(char*)c->next->value_raw;
-		
-			
+
+
 			i++;
-			
+
 			c = c->next;
 		}
 		m->start_parm_count=i;
@@ -154,25 +154,25 @@ node* setup_function_parms(node** nod, fcall* function, var* context, fcall* in_
 	//int m = function->deftion->start_parm_count;
 	int i =0;
 	step_forwrod(nod);
-	
+
 	while (*nod != close && (*nod)->type_ != endl )//&& i<m)
 	{
 		//var* pv = new_temp_var(NULL);
 		// allow to get parameters form current function old_call
 
-		
-		
+
+
 		var * n =&function->func_parmeters[i++];
 		n->values=NULL;
 		n->type_define=NULL;
-		
+
 
 		*nod = calculate(*nod, in_function, context, comma, close,n);
 		if (*nod == NULL)
 			return close;
 
 
-		
+
 
 
 		if ((*nod)->type_ == comma)
@@ -189,7 +189,7 @@ bool call_function(fcall* mfunc, var** context)
 {
 	if (mfunc->deftion->function_type == constr)
 	{
-		
+
 
 		mfunc->_return.values = install_memory_with_type(mfunc->_return.type_define, 1);
 		*context = &mfunc->_return;
@@ -215,14 +215,14 @@ void compile_var_name_start(node ** pnode, fcall * function_c, var * calling_obj
 		else
 		{
 			m= all_get_var_by_name((*pnode)->value_char_ptr,function_c,calling_object);
-			
+
 		}
 
 		step_forwrod(pnode); // .
 		step_forwrod(pnode); // V.(V)
 		compile_var_name_start(pnode, function_c, m);
 		return;
-		//TODO : continios after line end 
+		//TODO : continios after line end
 	}
 	if ((*pnode)->next->type_ == equles || (*pnode)->next->type_ == s_index)
 	{
@@ -249,7 +249,7 @@ void compile_var_name_start(node ** pnode, fcall * function_c, var * calling_obj
 			return;
 		}
 		fcall *new_function= create_fcall(tempxc);
-		
+
 		setup_function_parms(pnode, new_function, calling_object, function_c);
 		call_function(new_function, &calling_object);
 	}
@@ -268,31 +268,25 @@ typedef struct if_block
 	byte value;
 } if_block;
 
-bool scape_block(node** cx)
-{
-	if ((*cx)->ref_node != NULL && (*cx)->ref_node->opt_raw != NULL)
-	{
-		if_block* m = (if_block*)(*cx)->ref_node->opt_raw;
-		return m->setted == 1 && m->value > 0;
-	}
-	return false;
-}
 
+
+node* gelastjump(node* b)
+{
+	node* i=b;
+	do{
+	i=i->next_jump;
+	}
+	while(i->next_jump!=NULL);
+	return i;
+}
 void if_eif_function(node** cx, fcall * temp, var* calling_obj)
 {
 	var* m = new_temp_var(T_BOOL);
 	node* save = *cx; ///{if-eif}
 	if_block* heif = (if_block*)malloc(sizeof(if_block));
 
-	if (scape_block(cx)) //check if pre branch takin
-	{
-		heif->value = 2;
-		heif->setted = 1;
-		save->opt_raw = heif;
-		*cx = get_first_type((*cx), parentheses1)->ref_node; //TODO: 
-		return;
-	}
-	int bt = (int)(*cx)->value_raw;
+
+	int bt = (*cx)->value_keyword;
 	if (bt != _else_)
 	{
 		node* el = get_close_part((*cx)->next);
@@ -307,14 +301,16 @@ void if_eif_function(node** cx, fcall * temp, var* calling_obj)
 			heif->value = 1;
 			heif->setted = 1;
 			save->opt_raw = heif;
+
+			compile(calling_obj,*cx,temp,close);
+			*cx=save->next_jump!=NULL?gelastjump(save)->next->ref_node->next->ref_node:close;
+			//*cx=close;
 		}
 		else
 		{
 			(*cx) = close;
 
-			heif->value = 0;
-			heif->setted = 1;
-			save->opt_raw = heif;
+
 		}
 	}
 	else
@@ -371,7 +367,7 @@ void for_function(node** c, fcall * funcall, var * calling_object)
 
 	//*c = calculate(*c, funcall,calling_object, comma,*c, bool_var);
 		*c = calculate(cond, funcall,calling_object, (node_type)0,el, bool_var);
-	
+
 
 	*c = get_first_type(*c, parentheses1);
 	node* for_close = get_close_part(*c);
@@ -392,11 +388,11 @@ void for_function(node** c, fcall * funcall, var * calling_object)
 		compile(calling_object, *c,funcall , for_close);
 		//check the condition again
 		calculate(step_exp, funcall, calling_object, comma, NULL, for_v);
-	
+
 		calculate(cond, funcall, calling_object, (node_type)0, el, bool_var);
 	}
 
-	*c = for_close; //getFirstType(c, parse_obj::parentheses1c);	
+	*c = for_close; //getFirstType(c, parse_obj::parentheses1c);
 }
 
 
@@ -498,7 +494,7 @@ void compile(var* parent, node* out, fcall* c_function, node* stop)
 					define_new_var_globle(&n_var, c->value_type,name->value_char_ptr);
 					}
 
-					if (c->next->btype.node_type_bit.s_index && *(char*)c->next->opt_raw == 's')
+					if (c->next->btype.node_type_bit.s_index && c->next->opt_name_type == psize)
 					{
 						var* t = new_temp_var(T_INT);
 
@@ -627,7 +623,7 @@ void compile_type(node* out, fcall * function_c, node* stop, type_def* continar_
 					var* m;
 					node* name = get_first_type(c, var_name);
 					define_new_class_prop(name->value_char_ptr,continar_class,c->value_type, &m);
-					if (c->next->btype.node_type_bit.s_index && *(char*)c->next->opt_raw == 's')
+					if (c->next->btype.node_type_bit.s_index && c->next->opt_name_type == psize)
 					{
 						var* t = new_temp_var(T_INT);
 

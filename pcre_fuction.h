@@ -263,6 +263,7 @@ find* isMatchF(char* pattern, char* subject, int flags)
 		pcre_free(re);
 		return xv;
 	}
+	return NULL;
 }
 
 find* match(char* pattern, char* subject)

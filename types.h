@@ -1,5 +1,6 @@
 #pragma once
-
+#ifndef TYPES_H_
+#define TYPES_H_
 
 #if defined (_MSC_VER)
 #include <windows.h>
@@ -25,7 +26,7 @@ struct fcall;
 typedef void (*function_node)(struct fcall*);
 
 
-static char* base_types_name [] = {"long", "string", "char", "int", "bool", "float", "_array", "new"};
+static const char* base_types_name [] = {"long", "string", "char", "int", "bool", "float", "_array", "new"};
 
 struct type_def;
 
@@ -58,16 +59,16 @@ typedef enum node_type_enum //: i16
 	operators_n = 0x0010,
 	equles = 0x0020,
 	endl = 0x0040,
-	s_index = 0x0080,	
-	parentheses1 = 0x0100,//{	
+	s_index = 0x0080,
+	parentheses1 = 0x0100,//{
 	parentheses1_c = 0x0200,	// ,
 	comma = 0x0400,	// []
 	s_index_c = 0x0800,	// (
 	parentheses4 = 0x1000,	//)
 	parentheses4_c = 0x2000,	//.
-	dot = 0x4000,	
+	dot = 0x4000,
 	twodot = 0x8000,	//:
-	pars = (parentheses1 | parentheses1_c | parentheses4 | parentheses4_c | s_index_c | s_index),	
+	pars = (parentheses1 | parentheses1_c | parentheses4 | parentheses4_c | s_index_c | s_index),
 	have_var_value=value | var_name | keyword | itype | operators_n,
 	a=value | var_name,
 	non_one_char =0x000F
@@ -85,7 +86,9 @@ fucnction_parm,//p
 var_def,//
 var_call,//
 class_def,//k
-class_base_def//x
+class_base_def,//x,
+psize,
+pindex
 
 }var_name_def;
 
@@ -96,7 +99,7 @@ typedef enum  function_type
 	class_function=2
 }function_type;
 
-typedef union 
+typedef union
 {
 	i16 value;
 	enum node_type_enum name;
@@ -125,10 +128,10 @@ typedef union
 
 #define F 1
 
- 
+
 typedef struct node
 {
-	
+
 
 	int id;
 	node_type_raw btype;
@@ -141,34 +144,36 @@ typedef struct node
 
 	union
 	{
-		
-		void* value_raw; 
+
+		void* value_raw;
 		struct type_def * value_type ;
 		int * value_int ;
 		short value_short;
 		char * value_char_ptr;
 		char ** value_string;
 		int  _ptr_;
+		int value_keyword;
 
 	};
-	
+
 	bool is_flagged;
 	struct node* stack_parent;
 	struct node* stack_next;
 	//void* op; ///used in com if_helper///types in parse///functionn
 	struct node* ref_node; ///if __ {[( close;
+	struct node* next_jump;
 	struct node* root;
 	union  // opt
 	{
-		
-		void* opt_raw; 
+
+		void* opt_raw;
 		struct type_def * opt_type_ptr ;
 		int * opt_int_ptr ;
 		char * opt_char_ptr;
 		char ** opt_string_ptr;
 		int  _opt_ptr_;
 		var_name_def opt_name_type;
-		
+
 
 	};
 }node;
@@ -178,6 +183,9 @@ typedef struct node_stack
 	struct node* top;
 	int size;
 	struct node* root;
+	node ** nlist;
+    int max_a;
+    int pos_id;
 }node_stack;
 
 enum var_access { PUBLIC=1, STATIC, PRIVATE };
@@ -186,14 +194,14 @@ typedef struct var
 {
 
 
-	
+
 	char* name ;
-	
+
 
 	union
 	{
 		int  a;
-		void* values; 
+		void* values;
 		struct type_instance * value_type_instsance ;
 		int * value_int ;
 		long * value_long ;
@@ -203,7 +211,7 @@ typedef struct var
 		bool * value_bool;
 
 	};
-	
+
 	struct type_instance * holder ;
 
 	struct type_def* type_define;
@@ -216,7 +224,7 @@ typedef struct var
 struct type_def;
 typedef struct var_stack
 {
-	
+
 
 	struct var* top;
 	byte size;
@@ -242,7 +250,7 @@ typedef struct func_deftion
 typedef struct fcall
 {
 	var func_parmeters[100];
-	
+
 	int parm_count_c;
 	struct func_deftion* deftion;
 	struct var _return;
@@ -250,7 +258,7 @@ typedef struct fcall
 }fcall;
 typedef struct func_stack
 {
-	
+
 
 	func_deftion* top;
 	int size;
@@ -262,7 +270,7 @@ enum w_type { super=0, child };
 
 typedef struct type_def
 {
-	
+
 	struct var* d_propertys[100];
 	struct func_deftion* d_functions[100];
 
@@ -270,13 +278,13 @@ typedef struct type_def
 	int d_function_size;
 	int type_id;
 	char* type_name;
-	
+
 	struct type_def* base;
 	struct type_def* stack_next;
 	enum var_access access;
 	enum w_type w ;
 
-	
+
 }type_def;
 
 typedef struct type_instance
@@ -306,7 +314,7 @@ typedef struct type_instance
 
 //char * gramer = "<base_type> [operators|=] if(_O2==operators)[var_name|this] []"
 
-//F parse_obj 
+//F parse_obj
 
 enum key_word_enum2
 {
@@ -329,7 +337,7 @@ enum key_word_enum2
 					else if(*op=='-')\
 					*mx = *mx  - to;\
 					else if(*op=='*')\
-					*mx = *mx  * to;\
+					*mx = (*mx)  * (to);\
 					else if(*op=='/')\
 					*mx = *mx  / to;\
 					else if(*op=='='&&*(op+1)=='=')\
@@ -349,6 +357,17 @@ enum key_word_enum2
 					else if(*op=='<'&&*(op+1)=='=')\
 					*mx = *mx  <= to;
 
+#define BOOL_OPERATORS	if(*op=='='&&*(op+1)=='=')\
+					*mx = *mx  == to;\
+					else if(*op=='&'&&*(op+1)=='&')\
+					*mx = *mx  && to;\
+					else if(*op=='|'&&*(op+1)=='|')\
+					*mx = *mx  || to;\
+					else if(*op=='='&&*(op+1)=='=')\
+					*mx = *mx  == to;
+
+
+
 #define Plong(x) (long*)x
 #define Pchar(x) (char*)x
 #define Pshort(x) (short*)x
@@ -360,7 +379,7 @@ enum key_word_enum2
 typedef struct waiter {node_type wait_type;node* waiting_node;}fl;
 
 
-static const char* parse_obj_str(struct node* nod)
+static inline const char* parse_obj_str(struct node* nod)
 {
 	switch (nod->btype.name)
 	{
@@ -368,8 +387,8 @@ static const char* parse_obj_str(struct node* nod)
 	case keyword: return "keyword";
 	case var_name:
 	{
-		
-	return fuk[nod->_opt_ptr_];
+
+	return fuk[nod->opt_name_type];
 	}
 	case value: return "value";
 	case operators_n: return "operators_n";
@@ -393,7 +412,6 @@ static const char* parse_obj_str(struct node* nod)
 	}
 	return NULL;
 }
-#ifdef __cplusplus
-} /* extern "C" */
+
 
 #endif

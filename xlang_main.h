@@ -12,7 +12,7 @@ __pragma(warning(disable: 4996));
 #endif
 */
 //#define _CRTDBG_MAP_ALLOC
-#define DEBUG_P 1
+//#define DEBUG_P 1
 //#include <stdlib.h>  
 //#include <crtdbg.h>
 #define PCRE_STATIC 1

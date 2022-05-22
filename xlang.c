@@ -9,6 +9,8 @@ __  __   ___   | |__    _   _  __  __
 #include "xlang_main.h"
 #if defined (_MSC_VER)
 #include <direct.h>
+#else
+#include<unistd.h>
 #endif
 #include <time.h>
 clock_t t;
@@ -22,7 +24,7 @@ type_stack* types;
 func_stack* t_funcs;
 Debug * debuge;
 bool read_file = true;
-static char* diro;
+
 
 #define STR_VALUE(val) #val
 #define STR(name) STR_VALUE(name)
@@ -37,19 +39,19 @@ unsigned int calc_md5[4];
 unsigned int saved_md5[4];
 char* buff;
 char* comp;
-#ifdef __GNUC__||__MINGW64__
+#if defined(__GNUC__)|| defined(__MINGW64__)
 #define errno_t int
 #define _chdir chdir
 int fopen_s(FILE **f, const char *name, const char *mode) {
-    int ret = 1;
+   
   //  assert(f);
     *f = fopen(name, mode);
     /* Can't be sure about 1-to-1 mapping of errno and MS' errno_t */
-    if (!*f)
-        ret = 0;
-    return ret;
+    if (*f != NULL)
+        return 0;
+    return 2;
 }
-#define gets_s(x,y) gets(x)
+#define gets_s(x,y) fgets(x,500,stdin)
 #endif
 int GetDir(char* fullPath, char* dir)
 {
@@ -128,30 +130,30 @@ int main(const int argc, char** argv)
 	t = clock();
 	if (argc == 1)
 	{
-		bool v = false;
-		int x = 0;
-		node_type mk = (node_type)0;
-		char a[1024 * 5];
-		char* m = a;
+		bool unclosed = false;
+		
+		node_type which_type = (node_type)0;
+		char code_txt[1024 * 5];
+		
 		while (true)
 		{
-			memset(a, 0, 1024 * 5);
+			memset(code_txt, 0, 1024 * 5);
 
-			if (v)
+			if (unclosed)
 			{
-				printf("\n");
+				printf("\n...");
 				//gets(a);		
-				gets_s(a,500);
+				gets_s(code_txt,500);
 			}
 			else
 			{
 				printf("\n>>>");
-				gets_s(a,500);
+				gets_s(code_txt,500);
 			}
 
 
-			start_parse_lines(a, true);
-			v = static_flag_check2x(&mk);
+			start_parse_lines(code_txt, true);
+			unclosed = static_flag_check2x(&which_type);
 		}
 
 		return 0;
@@ -166,6 +168,12 @@ int main(const int argc, char** argv)
 
 
 	errno_t se = fopen_s(&sf, argv[1], "r");
+	
+	if(se)
+	{
+		printf("[%d]-file [%s] not found..\n",se,argv[1]);
+		exit(-1);
+	}
 
 	buff = get_filebuff(sf);
 	if (sf)
@@ -175,7 +183,9 @@ int main(const int argc, char** argv)
 	char* out=(char*)malloc(strlen(argv[1])+3+1);
 	comp = strcpy(out,argv[1]);
 	strcat(out,"cxx");
+	printf("saved to %s\n",comp);
 	errno_t ce =fopen_s(&cf, comp, "rb");
+	printf("found saved to %d\n",ce);
 #else
 	errno_t ce = 1;
 #endif
@@ -209,8 +219,8 @@ int main(const int argc, char** argv)
 	printf("\ntook %f seconds to execute \n", time_taken);
 	printf("\nvar num: %d , temp var num: %d", varss->size, t_varss->size);
 	//clean_memory();
-	char tt = getchar();
-	char trt = getchar();
+	getchar();
+	getchar();
 	free(buff);
 	//	_CrtDumpMemoryLeaks();
 }

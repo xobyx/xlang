@@ -28,7 +28,7 @@ extern int fi;
 #define T_OBJECT  (SIMPLE_TYPE+7)
 #define T_NEW_INC  (SIMPLE_TYPE+8)
 
-static func_stack base_function;
+extern func_stack base_function;
 
 /*XLANG*/ var* get_type_inc_obj_var(node** nop, var* context, func_deftion ** outp);
 int eql(const char* n,const char* x);

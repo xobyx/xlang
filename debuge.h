@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "types.h"
+#include "xlang_main.h"
 #if defined (_MSC_VER)
 #include <windows.h>
 #endif

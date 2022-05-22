@@ -1,6 +1,6 @@
 #include "functions.h"
 #include <string.h>
-#ifdef __GNUC__||__MINGW64__
+#if defined(__GNUC__)|| defined(__MINGW64__)
 #include <stdarg.h>
 #endif
 #include <time.h>
@@ -36,11 +36,11 @@
 void len(fcall* y);
 //void index_(func_deftion* y);
 //var t = {.type_define = T_INT, .name = "a"};
-func_deftion xd;
-func_deftion x = {
+///func_deftion xd;
+func_deftion len_obj_function = {
 	.start_func_parmeters = {0}, .func_code = &len, .func_name = "len", .function_type = f_main, .access=PUBLIC,
 	.return_type = T_INT, .ref = 0,
-	.stack_next = &xd, .start_parm_count = 1,
+	.stack_next = 0, .start_parm_count = 1,
 };
 //func_deftion xd = {
 //	.start_func_parmeters = {T_INT},.func_code = &index_,.func_name = "index",.function_type = f_main,
@@ -49,11 +49,11 @@ func_deftion x = {
 type_stack simple_type_stack = {.top = T_NEW_INC, .root = T_LONG, .size = 9};
 type_def SIMPLE_TYPE[] = {
 	{
-		.type_id = 0, .type_name = "long", .d_propertys = {0}, .d_functions = {0, 0, 0}, .base = 0,
+		.type_id = 0, .type_name = "long", .d_propertys = {0}, .d_functions = {0}, .base = 0,
 		.stack_next = T_STRING
 	},
 	{
-		.type_id = 1, .type_name = "string", .d_propertys = {0}, .d_functions = {&xd}, .d_function_size = 1, .base = 0,
+		.type_id = 1, .type_name = "string", .d_propertys = {0}, .d_functions = {&len_obj_function}, .d_function_size = 1, .base = 0,
 		.stack_next = T_CHAR
 	},
 	{.type_id = 2, .type_name = "char", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = T_INT},
@@ -62,7 +62,7 @@ type_def SIMPLE_TYPE[] = {
 	{.type_id = 5, .type_name = "float", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = T_OBJECT},
 	{.type_id = 6, .type_name = "object", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = T_ARRAY},
 	{
-		.type_id = 7, .type_name = "_array", .d_propertys = {0}, .d_functions = {&xd}, .d_function_size = 1, .base = 0,
+		.type_id = 7, .type_name = "_array", .d_propertys = {0}, .d_functions = {&len_obj_function}, .d_function_size = 1, .base = 0,
 		.stack_next = T_NEW_INC
 	},
 	{.type_id = 8, .type_name = "new", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = 0}
@@ -180,7 +180,7 @@ bool static_flag_check2x(node_type* m)
 
 fl* static_flag_check2()
 {
-	bool cont = false;
+
 	for (int i = 0; i < 10; i++)
 		if (staic_flag2[i].wait_type != 0)
 		{
@@ -309,8 +309,8 @@ void do_work1(var* calc_result, var* me, int index)
 void set_value(var* context, fcall* temp, node** cx)
 {
 	bool array_copy = false;
-	if ((*cx)->next->type_ == equles ||
-		(*cx)->next->type_ == s_index && get_first_type(*cx, s_index_c)->next->type_ == equles)
+	if (((*cx)->next->type_ == equles) ||
+		((*cx)->next->type_ == s_index && get_first_type(*cx, s_index_c)->next->type_ == equles))
 	{
 		var* calc_result = new_temp_var(NULL);
 		var* me = NULL;
@@ -477,7 +477,7 @@ void print_f(fcall* temp)
 			x = x + i;
 			*(y + i) = x->type_define->type_name == T_STRING->type_name ? *x->val_str_ptr : (void*)*x->value_int;
 		}
-#ifndef __GNUC__||__MINGW64__
+#if !defined(__GNUC__)&& !defined(__MINGW64__)
 
 
 		vprintf(*m->val_str_ptr, y);
@@ -553,7 +553,7 @@ void print(fcall* temp)
 	}
 	else
 	{
-		//TODO : print var to string 
+		//TODO : print var to string
 		//vprint(temp);
 	}
 	temp->_return.value_int = r;
@@ -610,12 +610,11 @@ void import(fcall* d)
 	{
 		char* y = *d->func_parmeters->val_str_ptr;
 		FILE* sf;
-  #ifdef __GNUC__||__MINGW64__
-    	int se = fopen_s(&sf, y, "r");
-   #else
-		errno_t se = fopen_s(&sf, y, "r");
-   #endif
-		if (se == 0)
+
+    	sf = fopen( y, "r");
+
+
+		if (sf != NULL)
 		{
 			char* buf = get_filebuff(sf);
 			//TODO: check for parsed file
@@ -1166,7 +1165,7 @@ void copy_object(type_instance* src, void* dstn_array, int size)
 	{
 		type_instance* dstn = (type_instance*)dstn_array + i ;
 		dstn->type= src->type;
-		
+
 		dstn->size=src->size;
 		var_stack* props = (var_stack*)malloc(sizeof(var_stack));
 		var_stack_init(props);
@@ -1176,7 +1175,7 @@ void copy_object(type_instance* src, void* dstn_array, int size)
 		{
 			for (var* prop = src->propertys.root; prop !=NULL; prop=prop->stack_next)
 			{
-				
+
 
 				if (strcmp(prop->name, "this") != 0)
 				{
@@ -1289,12 +1288,12 @@ var* get_type_inc_obj_var(node** mnode, var* called_object, func_deftion** outp)
 	{
 		*mnode = (*mnode)->next->next;
 		var* base = fvar;
-		if ((*mnode)->_opt_ptr_ == var_call)
+		if ((*mnode)->opt_name_type == var_call)
 		{
 			fvar = get_var_by_name_on_stack((*mnode)->value_char_ptr, &fvar->value_type_instsance->propertys);
 		}
 
-		if ((*mnode)->_opt_ptr_ == function_call)
+		if ((*mnode)->opt_name_type == function_call)
 		{
 			func_deftion* func1 = get_obj_function(base, (*mnode)->value_char_ptr);
 			if (func1 != NULL)
@@ -1362,7 +1361,7 @@ bool copy_array(var* out, void* out_memory, var* src)
 	{
 		//int* g = (int*)mvar->value;
 		//memcpy(memory, g, sizeof(int) * mvar->size);
-		
+
 		copy_object(src->value_type_instsance, (type_instance*)out_memory, src->size);
 	}
 	return false;
@@ -1372,13 +1371,13 @@ bool is_double_equle(node* mnode)
 {
 	return mnode->type_ == equles && mnode->next->type_ == equles;
 }
-#ifdef __GNUC__||__MINGW64__
+#if defined(__GNUC__)|| defined(__MINGW64__)
 #define strcat_s(x,y,z) strcat(x,z)
 #endif
 node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_type stop_in_type, node* stop_in_node,
                 var* calc_result)
 {
-	bool is_mem_set = false;
+	//bool is_mem_set = false;
 	var* last_var_name = NULL;
 	int f = 0;
 	node* mnode = (node*)cnode;
@@ -1413,11 +1412,11 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 			else if (mnode->type_ == var_name)
 			{
 				func_deftion* name_function = NULL;
-				if (mnode->_opt_ptr_ == function_call)
+				if (mnode->opt_name_type == function_call)
 				{
 					name_function = get_func_by_name(mnode->value_char_ptr);
 				}
-				else if (mnode->_opt_ptr_ == var_call && calling_function != NULL)
+				else if (mnode->opt_name_type == var_call && calling_function != NULL)
 				{
 					name_var = fget_var_by_name_fc(mnode->value_char_ptr, calling_function);
 				}
@@ -1426,7 +1425,7 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 				{
 					name_var = get_type_inc_obj_var(&mnode, calling_object, &name_function);
 				}
-				else if (mnode->_opt_ptr_ == var_call)
+				else if (mnode->opt_name_type == var_call)
 				{
 					name_var = get_globle_var_by_name(mnode->value_char_ptr);
 				}
@@ -1452,7 +1451,7 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 				}
 				else if (name_function != NULL)
 				{
-					node* y = get_close_part(get_first_type(mnode, parentheses4)); ///1
+					//node* y = get_close_part(get_first_type(mnode, parentheses4)); ///1
 					fcall* fcall = create_fcall(name_function);
 					//compile_var_name_start(k, funct);
 					//compile(mvar, k, funct, y);
@@ -1477,15 +1476,15 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 			}
 			else if (mnode->type_ == value)
 			{
-				name_var = new_temp_var((type_def*)mnode->opt_raw);
+				name_var = new_temp_var((type_def*)mnode->opt_type_ptr);
 
-				name_var->values = install_memory_with_type((type_def*)mnode->opt_raw, 1);
+				name_var->values = install_memory_with_type(mnode->opt_type_ptr, 1);
 				set_value_copy_node(name_var, mnode);
 			}
 
 			if (op == NULL)
 			{
-				is_mem_set = true;
+
 
 				setup_t(calc_result, &saved_return_type, indexx, name_var);
 				if (memory == NULL)
@@ -1521,7 +1520,7 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 
 				else
 				{
-					///FIXME: 
+					///FIXME:
 					((type_instance*)memory)[i++] = name_var->value_type_instsance[in];
 				}
 				in=0; //reset index
@@ -1575,9 +1574,10 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 				}
 				else if (calc_result->type_define->type_name == T_BOOL->type_name)
 				{
-					bool* mx = &((bool*)memory)[i - 1];
+					//bool* mx = &((bool*)memory)[i - 1];
+					bool* mx = ((bool*)memory)+(i - 1);
 					bool to = *(bool*)name_var->values;
-					MATH_OPERATORS
+					BOOL_OPERATORS
 				}
 				else if (calc_result->type_define->type_name == T_STRING->type_name)
 				{
@@ -1591,7 +1591,7 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 						//strcat(mx,to);
 						long mxlen = strlen(*mx);
 						long tolen = strlen(to);
-						char* exp = (char*)realloc(*mx, strlen(*mx) + strlen(to) + 1);
+						char* exp = (char*)realloc(*mx, mxlen + tolen + 1);
 
 
 						strcat_s(exp, mxlen + tolen + 1, to);
@@ -1609,6 +1609,7 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 				else
 				{
 					//int y = get_index_value(funct, k);
+					/*
 					type_instance* typ_ = (type_instance*)memory + (i - 1);
 					int to = name_var->value_int[in];
 					var* x = new_temp_var(T_INT);
@@ -1616,9 +1617,10 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 					fcall* fcall1 = create_fcall(uy);
 					fcall1->context = calling_object;
 					fcall1->func_parmeters[0].value_int = &to;
-					node* ty = NULL;
+					//node* ty = NULL;
 					call_function(fcall1, &calling_object);
 					//char* mtype = mb == NULL ? (char*)k->opt : (char*)mb->var_type->name;
+					*/
 				}
 				op = NULL;
 
@@ -1633,7 +1635,7 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 				if (last_var_name != NULL)
 				{
 					mnode = mnode->next;
-					*last_var_name->value_int++;
+					//*last_var_name->value_int++;
 					last_var_name = NULL;
 				}
 				else
@@ -1766,9 +1768,10 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 
 node* get_close_part(node* t)
 {
-	if (t->ref_node != NULL && (t->btype.name == s_index && t->ref_node->type_ == s_index_c ||
-		t->btype.name == parentheses1 && t->ref_node->type_ == parentheses1_c ||
-		t->btype.name == parentheses4 && t->ref_node->type_ == parentheses4_c))
+	if (t->ref_node != NULL &&
+	    ((t->btype.name == s_index && t->ref_node->type_ == s_index_c )||
+		(t->btype.name == parentheses1 && t->ref_node->type_ == parentheses1_c) ||
+		(t->btype.name == parentheses4 && t->ref_node->type_ == parentheses4_c)))
 	{
 		return t->ref_node;
 	}
@@ -1802,7 +1805,7 @@ void set_value_copy_var(var* dstn, var* scr)
 	}
 }
 
-///var type and memory must already setted
+///var type and memory must already setted  //for value  //  only parse int
 void set_value_copy_node(var* dstn, node* scr)
 {
 	if (T_INT == dstn->type_define)
@@ -1827,7 +1830,7 @@ void set_value_copy_node(var* dstn, node* scr)
 }
 
 
-type_def parms[] = {T_STRING, T_INT};
+//type_def parms[] = {T_STRING, T_INT};
 
 func_deftion simple_function_array[] = {
 	{
@@ -1893,7 +1896,7 @@ func_deftion simple_function_array[] = {
 		.stack_next = NULL
 	}
 };
-static func_stack base_function = {.top = simple_function_array + 9, .size = 10, .root = simple_function_array + 0};
+func_stack base_function = {.top = simple_function_array + 9, .size = 10, .root = simple_function_array + 0};
 
 fcall* create_fcall(func_deftion* fd)
 {

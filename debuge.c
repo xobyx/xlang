@@ -1,5 +1,5 @@
 ﻿#include "debuge.h"
-#include "http.h"
+
 #include <stdarg.h>
 
 //extern node_type staic_flag[];
@@ -15,7 +15,7 @@ void(*checknode)(Debug x, node* y);
 */
 
 
- #ifdef __GNUC__||__MINGW64__
+#if defined(__GNUC__)|| defined(__MINGW64__)
 
 
 int _cprintf(Debug* x, byte color, const char* format, ...)
@@ -38,21 +38,22 @@ void _do_work(Debug* x, node* temp)
 {
 	x->cprintf(x,0x8f,"\x1B[1;37m\x1B[47;100m%s", parse_obj_str(temp));
 	if ( temp->type_ == value && temp->opt_raw != NULL )
-		x->cprintf(x, 0x05, "\x1B[35m\x1B[40m(%s)", ((type_def*)temp->opt_raw)->type_name);
+		x->cprintf(x, 0x05, "\x1B[35m\x1B[40m(%s)", temp->opt_type_ptr->type_name);
 	x->checknode(x, temp);
 	if (temp->ref_node != NULL)
 		x->addnode(x, temp);
+////// 
 	if ((temp->btype.value) & (have_var_value))
 	{
 		printf(" [ ");
 		if (temp->type_ == itype)
-			x->cprintf(x, 0x02, "\x1B[32m\x1B[40m%s", ((type_def*)temp->value_raw)->type_name);
+			x->cprintf(x, 0x02, "\x1B[32m\x1B[40m%s", temp->value_type->type_name);
 		if (temp->type_ == var_name)
 		{
 			x->cprintf(x, 0x02, "\x1B[32m\x1B[40m%s",temp->value_char_ptr);
 		}
 		else if (temp->type_ == keyword)
-			x->cprintf(x, 0x02, "\x1B[32m\x1B[40m%s", key_word[(int)temp->value_raw]);
+			x->cprintf(x, 0x02, "\x1B[32m\x1B[40m%s", key_word[temp->value_keyword]);
 		else
 			x->cprintf(x, 0x02, "\x1B[32m\x1B[40m%s", temp->value_raw != NULL ? (char*)temp->value_raw : "NONE");
 		printf(" ]");
@@ -63,25 +64,11 @@ void _do_work(Debug* x, node* temp)
 	if (temp->next == NULL) printf("\n\n");
 }
 
-void _test_color(Debug* x)
-{
-	bit8_color mcolor;
-	for (int u = 1; u < 16; u++)
-	{
-		mcolor.bf.foreground = 0;
-		mcolor.bf.background = u;
-//		SetConsoleTextAttribute(x->hConsole, mcolor.bf_color);
-		printf("******%d******\n", u);
-	}
-}
+
 
 void _print_line_debuge(Debug* x, node* bx, int line)
 {
-	const short colors[] =
-	{
-		1, 2, 3, 4, 5, 6,
 
-	};
 	//FlushConsoleInputBuffer(this->hConsole);
 
 	//!out_put
@@ -153,12 +140,12 @@ void _checknode(Debug* x, node* y)
 		}
 	}
 }
-Debug _debuge_ = {
+struct Debug _debuge_ = {
 //		.hConsole = 0,
 		.t = 0,
 		.print_line_debuge = _print_line_debuge,
 		.do_work = _do_work,
-		.test_color = _test_color,
+
 		.cprintf = _cprintf,
 		.addnode = _addnode,
 		.checknode = _checknode,
@@ -207,7 +194,7 @@ void _do_work(Debug* x, node* temp)
 {
 	x->cprintf(x, 0x8F, "%s", parse_obj_str(temp));
 	if ( temp->type_ == value && temp->opt_raw != NULL )
-		x->cprintf(x, 0x05, " (%s)", ((type_def*)temp->opt_raw)->type_name);
+		x->cprintf(x, 0x05, " (%s)", temp->opt_type_ptr->type_name);
 	x->checknode(x, temp);
 	if (temp->ref_node != NULL)
 		x->addnode(x, temp);
