@@ -77,8 +77,8 @@ int r = 0;
 
 void parse_line(char* buff, node* n_node, const int line)
 {
-	
-	
+
+
 	n_node->type_ |= operators_n;
 
 	while (buff != NULL && (*buff == ' ' || *buff == '\t' || *buff == '\n' || *buff == '\r' || *buff == ';'))
@@ -87,7 +87,7 @@ void parse_line(char* buff, node* n_node, const int line)
 		if(*buff=='\n')n_node->line++;
 	}
 	n_node->line = line;
-	
+
 	node_type a = (node_type)0;
 	if (static_flag_check2x(&a))
 	{
@@ -112,7 +112,7 @@ void parse_line(char* buff, node* n_node, const int line)
 		n_node->type_ = endl;
 		n_node->next = NULL;
 		n_node->line = line;
-		
+
 		if (print_parse_log)
 			debuge->print_line_debuge(debuge, n_node, line);
 
@@ -124,7 +124,7 @@ void parse_line(char* buff, node* n_node, const int line)
 		return;
 	}
 
-	
+
 	node* next = new_node(nodes);
 	next->parent = n_node;
 	n_node->next = next;
@@ -402,30 +402,35 @@ void parse_line(char* buff, node* n_node, const int line)
 				//{
 				//	next->type_ = var_name | value;
 				//}
-				if (i == _if_ || i == _while_ || i == _else_ || i == _eif_)
+				if (i == _if_  || i == _else_ || i == _eif_)
 
 				{
+				node * prev_condtion=NULL;
 					if (i == _else_)
 					{
 						if ((n_node->parent != NULL && n_node->parent->type_ == parentheses1_c))
 						{
-							n_node->ref_node = n_node->parent->ref_node->parent->ref_node->parent; ///if
-							n_node->ref_node->next_jump = n_node;  //save next jump to if
+							prev_condtion = n_node->parent->ref_node->parent->ref_node->parent; ///if
+
 						}
 						else if (n_node->stack_parent->parent->type_ == parentheses1_c)
 						{
-							n_node->ref_node = get_first_type_with_value(get_root(n_node->stack_parent->parent), keyword, (void*)_eif_);
-							if (n_node->ref_node == NULL)
+							prev_condtion = get_first_type_with_value(get_root(n_node->stack_parent->parent), keyword, (void*)_eif_);
+							if (prev_condtion == NULL)
 							{
-								n_node->ref_node = get_first_type_with_value(get_root(n_node->stack_parent->parent), keyword, (void*)_if_);
+								prev_condtion = get_first_type_with_value(get_root(n_node->stack_parent->parent), keyword, (void*)_if_);
 							}
-							n_node->ref_node->next_jump = n_node;
+
+
 						}
 						else
 						{
 							printf("ERROR: no if body");
 							exit(-1);
 						}
+
+						n_node->ref_node= prev_condtion;
+						n_node->ref_node->next_jump = n_node;
 						n_node->next_jump = NULL;
 						next->flag_ = var_name | value;
 						next->type_ = parentheses1;
@@ -440,31 +445,54 @@ void parse_line(char* buff, node* n_node, const int line)
 					{
 						if ((n_node->parent != NULL && n_node->parent->type_ == parentheses1_c))
 						{
-							n_node->ref_node = n_node->parent->ref_node->parent->ref_node->parent;
+						///if--eif
+							prev_condtion = n_node->parent->ref_node->parent->ref_node->parent;
+
 						}
 
 						else if (n_node->stack_parent->parent->type_ == parentheses1_c)
 						{
-							n_node->ref_node = get_first_type_with_value(get_root(n_node->stack_parent->parent), keyword, (void*)_eif_);
-							if (n_node->ref_node == NULL)
+							prev_condtion = get_first_type_with_value(get_root(n_node->stack_parent->parent), keyword, (void*)_eif_);
+							if (prev_condtion == NULL)
 							{
-								n_node->ref_node = get_first_type_with_value(get_root(n_node->stack_parent->parent), keyword, (void*)_if_);
+								prev_condtion = get_first_type_with_value(get_root(n_node->stack_parent->parent), keyword, (void*)_if_);
 
 								//TODO:
 							}
+
 						}
 						else
 						{
-							printf("ERROR: no if body");
+							printf("ERROR: parent if-eif body");
+							exit(-1);
 						}
 
 					}
+					if(prev_condtion!=NULL)
+                    {
+						n_node->ref_node= prev_condtion;
+						n_node->ref_node->next_jump = n_node;
+                    }
+                    else
+                    {
+                            printf("ERROR: no parent if-eif body");
+							//exit(-1);
+                    }
 					n_node->next_jump = NULL;
 					next->flag_ = var_name | value;
 					next->type_ = parentheses4;
 					static_flag_op2(parentheses1, NULL, true);
 					static_flag_op2(parentheses4, NULL, true);
 					next->is_flagged = true;
+				}
+				else if( i == _while_)
+				{
+                    next->flag_ = var_name | value;
+					next->type_ = parentheses4;
+					static_flag_op2(parentheses1, NULL, true);
+					static_flag_op2(parentheses4, NULL, true);
+					next->is_flagged = true;
+
 				}
 				else if (i == _return_)
 				{

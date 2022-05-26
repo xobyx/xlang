@@ -303,7 +303,9 @@ void if_eif_function(node** cx, fcall * temp, var* calling_obj)
 			save->opt_raw = heif;
 
 			compile(calling_obj,*cx,temp,close);
-			*cx=save->next_jump!=NULL?gelastjump(save)->next->ref_node->next->ref_node:close;
+                                                     //  [{|(]    [}|)]
+			*cx=save->next_jump!=NULL?get_first_type(gelastjump(save),parentheses1)->ref_node:close;
+
 			//*cx=close;
 		}
 		else
@@ -429,7 +431,7 @@ void install_class(node** n)
 	*n = tm;
 }
 
-void compile(var* parent, node* out, fcall* c_function, node* stop)
+node* compile(var* parent, node* out, fcall* c_function, node* stop)
 {
 	//func* temp=NULL;
 	/////call from function them self....rooted already
@@ -464,7 +466,7 @@ void compile(var* parent, node* out, fcall* c_function, node* stop)
 					if (tempx == NULL)
 					{
 						printf("function %s isn'node defined", c->value_char_ptr);
-						return;
+						return c;
 					}
 					fcall* fcall = create_fcall(tempx);
 					setup_function_parms(&c, fcall, parent, c_function);
@@ -561,12 +563,12 @@ void compile(var* parent, node* out, fcall* c_function, node* stop)
 
 						node* k = calculate(c->next, c_function, parent, (node_type)0, NULL, re);
 						c = stop;
-						return;
+						return c;
 					}
 					break;
 				case _break_:
 					c = stop;
-					return;
+					return c;
 
 				case _class_:
 					install_class(&c);
@@ -586,6 +588,7 @@ void compile(var* parent, node* out, fcall* c_function, node* stop)
 		if (c == NULL)
 			break;
 	}
+	return c;
 }
 
 

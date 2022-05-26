@@ -68,15 +68,14 @@
  node* get_node_id(node_stack* s,int id)
  {
  int index = id -1;
- node * nnode;
  if(id > s->max_a  ) //1,[2-max_a],..[for-loop-fill]....[id-new-max-a]
  {
     s->nlist =(node**) ( realloc(s->nlist,sizeof(node*) * (id)));
 
 
-    for(int m = s->max_a ;m< id ; m++)  //
+    for(int m = s->max_a ;m<= index ; m++)  //
     {
-        s->nlist[m]= nnode = new_node(s);
+        s->nlist[m] = new_node(s);
         s->nlist[m]->id= m+1;
     }
     s->max_a = id;
@@ -85,7 +84,7 @@
  }
 
    // s->pos_id= id;
-return s->nlist[id-1];
+return s->nlist[index];
 
 
 
@@ -110,11 +109,11 @@ return s->nlist[id-1];
 
  void clean_stack(node_stack* s)
  {
-	node*x=NULL;
-
-	for (node * bi = s->root;bi!=NULL;bi=x)
+	
+   free(s->nlist);
+	for (node * bi = s->root;bi!=NULL;bi=bi->stack_next)
 	{
-		x=bi->stack_next;
+		
 		//if(bi->value!=0)free(bi->value);
 		//if(bi->opt!=0)free(bi->opt);
 		if((bi->btype.value & a) !=0)
@@ -129,5 +128,6 @@ return s->nlist[id-1];
 		s->size--;
 
 	}
+	free(s);
 
  }
