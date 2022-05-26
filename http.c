@@ -129,7 +129,7 @@ void http(fcall* cs)
 type_def * get_type()
 {
 	type_def*  a;
-	a->type_name = "http";
+//	a->type_name = "http";
 	//a.functions.root= 
 	///func* function = add_function(&a.functions,":http", &a,4,http,0,0);
 	//function->function_type= f_type::constr;

@@ -176,7 +176,7 @@ void maintxt(char * yy,unsigned int s[4]) {
  
     //var char digest[16] := h0 append h1 append h2 append h3 //(Output is in little-endian)
     uint8_t *p;
-	int a= sizeof(uint8_t);
+	//int a= sizeof(uint8_t);
     // display result
 	char digest[33]={0};
 	

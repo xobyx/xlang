@@ -185,7 +185,7 @@ typedef struct node_stack
 	struct node* root;
 	node ** nlist;
     int max_a;
-    int pos_id;
+   
 }node_stack;
 
 enum var_access { PUBLIC=1, STATIC, PRIVATE };

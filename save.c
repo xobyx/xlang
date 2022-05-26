@@ -280,7 +280,7 @@ void s_compile_(node_stack* stack)
 #endif
 
 
-		if(x->type_ != var_name || x->value_raw == NULL || !eql((char*)x->value_raw,"import"))COMPILE_1_P(i);
+		if(x->type_ != var_name || x->value_raw == NULL || !eql((char*)x->value_raw,"import"))compile(0,i,0,0);
 
 	}
 }
