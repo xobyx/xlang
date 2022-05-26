@@ -91,7 +91,7 @@ void save_file(char* file, node_stack* a, unsigned int MD5_hash[4])
 				fwrite(top->value_char_ptr,msize, 1, f);
 
 
-				////value will not be type_instance [var_name] 
+				////value will not be type_instance [var_name]
 
 
 
@@ -134,21 +134,21 @@ void save_file(char* file, node_stack* a, unsigned int MD5_hash[4])
 		{
 			fwrite(&e, 4, 1, f);
 		}
+		if(top->next_jump!=NULL)
+		{
+			fwrite(&top->next_jump->id,4,1,f);
+		}
+		else
+		{
+			fwrite(&e,4,1,f);
+		}
 
 		top = top->stack_next;
 	}
 
 	fclose(f);
 }
-node * node_by_idx(int id,node_stack* nodes)
-{
-	for(node* n=nodes->root;n!=NULL;n=n->next)
-	{
-		if(n->id==id) return n;
-	}
-	return NULL;
-}
-int ac[][2]={{1,1}};
+
 
 void read_file_parse(FILE* f, node_stack* nodes)
 {
@@ -196,10 +196,10 @@ void read_file_parse(FILE* f, node_stack* nodes)
 		read=fread(&msize, 4, 1, f);
 		if (msize != 0)
 		{
-			
 
 
-			
+
+
 			if (top->type_==value||top->type_==var_name||top->type_==operators_n)//& (index|size))
 			{
 				byte * m_value = (byte*)malloc(msize + 1);
@@ -210,14 +210,14 @@ void read_file_parse(FILE* f, node_stack* nodes)
 			else if(top->type_==keyword)
 			{
 				read=fread(&top->value_keyword, msize, 1, f);
-				
+
 			}
 			else if(top->type_==itype)
 			{
 				int type_id=0;
 				read=fread(&type_id, msize, 1, f);
 				top->value_type= SIMPLE_TYPE+ type_id;
-			
+
 			}
 			//else
 			//	top->value_raw = m_value;
@@ -250,6 +250,13 @@ void read_file_parse(FILE* f, node_stack* nodes)
 		{
 		top->ref_node= NULL;
 		}
+		int next_jump_id;
+		read=fread(&next_jump_id,4,1,f);
+		if(next_jump_id!=0)
+		{
+		node* next_jump= get_node_id(nodes,next_jump_id);
+		top->next_jump=next_jump;
+		}
 		read=ftell(f);
 	}
 
@@ -264,23 +271,28 @@ void read_file_parse(FILE* f, node_stack* nodes)
 //static debuge b;
 void s_compile_(node_stack* stack)
 {
-
-	node* i;
-	for (node* x = stack->root; x != NULL; x = i->stack_next)
+//debuge->print_line_debuge(debuge,stack->root, 0);
+//compile(0,stack->root,0,0);
+return;
+	//node* i;
+	for (node* i = stack->root; i != NULL; i = i->stack_next)
 	{
-		i = x;
+		//i = x;
 		while (i->next != NULL)
 		{
 			i = i->next;
 		}
 
 
-#ifdef DEBUG_P
-//  b.print_line_debuge(i, 0);
-#endif
+
+        debuge->print_line_debuge(debuge,i, 0);
 
 
-		if(x->type_ != var_name || x->value_raw == NULL || !eql((char*)x->value_raw,"import"))compile(0,i,0,0);
+
+		if(i->type_ != var_name || i->value_raw == NULL || !eql((char*)i->value_raw,"import"))
+		{
+		i=compile(0,i,0,0);
+		}
 
 	}
 }
