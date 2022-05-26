@@ -436,13 +436,16 @@ node* compile(var* parent, node* out, fcall* c_function, node* stop)
 	//func* temp=NULL;
 	/////call from function them self....rooted already
 	node* in;
+	node* c;
+	node* ret;
 	if (stop == NULL)
 		in = get_root(out);
 	else
 		in = out;
 
-	for (node* c = in; c != NULL; c = c->next)
+	for (c = in; c != NULL; c = c->next)
 	{
+		ret=c;
 		if (stop != NULL && (c == stop || (c->parent != NULL && c->parent == stop)))
 		{
 			break;
@@ -519,7 +522,7 @@ node* compile(var* parent, node* out, fcall* c_function, node* stop)
 						}
 						else
 						{
-							if (c->next->next->type_ == itype && get_type_by_name((char*)c->next->next->value_raw))
+							if (c->next->next->type_ == itype && c->next->next->value_type)
 							{
 								//c->next->next->type_=var_name;
 							}
@@ -533,6 +536,7 @@ node* compile(var* parent, node* out, fcall* c_function, node* stop)
 						n_var->values = install_memory_with_type(n_var->type_define, n_var->size);
 					}
 				}
+				ret=c;
 				break;
 			}
 		case keyword:
@@ -588,7 +592,7 @@ node* compile(var* parent, node* out, fcall* c_function, node* stop)
 		if (c == NULL)
 			break;
 	}
-	return c;
+	return ret;
 }
 
 

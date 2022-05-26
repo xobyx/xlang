@@ -273,25 +273,26 @@ void s_compile_(node_stack* stack)
 {
 //debuge->print_line_debuge(debuge,stack->root, 0);
 //compile(0,stack->root,0,0);
-return;
-	//node* i;
+//return;
+	node* m;
 	for (node* i = stack->root; i != NULL; i = i->stack_next)
 	{
 		//i = x;
 		while (i->next != NULL)
 		{
+			m=i;
 			i = i->next;
 		}
 
 
 
-        debuge->print_line_debuge(debuge,i, 0);
+       // debuge->print_line_debuge(debuge,m, 0);
 
 
 
-		if(i->type_ != var_name || i->value_raw == NULL || !eql((char*)i->value_raw,"import"))
+	//	if(m->type_ != var_name || m->value_raw == NULL || !eql((char*)m->value_raw,"import"))
 		{
-		i=compile(0,i,0,0);
+		i=compile(0,m,0,0);
 		}
 
 	}
