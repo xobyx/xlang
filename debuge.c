@@ -279,6 +279,7 @@ void _print_line_debuge(Debug* x, node* bx, int line)
 
 void _addnode(Debug* x, node* y)
 {
+	if((y->type_ & (parentheses1 | parentheses4))==0) return;
 	for (int i = 0; i < 10; i++)
 	{
 		if (x->stack[i].m == NULL)
@@ -299,6 +300,7 @@ void _addnode(Debug* x, node* y)
 
 void _checknode(Debug* x, node* y)
 {
+	if((y->type_ & (parentheses1_c | parentheses4_c))==0) return;
 	for (int i = 9; i >= 0; i--)
 	{
 		if (x->stack[i].m == y)

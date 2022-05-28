@@ -276,6 +276,7 @@ node* get_last_type(node* in, const node_type b)
 
 void do_work1(var* calc_result, var* me, int index)
 {
+	//if(index >= me->size ){printf("error index out range ..");exit(0);}
 	if (me->type_define == T_INT)
 	{
 		me->value_int[index] = *calc_result->value_int;
@@ -296,9 +297,14 @@ void do_work1(var* calc_result, var* me, int index)
 	{
 		me->value_int[index] = *calc_result->value_int;
 	}
-	else if (me->type_define == T_STRING)
+	else if (me->type_define == T_STRING &&  calc_result->type_define ==T_STRING )
 	{
 		me->val_str_ptr[index] = *calc_result->val_str_ptr;
+	}
+	else if (me->type_define == T_STRING &&  calc_result->type_define ==T_CHAR )
+	{
+		char * dst= me->val_str_ptr[0];
+		dst[index] = *calc_result->value_char_ptr;
 	}
 	else
 	{
@@ -330,6 +336,7 @@ void set_value(var* context, fcall* temp, node** cx)
 		{
 			me = get_globle_var_by_name((*cx)->value_char_ptr);
 		}
+		bool index_assian=false;
 
 
 		if ((*cx)->next->btype.node_type_bit.s_index)
@@ -343,6 +350,7 @@ void set_value(var* context, fcall* temp, node** cx)
 			index = *get_index->value_int;
 			free_temp_var(get_index);
 			*cx = close;
+			index_assian=true;
 		}
 		else if (me->size > 1)
 		{
@@ -352,8 +360,8 @@ void set_value(var* context, fcall* temp, node** cx)
 
 		if ((*cx)->next->type_ == equles)
 		{
-			calc_result->type_define = me->type_define;
-
+			calc_result->type_define =((me->type_define == SIMPLE_TYPE+1) && index_assian)? T_CHAR :me->type_define;
+			
 
 			//c = calculate(res, c->next->next, temp);
 			*cx = calculate((*cx)->next->next, temp, context, endl, NULL, calc_result);
@@ -461,6 +469,11 @@ void scap_string(char* m)
 			*(y + 1) = 0x0d;
 			y++;
 		}
+		if (*y == '\\' && (*(y + 1) >= '0' && *(y + 1) >= '9'))
+		{
+			*y = *(y) - 0x30;			
+			y++;
+		}
 	}
 }
 
@@ -521,7 +534,7 @@ void print(fcall* temp)
 	{
 		char* k2 = "%s]\n";
 		k = "%s\n";
-		if (m->size > 1)
+		if (m->size > 1 )
 		{
 			k = "%s,";
 			*r = printf("%s(%d)=[", m->type_define->type_name, m->size);
@@ -538,18 +551,27 @@ void print(fcall* temp)
 	}
 	else if (m->type_define == T_LONG)
 	{
+		for(int i=0;i<m->size;i++)
+		{
 		k = "%lu\n";
-		*r = printf(k, (m->value_long)[0]);
+		*r = printf(k, (m->value_long)[i]);
+		}
 	}
 	else if (m->type_define == T_CHAR)
 	{
+		for(int i=0;i<m->size;i++)
+		{
 		k = "%c\n";
-		*r = printf(k, *m->value_char_ptr);
+		*r = printf(k, m->value_char_ptr[i]);
+		}
 	}
 	else if (m->type_define == T_FLOAT)
 	{
+		for(int i=0;i<m->size;i++)
+		{
 		k = "%f\n";
 		*r = printf(k, *m->value_float);
+		}
 	}
 	else
 	{
@@ -616,7 +638,7 @@ void import(fcall* d)
 
 		if (sf != NULL)
 		{
-			char* buf = get_filebuff(sf);
+			char* buf = get_file_buffer(sf);
 			//TODO: check for parsed file
 			start_parse_lines(buf, false);
 			free(buf);
@@ -1219,35 +1241,32 @@ void copy_object(type_instance* src, void* dstn_array, int size)
 }
 
 
-void* install_memory_with_type(type_def* tc, const int sx)
+void* install_memory_with_type(type_def* mtype, const int count)
 {
-	int size = sx == 0 ? 1 : sx;
+	int size = count == 0 ? 1 : count;
 	void* r = NULL;
-	if (tc == NULL) return r;
-	if (T_INT == tc)
+	if (mtype == NULL) return r;
+	if (T_INT == mtype)
 	{
-		r = (int*)calloc(size, sizeof(int));
+		r = (int*)calloc(count, sizeof(int));
 	}
-
-
-	else if (T_LONG == tc)
-		r = (long*)calloc(size, sizeof(long));
-
-	else if (T_CHAR == tc)
-		r = (char*)calloc(size, sizeof(char));
-	else if (T_FLOAT == tc)
-		r = (float*)malloc(sizeof(float) * size);
-	else if (T_STRING == tc)
-		r = (char**)calloc(size, sizeof(char*));
-	else if (T_BOOL == tc)
-		r = (bool*)malloc(sizeof(int) * size);
+	else if (T_LONG == mtype)
+		r = (long*)calloc(count, sizeof(long));
+	else if (T_CHAR == mtype)
+		r = (char*)calloc(count, sizeof(char));
+	else if (T_FLOAT == mtype)
+		r = (float*)calloc(count,sizeof(float));
+	else if (T_STRING == mtype)
+		r = (char**)calloc(count, sizeof(char*));
+	else if (T_BOOL == mtype)
+		r = (bool*)calloc(count, sizeof(int));
 
 	else
 	{
-		type_instance* n_copy_array = (type_instance*)calloc(size, sizeof(type_instance));
+		type_instance* n_copy_array = (type_instance*)calloc(count, sizeof(type_instance));
 
 
-		instance_type(tc, n_copy_array, size);
+		instance_type(mtype, n_copy_array, count);
 
 
 		r = n_copy_array;
@@ -1339,8 +1358,14 @@ bool copy_array(var* out, void* out_memory, var* src)
 		printf("ERROR: size mismatch  %s[%d]\n", src->name, src->size);
 		return true;
 	}
-
-	if (out->type_define->type_name == T_STRING->type_name)
+	else if (out->type_define == T_CHAR)
+	{
+		for(int i=0 ; i<src->size;i++)
+		{
+		((char*)out_memory)[i]=  src->value_char_ptr[i];
+		}
+	}
+	else if (out->type_define == T_STRING)
 	{
 		int u = 0;
 		char** g = src->val_str_ptr;
@@ -1352,7 +1377,7 @@ bool copy_array(var* out, void* out_memory, var* src)
 			g++;
 		}
 	}
-	else if (out->type_define->type_name == T_INT->type_name)
+	else if (out->type_define == T_INT)
 	{
 		int* g = src->value_int;
 		memcpy(out_memory, g, sizeof(int) * src->size);
@@ -1370,6 +1395,11 @@ bool copy_array(var* out, void* out_memory, var* src)
 bool is_double_equle(node* mnode)
 {
 	return mnode->type_ == equles && mnode->next->type_ == equles;
+}
+bool is_double_oprater(node* mnode)
+{
+	return (mnode->type_ == operators_n && (mnode->next->type_ == operators_n||mnode->next->type_ == equles))
+		||(mnode->type_ == equles && mnode->next->type_ == equles);
 }
 #if defined(__GNUC__)|| defined(__MINGW64__)
 #define strcat_s(x,y,z) strcat(x,z)
@@ -1407,7 +1437,7 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 				name_var = new_temp_var(NULL);
 				mnode = calculate(mnode->next, calling_function, calling_object, (node_type)0, get_close_part(mnode),
 				                  name_var);
-				continue;
+				//continue;
 			}
 			else if (mnode->type_ == var_name)
 			{
@@ -1482,7 +1512,7 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 				set_value_copy_node(name_var, mnode);
 			}
 
-			if (op == NULL)
+			if (op == NULL) //
 			{
 
 
@@ -1541,7 +1571,7 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 					//k = getFirstType(k, parse_obj::endl);
 					mnode = endm;
 				}
-				if (calc_result->type_define->type_name == T_INT->type_name)
+				if (calc_result->type_define == T_INT)
 				{
 					//TODO:no need allready done by in
 					//int y = get_index_value(funct, k);
@@ -1550,36 +1580,36 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 					///math_opration(op,mx,to);
 					MATH_OPERATORS
 				}
-				else if (calc_result->type_define->type_name == T_FLOAT->type_name)
+				else if (calc_result->type_define== T_FLOAT)
 				{
 					const int y = get_index_value(calling_function, mnode);
 					float* mx = (float*)memory + (i - 1);
 					float to = name_var->type_define != NULL && name_var->type_define->type_name == T_INT->type_name
 						           ? (float)name_var->value_int[y]
 						           : name_var->value_float[y];
-					MATH_OPERATORS
+					///MATH_OPERATORS
 				}
-				else if (calc_result->type_define->type_name == T_LONG->type_name)
+				else if (calc_result->type_define == T_LONG)
 				{
 					int y = get_index_value(calling_function, mnode);
 					long* mx = (long*)memory + (i - 1);
 					long to = (name_var->value_long)[y];
 					MATH_OPERATORS
 				}
-				else if (calc_result->type_define->type_name == T_CHAR->type_name)
+				else if (calc_result->type_define == T_CHAR)
 				{
 					char* mx = &((char*)memory)[i - 1];
 					char to = name_var->value_char_ptr[0];
 					MATH_OPERATORS
 				}
-				else if (calc_result->type_define->type_name == T_BOOL->type_name)
+				else if (calc_result->type_define== T_BOOL)
 				{
 					//bool* mx = &((bool*)memory)[i - 1];
 					bool* mx = ((bool*)memory)+(i - 1);
 					bool to = *(bool*)name_var->values;
 					BOOL_OPERATORS
 				}
-				else if (calc_result->type_define->type_name == T_STRING->type_name)
+				else if (calc_result->type_define== T_STRING)
 				{
 					int y = in;
 					char** mx = &((char**)memory)[i - 1];
@@ -1630,6 +1660,7 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 		}
 		else if (mnode->type_ == operators_n || is_double_equle(mnode))
 		{
+		/*
 			if (!is_double_equle(mnode) &&(*(char*)mnode->value_raw == '+' && *(char*)mnode->next->value_raw == '+'))
 			{
 				if (last_var_name != NULL)
@@ -1644,34 +1675,19 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 					f = 1;
 				}
 			}
-			else if (mnode->type_ == equles)
+		 */
+			if(is_double_oprater(mnode))
 			{
-				op = "==";
+				op = (char*)malloc(3);
+				op[0]=   *mnode->value_char_ptr;
+				op[1]=   *mnode->next->value_char_ptr;
+				op[3]= '\0';
 				mnode = mnode->next;
-			}
-			else if (*(char*)mnode->value_raw == '&' && *(char*)mnode->next->value_raw == '&')
-			{
-				op = "&&";
-				mnode = mnode->next;
-			}
-			else if (*(char*)mnode->value_raw == '>' && *(char*)mnode->next->value_raw == '=')
-			{
-				op = ">=";
-				mnode = mnode->next;
-			}
-			else if (*(char*)mnode->value_raw == '<' && *(char*)mnode->next->value_raw == '=')
-			{
-				op = "<=";
-				mnode = mnode->next;
-			}
-			else if (*(char*)mnode->value_raw == '|' && *(char*)mnode->next->value_raw == '|')
-			{
-				op = "||";
-				mnode = mnode->next;
-			}
+
+			}			
 			else
 			{
-				op = (char*)mnode->value_raw;
+				op = mnode->value_char_ptr;
 			}
 		}
 		else ///error no unacceable
@@ -1781,7 +1797,7 @@ node* get_close_part(node* t)
 }
 
 
-char* get_filebuff(FILE* sf)
+char* get_file_buffer(FILE* sf)
 {
 	fseek(sf, 0, SEEK_SET);
 	fseek(sf, 0, SEEK_END);
@@ -1826,6 +1842,11 @@ void set_value_copy_node(var* dstn, node* scr)
 	else if (T_BOOL == dstn->type_define)
 	{
 		*dstn->value_bool = strcmp(scr->value_char_ptr, "false") != 0;
+	}
+	else if (T_CHAR == dstn->type_define)
+	{
+		
+		*dstn->value_char_ptr = *scr->value_char_ptr;
 	}
 }
 

@@ -11,7 +11,7 @@
 /*XLANG*/ void set_value_copy_node(var* dstn, node* scr);
 
 //#define setvaluefortype(mvar,)
-/*XLANG*/ char* get_filebuff(FILE* sf);
+/*XLANG*/ char* get_file_buffer(FILE* sf);
 
 
 extern fl staic_flag2[] ;

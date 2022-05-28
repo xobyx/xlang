@@ -1,7 +1,7 @@
 #include "xlang_main.h"
 
 
-void setup_ref(node_stack* stack);
+
 
 void s_compile_(node_stack* stack);
 
@@ -286,7 +286,7 @@ void s_compile_(node_stack* stack)
 
 
 
-       // debuge->print_line_debuge(debuge,m, 0);
+        debuge->print_line_debuge(debuge,m, 0);
 
 
 

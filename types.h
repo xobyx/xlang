@@ -23,17 +23,17 @@ struct fcall;
 #define KMAG  "\x1B[35m"
 #define KCYN  "\x1B[36m"
 #define KWHT  "\x1B[37m"
-typedef void (*function_node)(struct fcall*);
+typedef void(*function_node)(struct fcall*);
 
 
-static const char* base_types_name [] = {"long", "string", "char", "int", "bool", "float", "_array", "new"};
+static const char* base_types_name[] = { "long", "string", "char", "int", "bool", "float", "_array", "new" };
 
 struct type_def;
 
 
-static const char* key_word [] = {"if", "for", "while", "do", "else", "eif", "return", "break", "class", "static"};
+static const char* key_word[] = { "if", "for", "while", "do", "else", "eif", "return", "break", "class", "static" };
 
-typedef enum key_word_enum { _if_= 0, _for_, _while_, _do_, _else_, _eif_, _return_, _break_, _class_, _static_ }key_word_enum;
+typedef enum key_word_enum { _if_ = 0, _for_, _while_, _do_, _else_, _eif_, _return_, _break_, _class_, _static_ }key_word_enum;
 
 // long[0],string[1],char[2],int[3]
 typedef struct type_stack
@@ -43,8 +43,8 @@ typedef struct type_stack
 	int size;
 }type_stack;
 
-static const char operators [] = {'+', '-', '/', '*', '='};
-static const char one_c [] = {
+static const char operators[] = { '+', '-', '/', '*', '=' };
+static const char one_c[] = {
 	'+', 0, '-', 0, '/', 0, '*', 0, '=', 0, '(', 0, ')', 0, '{', 0, '}', 0, '[', 0, ']', 0, ',', 0, '>', 0, '<', 0, '|',
 	0, '&', 0, '!', 0, '.', 0, ':'
 };
@@ -69,34 +69,34 @@ typedef enum node_type_enum //: i16
 	dot = 0x4000,
 	twodot = 0x8000,	//:
 	pars = (parentheses1 | parentheses1_c | parentheses4 | parentheses4_c | s_index_c | s_index),
-	have_var_value=value | var_name | keyword | itype | operators_n,
-	a=value | var_name,
-	non_one_char =0x000F
+	have_var_value = value | var_name | keyword | itype | operators_n,
+	a = value | var_name,
+	non_one_char = 0x000F
 
 }node_type;
 
-static const char* fuk[]={0,0,0,0,0,0,0,0,0,0,"function_def","function_call","fucnction_parm","var_def","var_call","class_def","class_base_def"};
+static const char* fuk[] = { 0,0,0,0,0,0,0,0,0,0,"function_def","function_call","fucnction_parm","var_def","var_call","class_def","class_base_def" };
 
 
 typedef enum var_name_def
 {
-function_def=10,//f
-function_call,//a
-fucnction_parm,//p
-var_def,//
-var_call,//
-class_def,//k
-class_base_def,//x,
-psize,
-pindex
+	function_def = 10,//f
+	function_call,//a
+	fucnction_parm,//p
+	var_def,//
+	var_call,//
+	class_def,//k
+	class_base_def,//x,
+	psize,
+	pindex
 
 }var_name_def;
 
 typedef enum  function_type
 {
-	f_main=0,
-	constr=1,
-	class_function=2
+	f_main = 0,
+	constr = 1,
+	class_function = 2
 }function_type;
 
 typedef union
@@ -106,22 +106,22 @@ typedef union
 
 	struct
 	{
-		i16 itype:1;
-		i16 keword:1;
-		i16 var_name:1;
-		i16 value:1;
-		i16 operators_n:1;
-		i16 equles:1;
-		i16 endl:1;
-		i16 s_index:1; //[
-		i16 parentheses1:1; //}
-		i16 parentheses1c:1; //{
-		i16 comma:1; //,
-		i16 s_index_c:1; //]
-		i16 parentheses4:1; //(
-		i16 parentheses4c:1; //(
-		i16 dot:1; //(
-		i16 twodot:1; //(
+		i16 itype : 1;
+		i16 keword : 1;
+		i16 var_name : 1;
+		i16 value : 1;
+		i16 operators_n : 1;
+		i16 equles : 1;
+		i16 endl : 1;
+		i16 s_index : 1; //[
+		i16 parentheses1 : 1; //}
+		i16 parentheses1c : 1; //{
+		i16 comma : 1; //,
+		i16 s_index_c : 1; //]
+		i16 parentheses4 : 1; //(
+		i16 parentheses4c : 1; //(
+		i16 dot : 1; //(
+		i16 twodot : 1; //(
 		//i16 mbool:1;
 	} node_type_bit;
 }node_type_raw;
@@ -136,7 +136,7 @@ typedef struct node
 	int id;
 	node_type_raw btype;
 	node_type_raw fflag;
-	int line ;
+	int line;
 
 	struct node* parent;
 	struct  node* next;
@@ -146,12 +146,12 @@ typedef struct node
 	{
 
 		void* value_raw;
-		struct type_def * value_type ;
-		int * value_int ;
-		short value_short;
+		struct type_def * value_type;
+	//	int * value_int;
+	//	short value_short;
 		char * value_char_ptr;
-		char ** value_string;
-		int  _ptr_;
+	//	char ** value_string;
+	//	int  _ptr_;
 		key_word_enum value_keyword;
 
 	};
@@ -167,8 +167,8 @@ typedef struct node
 	{
 
 		void* opt_raw;
-		struct type_def * opt_type_ptr ;
-		int * opt_int_ptr ;
+		struct type_def * opt_type_ptr;
+		int * opt_int_ptr;
 		char * opt_char_ptr;
 		char ** opt_string_ptr;
 		int  _opt_ptr_;
@@ -184,35 +184,35 @@ typedef struct node_stack
 	int size;
 	struct node* root;
 	node ** nlist;
-    int max_a;
-   
+	int max_a;
+
 }node_stack;
 
-enum var_access { PUBLIC=1, STATIC, PRIVATE };
+enum var_access { PUBLIC = 1, STATIC, PRIVATE };
 
 typedef struct var
 {
 
 
 
-	char* name ;
+	char* name;
 
 
 	union
 	{
 		int  a;
 		void* values;
-		struct type_instance * value_type_instsance ;
-		int * value_int ;
-		long * value_long ;
-		float * value_float ;
+		struct type_instance * value_type_instsance;
+		int * value_int;
+		long * value_long;
+		float * value_float;
 		char * value_char_ptr;
 		char ** val_str_ptr;
 		bool * value_bool;
 
 	};
 
-	struct type_instance * holder ;
+	struct type_instance * holder;
 
 	struct type_def* type_define;
 	struct type_def* base_type;
@@ -220,7 +220,7 @@ typedef struct var
 	struct node* ref;
 	struct var* stack_next;
 	enum var_access access;
-}var ;
+}var;
 struct type_def;
 typedef struct var_stack
 {
@@ -266,7 +266,7 @@ typedef struct func_stack
 }func_stack;
 
 
-enum w_type { super=0, child };
+enum w_type { super = 0, child };
 
 typedef struct type_def
 {
@@ -282,7 +282,7 @@ typedef struct type_def
 	struct type_def* base;
 	struct type_def* stack_next;
 	enum var_access access;
-	enum w_type w ;
+	enum w_type w;
 
 
 }type_def;
@@ -333,22 +333,30 @@ typedef struct type_instance
 					*mx = (*mx)  * (to);\
 					else if(*op=='/')\
 					*mx = *mx  / to;\
-					else if(*op=='='&&*(op+1)=='=')\
-					*mx = *mx  == to;\
-					else if(*op=='&'&&*(op+1)=='&')\
-					*mx = *mx  && to;\
-					else if(*op=='|'&&*(op+1)=='|')\
-					*mx = *mx  || to;\
-					else if(*op=='='&&*(op+1)=='=')\
-					*mx = *mx  == to;\
-					else if(*op=='>'&&*(op+1)!='=')\
-					*mx = *mx  > to;\
-					else if(*op=='<'&&*(op+1)!='=')\
-					*mx = *mx  < to;\
-					else if(*op=='>'&&*(op+1)=='=')\
-					*mx = *mx  >= to;\
-					else if(*op=='<'&&*(op+1)=='=')\
-					*mx = *mx  <= to;
+					else if(*op=='&')\
+					*mx = *mx  & to;\
+					else if(*op=='|')\
+					*mx = *mx  | to;\
+					else if(*op=='>'&& *(op+1)=='>')\
+					*mx = (*mx)  >>(to);\
+					else if(*op=='<'&& *(op+1)=='<')\
+					*mx = *mx  <<(to);\
+					else if(*op=='=' && *(op+1)=='=')\
+					*mx = *mx == to;\
+					else if (*op == '&'&&*(op + 1) == '&')\
+					*mx = *mx  && to; \
+					else if (*op == '|'&&*(op + 1) == '|')\
+					*mx = *mx || to; \
+					else if (*op == '='&&*(op + 1) == '=')\
+					*mx = *mx == to; \
+					else if (*op == '>'&&*(op + 1) != '=')\
+					*mx = *mx > to; \
+					else if (*op == '<'&&*(op + 1) != '=')\
+					*mx = *mx < to; \
+					else if (*op == '>'&&*(op + 1) == '=')\
+					*mx = *mx >= to; \
+					else if (*op == '<'&&*(op + 1) == '=')\
+					*mx = *mx <= to;
 
 #define BOOL_OPERATORS	if(*op=='='&&*(op+1)=='=')\
 					*mx = *mx  == to;\
@@ -369,7 +377,7 @@ typedef struct type_instance
 #define Pfloat(x) (float*)x
 #define Pstring(x) (char**)x
 #define FCAST(PT,P,X)  P#PT(x)
-typedef struct waiter {node_type wait_type;node* waiting_node;}fl;
+typedef struct waiter { node_type wait_type; node* waiting_node; }fl;
 
 
 static inline const char* parse_obj_str(struct node* nod)
@@ -381,7 +389,7 @@ static inline const char* parse_obj_str(struct node* nod)
 	case var_name:
 	{
 
-	return fuk[nod->opt_name_type];
+		return fuk[nod->opt_name_type];
 	}
 	case value: return "value";
 	case operators_n: return "operators_n";
@@ -401,7 +409,7 @@ static inline const char* parse_obj_str(struct node* nod)
 	case a: return "a";
 	case non_one_char: return "NON_ONE_CHAR";
 		/* etc... */
-	default: ;
+	default:;
 	}
 	return NULL;
 }
