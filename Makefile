@@ -14,7 +14,7 @@ WINDRES = windres
 INC =
 CFLAGS = -Wall
 RESINC =
-LIBDIR = -Lpcre/.libs
+#LIBDIR = -Lpcre/.libs
 LIB =
 LDFLAGS = -Wl,-Bstatic -lpcre -Wl,-Bdynamic
 

@@ -38,34 +38,34 @@ void len(fcall* y);
 //var t = {.type_define = T_INT, .name = "a"};
 ///func_deftion xd;
 func_deftion len_obj_function = {
-	.start_func_parmeters = {0}, .func_code = &len, .func_name = "len", .function_type = f_main, .access=PUBLIC,
-	.return_type = T_INT, .ref = 0,
-	.stack_next = 0, .start_parm_count = 1,
+	.start_func_parmeters = {0},.func_code = &len,.func_name = "len",.function_type = f_main,.access = PUBLIC,
+	.return_type = T_INT,.ref = 0,
+	.stack_next = 0,.start_parm_count = 1,
 };
 //func_deftion xd = {
 //	.start_func_parmeters = {T_INT},.func_code = &index_,.func_name = "index",.function_type = f_main,
 //	.return_type = T_INT,.ref = 0,/* func* STACK_NEXT*/0
 //};
-type_stack simple_type_stack = {.top = T_NEW_INC, .root = T_LONG, .size = 9};
+type_stack simple_type_stack = { .top = T_NEW_INC,.root = T_LONG,.size = 9 };
 type_def SIMPLE_TYPE[] = {
 	{
-		.type_id = 0, .type_name = "long", .d_propertys = {0}, .d_functions = {0}, .base = 0,
+		.type_id = 0,.type_name = "long",.d_propertys = {0},.d_functions = {0},.base = 0,
 		.stack_next = T_STRING
 	},
 	{
-		.type_id = 1, .type_name = "string", .d_propertys = {0}, .d_functions = {&len_obj_function}, .d_function_size = 1, .base = 0,
+		.type_id = 1,.type_name = "string",.d_propertys = {0},.d_functions = {&len_obj_function},.d_function_size = 1,.base = 0,
 		.stack_next = T_CHAR
 	},
-	{.type_id = 2, .type_name = "char", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = T_INT},
-	{.type_id = 3, .type_name = "int", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = T_BOOL},
-	{.type_id = 4, .type_name = "bool", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = T_FLOAT},
-	{.type_id = 5, .type_name = "float", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = T_OBJECT},
-	{.type_id = 6, .type_name = "object", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = T_ARRAY},
+	{.type_id = 2,.type_name = "char",.d_propertys = {0},.d_functions = {0},.base = 0,.stack_next = T_INT},
+	{.type_id = 3,.type_name = "int",.d_propertys = {0},.d_functions = {0},.base = 0,.stack_next = T_BOOL},
+	{.type_id = 4,.type_name = "bool",.d_propertys = {0},.d_functions = {0},.base = 0,.stack_next = T_FLOAT},
+	{.type_id = 5,.type_name = "float",.d_propertys = {0},.d_functions = {0},.base = 0,.stack_next = T_OBJECT},
+	{.type_id = 6,.type_name = "object",.d_propertys = {0},.d_functions = {0},.base = 0,.stack_next = T_ARRAY},
 	{
-		.type_id = 7, .type_name = "_array", .d_propertys = {0}, .d_functions = {&len_obj_function}, .d_function_size = 1, .base = 0,
+		.type_id = 7,.type_name = "_array",.d_propertys = {0},.d_functions = {&len_obj_function},.d_function_size = 1,.base = 0,
 		.stack_next = T_NEW_INC
 	},
-	{.type_id = 8, .type_name = "new", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = 0}
+	{.type_id = 8,.type_name = "new",.d_propertys = {0},.d_functions = {0},.base = 0,.stack_next = 0}
 
 
 };
@@ -239,7 +239,7 @@ node* get_first_type_with_value(node* in, node_type b, void* value)
 				return temp;
 			if (b == keyword)
 			{
-				if ((int)value == (int)temp->value_raw)
+				if (value == temp->value_keyword)
 					return temp;
 			}
 
@@ -297,13 +297,13 @@ void do_work1(var* calc_result, var* me, int index)
 	{
 		me->value_int[index] = *calc_result->value_int;
 	}
-	else if (me->type_define == T_STRING &&  calc_result->type_define ==T_STRING )
+	else if (me->type_define == T_STRING && calc_result->type_define == T_STRING)
 	{
 		me->val_str_ptr[index] = *calc_result->val_str_ptr;
 	}
-	else if (me->type_define == T_STRING &&  calc_result->type_define ==T_CHAR )
+	else if (me->type_define == T_STRING && calc_result->type_define == T_CHAR)
 	{
-		char * dst= me->val_str_ptr[0];
+		char * dst = me->val_str_ptr[0];
 		dst[index] = *calc_result->value_char_ptr;
 	}
 	else
@@ -336,7 +336,7 @@ void set_value(var* context, fcall* temp, node** cx)
 		{
 			me = get_globle_var_by_name((*cx)->value_char_ptr);
 		}
-		bool index_assian=false;
+		bool index_assian = false;
 
 
 		if ((*cx)->next->btype.node_type_bit.s_index)
@@ -350,7 +350,7 @@ void set_value(var* context, fcall* temp, node** cx)
 			index = *get_index->value_int;
 			free_temp_var(get_index);
 			*cx = close;
-			index_assian=true;
+			index_assian = true;
 		}
 		else if (me->size > 1)
 		{
@@ -360,8 +360,8 @@ void set_value(var* context, fcall* temp, node** cx)
 
 		if ((*cx)->next->type_ == equles)
 		{
-			calc_result->type_define =((me->type_define == SIMPLE_TYPE+1) && index_assian)? T_CHAR :me->type_define;
-			
+			calc_result->type_define = ((me->type_define == SIMPLE_TYPE + 1) && index_assian) ? T_CHAR : me->type_define;
+
 
 			//c = calculate(res, c->next->next, temp);
 			*cx = calculate((*cx)->next->next, temp, context, endl, NULL, calc_result);
@@ -471,7 +471,7 @@ void scap_string(char* m)
 		}
 		if (*y == '\\' && (*(y + 1) >= '0' && *(y + 1) >= '9'))
 		{
-			*y = *(y) - 0x30;			
+			*y = *(y)-0x30;
 			y++;
 		}
 	}
@@ -480,23 +480,23 @@ void scap_string(char* m)
 void print_f(fcall* temp)
 {
 	//va_list a;
-	void** y = (void**)malloc(sizeof(char**) * (temp->parm_count_c - 1));
-	var* m = temp->func_parmeters;
-	var* x = m;
-	if (m->type_define->type_name == T_STRING->type_name)
+	void** margs = (void**)malloc(sizeof(char**) * (temp->parm_count_c - 1));//arg list
+	var* fparms = temp->func_parmeters;
+	var* x = fparms;
+	if (fparms->type_define == T_STRING)
 	{
-		for (int i = 0; i < temp->parm_count_c - 1; i++)
+		for (int i = 1; i < temp->parm_count_c; i++)
 		{
 			x = x + i;
-			*(y + i) = x->type_define->type_name == T_STRING->type_name ? *x->val_str_ptr : (void*)*x->value_int;
+			*(margs + (i - 1)) = x->type_define == T_STRING ? *x->val_str_ptr : *x->value_int;
 		}
 #if !defined(__GNUC__)&& !defined(__MINGW64__)
 
 
-		vprintf(*m->val_str_ptr, y);
+		vprintf(*fparms->val_str_ptr, margs);
 #endif
 
-		free(y);
+		free(margs);
 	}
 }
 
@@ -534,7 +534,7 @@ void print(fcall* temp)
 	{
 		char* k2 = "%s]\n";
 		k = "%s\n";
-		if (m->size > 1 )
+		if (m->size > 1)
 		{
 			k = "%s,";
 			*r = printf("%s(%d)=[", m->type_define->type_name, m->size);
@@ -551,26 +551,26 @@ void print(fcall* temp)
 	}
 	else if (m->type_define == T_LONG)
 	{
-		for(int i=0;i<m->size;i++)
+		for (int i = 0; i < m->size; i++)
 		{
-		k = "%lu\n";
-		*r = printf(k, (m->value_long)[i]);
+			k = "%lu\n";
+			*r = printf(k, (m->value_long)[i]);
 		}
 	}
 	else if (m->type_define == T_CHAR)
 	{
-		for(int i=0;i<m->size;i++)
+		for (int i = 0; i < m->size; i++)
 		{
-		k = "%c\n";
-		*r = printf(k, m->value_char_ptr[i]);
+			k = "%c\n";
+			*r = printf(k, m->value_char_ptr[i]);
 		}
 	}
 	else if (m->type_define == T_FLOAT)
 	{
-		for(int i=0;i<m->size;i++)
+		for (int i = 0; i < m->size; i++)
 		{
-		k = "%f\n";
-		*r = printf(k, *m->value_float);
+			k = "%f\n";
+			*r = printf(k, *m->value_float);
 		}
 	}
 	else
@@ -633,7 +633,7 @@ void import(fcall* d)
 		char* y = *d->func_parmeters->val_str_ptr;
 		FILE* sf;
 
-    	sf = fopen( y, "r");
+		sf = fopen(y, "r");
 
 
 		if (sf != NULL)
@@ -674,14 +674,14 @@ void time_x(fcall* d)
 
 void _exit_(fcall* d)
 {
-if (d->func_parmeters->type_define == T_INT && d->func_parmeters->value_int!=NULL)
-{
-exit(*d->func_parmeters->value_int);
-}
-else
-{
-printf("too few arguments to function exit");
-}
+	if (d->func_parmeters->type_define == T_INT && d->func_parmeters->value_int != NULL)
+	{
+		exit(*d->func_parmeters->value_int);
+	}
+	else
+	{
+		printf("too few arguments to function exit");
+	}
 
 }
 
@@ -745,7 +745,7 @@ void scan(fcall* d) ///xscan(var out,"%s");
 void str(fcall* d)
 {
 	char* buff = NULL;
-	if (d->func_parmeters->type_define->type_name == T_FLOAT->type_name)
+	if (d->func_parmeters->type_define == T_FLOAT)
 	{
 		float* u = d->func_parmeters->value_float;
 		buff = (char*)malloc(sizeof(float) * 4 + 1);
@@ -755,7 +755,7 @@ void str(fcall* d)
 
 		d->_return.val_str_ptr = get_pptr_string(t);
 	}
-	else if (d->func_parmeters->type_define->type_name == T_INT->type_name)
+	else if (d->func_parmeters->type_define == T_INT)
 	{
 		int* u = d->func_parmeters->value_int;
 		buff = (char*)malloc(sizeof(int) * 4 + 1);
@@ -766,13 +766,14 @@ void str(fcall* d)
 
 		d->_return.val_str_ptr = get_pptr_string(t);
 	}
-	else if (d->func_parmeters->type_define->type_name == T_CHAR->type_name)
+	else if (d->func_parmeters->type_define == T_CHAR)
 	{
-		char* u = d->func_parmeters->value_char_ptr;
-		char* ubuff = (char*)malloc(sizeof(char) + 1);
-		memset(ubuff, 0, 2);
-		*ubuff = *u;
+		
+		int size = (sizeof(char) * d->func_parmeters->size) + 1;
+		char* ubuff = (char*)calloc(1,size);
+		
 
+		strcpy(ubuff, d->func_parmeters->value_char_ptr);
 
 		d->_return.val_str_ptr = get_pptr_string(ubuff);
 	}
@@ -785,15 +786,15 @@ void str(fcall* d)
 
 
 func_deftion* add_function_gloable(char* name, type_def* return_type, int pcount, const function_node fe,
-                                   char** par_name,
-                                   type_def** par_type)
+	char** par_name,
+	type_def** par_type)
 {
 	return add_function(funcs, name, return_type, pcount, fe, par_name, par_type);
 }
 
 func_deftion* add_function(func_stack* s, char* name, type_def* return_type, int pcount, const function_node fe,
-                           char** par_name,
-                           type_def** par_type)
+	char** par_name,
+	type_def** par_type)
 {
 	func_deftion* nx2 = new_func_on_stack(s);
 
@@ -826,24 +827,43 @@ void add_type(char* name)
 	type_def* mt = new_type();
 	mt->type_name = name;
 }
-
+int * new_int(int count, int value)
+{
+	int* re = calloc(count, sizeof(int));
+	*re = value;
+	return re;
+}
 void len(fcall* y)
 {
-	if (y->context->type_define == T_STRING)
-	{
-		char** ys = y->context->val_str_ptr;
-		int* n = (int*)malloc(strlen(*ys));
-		y->_return.value_int = n;
-	}
-	if (y->context->type_define->base == T_ARRAY)
-	{
-		y->_return.value_int = (int*)malloc(y->context->value_type_instsance->base->size);
-	}
 
+	if (y->context != NULL)
+	{
+		if (y->context->type_define == T_STRING)
+		{
+			if(y->context->size==1)
+			y->_return.value_int = new_int(1, strlen(*y->context->val_str_ptr));
+			else
+			y->_return.value_int = new_int(1, y->context->size);
+		}
+		if (y->context->type_define->base == T_ARRAY)
+		{
+			y->_return.value_int = (int*)new_int(1, y->context->value_type_instsance->size);
+		}
+
+
+	}
 	else
 	{
-		printf("exp:::");
-		///TODO:
+		if (y->parm_count_c == 1)
+		{
+			if (y->func_parmeters->size > 1) {
+				y->_return.value_int = new_int(1, y->func_parmeters->size);
+			}
+			else if (y->func_parmeters->type_define == T_STRING)
+			{
+				y->_return.value_int = new_int(1, strlen(*y->func_parmeters->val_str_ptr));
+			}
+		}
 	}
 }
 
@@ -908,26 +928,26 @@ void install_default_types()
 {
 	types = &simple_type_stack;
 
-/*
-	HMODULE load_library_a = LoadLibraryA("httplib_dy.dll");
-	if (load_library_a != NULL)
-	{
-		ty* get_type_fnction = (ty*)GetProcAddress(load_library_a, "get_type");
-		type_def* nt = get_type_fnction(SIMPLE_TYPE);
+	/*
+		HMODULE load_library_a = LoadLibraryA("httplib_dy.dll");
+		if (load_library_a != NULL)
+		{
+			ty* get_type_fnction = (ty*)GetProcAddress(load_library_a, "get_type");
+			type_def* nt = get_type_fnction(SIMPLE_TYPE);
 
-		func_deftion* xz = add_function_gloable(nt->d_functions[0]->func_name, nt, nt->d_functions[0]->start_parm_count,
-		                                        nt->d_functions[0]->func_code,
-		                                        nt->d_functions[0]->start_func_parmeters_name,
-		                                        nt->d_functions[0]->start_func_parmeters);
-		//func* temp = copy_func(nt->functions.root);
-		//temp->func_name = nt->functions.root->func_name;
-		//func_stack_push(funcs, temp);
-		xz->function_type = constr;
+			func_deftion* xz = add_function_gloable(nt->d_functions[0]->func_name, nt, nt->d_functions[0]->start_parm_count,
+													nt->d_functions[0]->func_code,
+													nt->d_functions[0]->start_func_parmeters_name,
+													nt->d_functions[0]->start_func_parmeters);
+			//func* temp = copy_func(nt->functions.root);
+			//temp->func_name = nt->functions.root->func_name;
+			//func_stack_push(funcs, temp);
+			xz->function_type = constr;
 
-		//type_stack_push(types, nt);
-		//type_print(nt, 0);
-	}
-	*/
+			//type_stack_push(types, nt);
+			//type_print(nt, 0);
+		}
+		*/
 }
 
 
@@ -1106,30 +1126,14 @@ bool is_base_type(type_def* t)
 
 void* install_memory(var* n)
 {
-	///TODO: install_memory
-	type_def* y = n->type_define;
-	if (n->size > 1)
-	{
-		void* yyy = install_memory_with_type(y, n->size);
-		/*
-		type_instance* ntype = calloc(1, sizeof(type_instance));
-
-		instance_type(n->type_define, ntype, n->size);
-		var* array_obj = new_var_on_stack(&ntype->propertys, "array", T_ARRAY);
-
-		array_obj->base_type = n->type_define; //u
-		*/
-
-		return yyy;
-	}
-	return install_memory_with_type(y, n->size);
+	return install_memory_with_type(n->type_define, n->size);
 }
 
 void instance_type(type_def* type_protype, void* dstn_array, int size)
 {
 	for (int i = 0; i < size; i++)
 	{
-		type_instance* type_new_instance = (type_instance*)dstn_array + i ;
+		type_instance* type_new_instance = (type_instance*)dstn_array + i;
 
 		var_stack* props = (var_stack*)malloc(sizeof(var_stack));
 		var_stack_init(props);
@@ -1185,17 +1189,17 @@ void copy_object(type_instance* src, void* dstn_array, int size)
 {
 	for (int i = 0; i < size; i++)
 	{
-		type_instance* dstn = (type_instance*)dstn_array + i ;
-		dstn->type= src->type;
+		type_instance* dstn = (type_instance*)dstn_array + i;
+		dstn->type = src->type;
 
-		dstn->size=src->size;
+		dstn->size = src->size;
 		var_stack* props = (var_stack*)malloc(sizeof(var_stack));
 		var_stack_init(props);
 
 		//printf("\ncopy %s %s\n",src->w==child?"inc type":"super type",src->name);
 		if (src->propertys.size > 0)
 		{
-			for (var* prop = src->propertys.root; prop !=NULL; prop=prop->stack_next)
+			for (var* prop = src->propertys.root; prop != NULL; prop = prop->stack_next)
 			{
 
 
@@ -1224,7 +1228,7 @@ void copy_object(type_instance* src, void* dstn_array, int size)
 						else //inctance_prop
 						{
 							inctance_prop->values = install_memory_with_type(prop->type_define, size);
-							copy_object(prop->value_type_instsance,inctance_prop->values,size);
+							copy_object(prop->value_type_instsance, inctance_prop->values, size);
 							//set_value_copy_var(inctance_prop, prop);
 						}
 					}
@@ -1253,9 +1257,12 @@ void* install_memory_with_type(type_def* mtype, const int count)
 	else if (T_LONG == mtype)
 		r = (long*)calloc(count, sizeof(long));
 	else if (T_CHAR == mtype)
-		r = (char*)calloc(count, sizeof(char));
+	{
+		r = (char*)malloc(sizeof(char)*count +1);
+		memset(r,0,sizeof(char)*count +1);
+	}
 	else if (T_FLOAT == mtype)
-		r = (float*)calloc(count,sizeof(float));
+		r = (float*)calloc(count, sizeof(float));
 	else if (T_STRING == mtype)
 		r = (char**)calloc(count, sizeof(char*));
 	else if (T_BOOL == mtype)
@@ -1360,9 +1367,9 @@ bool copy_array(var* out, void* out_memory, var* src)
 	}
 	else if (out->type_define == T_CHAR)
 	{
-		for(int i=0 ; i<src->size;i++)
+		for (int i = 0; i < src->size; i++)
 		{
-		((char*)out_memory)[i]=  src->value_char_ptr[i];
+			((char*)out_memory)[i] = src->value_char_ptr[i];
 		}
 	}
 	else if (out->type_define == T_STRING)
@@ -1398,14 +1405,14 @@ bool is_double_equle(node* mnode)
 }
 bool is_double_oprater(node* mnode)
 {
-	return (mnode->type_ == operators_n && (mnode->next->type_ == operators_n||mnode->next->type_ == equles))
-		||(mnode->type_ == equles && mnode->next->type_ == equles);
+	return (mnode->type_ == operators_n && (mnode->next->type_ == operators_n || mnode->next->type_ == equles))
+		|| (mnode->type_ == equles && mnode->next->type_ == equles);
 }
 #if defined(__GNUC__)|| defined(__MINGW64__)
 #define strcat_s(x,y,z) strcat(x,z)
 #endif
 node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_type stop_in_type, node* stop_in_node,
-                var* calc_result)
+	var* calc_result)
 {
 	//bool is_mem_set = false;
 	var* last_var_name = NULL;
@@ -1436,7 +1443,7 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 			{
 				name_var = new_temp_var(NULL);
 				mnode = calculate(mnode->next, calling_function, calling_object, (node_type)0, get_close_part(mnode),
-				                  name_var);
+					name_var);
 				//continue;
 			}
 			else if (mnode->type_ == var_name)
@@ -1450,7 +1457,7 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 				{
 					name_var = fget_var_by_name_fc(mnode->value_char_ptr, calling_function);
 				}
-					////////
+				////////
 				else if (calling_object != NULL || mnode->next->type_ == dot)
 				{
 					name_var = get_type_inc_obj_var(&mnode, calling_object, &name_function);
@@ -1486,7 +1493,7 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 					//compile_var_name_start(k, funct);
 					//compile(mvar, k, funct, y);
 					setup_function_parms(&mnode, fcall, calling_object == NULL ? name_var : calling_object,
-					                     calling_function);
+						calling_function);
 					call_function(fcall, calling_object == NULL ? &name_var : &calling_object);
 
 
@@ -1536,8 +1543,8 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 
 				else if (calc_result->type_define->type_name == T_CHAR->type_name)
 					((char*)memory)[i++] = name_var->type_define != T_STRING
-						                       ? name_var->value_char_ptr[in]
-						                       : name_var->val_str_ptr[0][in];
+					? name_var->value_char_ptr[in]
+					: name_var->val_str_ptr[0][in];
 				else if (calc_result->type_define == T_STRING)
 				{
 					char* val = name_var->val_str_ptr[in];
@@ -1553,7 +1560,7 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 					///FIXME:
 					((type_instance*)memory)[i++] = name_var->value_type_instsance[in];
 				}
-				in=0; //reset index
+				in = 0; //reset index
 			}
 			else //v2 op != NULL
 			{
@@ -1565,7 +1572,7 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 					struct var* atx = new_temp_var(NULL);
 					//node* end= calculate4(atx, k->parent->parent->parent, parse_obj::parentheses4c, funct);
 					node* endm = calculate4(atx, get_first_type_backword_from(mnode, operators_n)->next, parentheses4_c,
-					                        calling_function);
+						calling_function);
 					name_var = atx;
 					calc_result->type_define = T_BOOL;
 					//k = getFirstType(k, parse_obj::endl);
@@ -1580,13 +1587,13 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 					///math_opration(op,mx,to);
 					MATH_OPERATORS
 				}
-				else if (calc_result->type_define== T_FLOAT)
+				else if (calc_result->type_define == T_FLOAT)
 				{
 					const int y = get_index_value(calling_function, mnode);
 					float* mx = (float*)memory + (i - 1);
 					float to = name_var->type_define != NULL && name_var->type_define->type_name == T_INT->type_name
-						           ? (float)name_var->value_int[y]
-						           : name_var->value_float[y];
+						? (float)name_var->value_int[y]
+						: name_var->value_float[y];
 					///MATH_OPERATORS
 				}
 				else if (calc_result->type_define == T_LONG)
@@ -1602,14 +1609,14 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 					char to = name_var->value_char_ptr[0];
 					MATH_OPERATORS
 				}
-				else if (calc_result->type_define== T_BOOL)
+				else if (calc_result->type_define == T_BOOL)
 				{
 					//bool* mx = &((bool*)memory)[i - 1];
-					bool* mx = ((bool*)memory)+(i - 1);
+					bool* mx = ((bool*)memory) + (i - 1);
 					bool to = *(bool*)name_var->values;
 					BOOL_OPERATORS
 				}
-				else if (calc_result->type_define== T_STRING)
+				else if (calc_result->type_define == T_STRING)
 				{
 					int y = in;
 					char** mx = &((char**)memory)[i - 1];
@@ -1660,31 +1667,31 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 		}
 		else if (mnode->type_ == operators_n || is_double_equle(mnode))
 		{
-		/*
-			if (!is_double_equle(mnode) &&(*(char*)mnode->value_raw == '+' && *(char*)mnode->next->value_raw == '+'))
-			{
-				if (last_var_name != NULL)
+			/*
+				if (!is_double_equle(mnode) &&(*(char*)mnode->value_raw == '+' && *(char*)mnode->next->value_raw == '+'))
 				{
-					mnode = mnode->next;
-					//*last_var_name->value_int++;
-					last_var_name = NULL;
+					if (last_var_name != NULL)
+					{
+						mnode = mnode->next;
+						//*last_var_name->value_int++;
+						last_var_name = NULL;
+					}
+					else
+					{
+						mnode = mnode->next;
+						f = 1;
+					}
 				}
-				else
-				{
-					mnode = mnode->next;
-					f = 1;
-				}
-			}
-		 */
-			if(is_double_oprater(mnode))
+			 */
+			if (is_double_oprater(mnode))
 			{
 				op = (char*)malloc(3);
-				op[0]=   *mnode->value_char_ptr;
-				op[1]=   *mnode->next->value_char_ptr;
-				op[3]= '\0';
+				op[0] = *mnode->value_char_ptr;
+				op[1] = *mnode->next->value_char_ptr;
+				op[3] = '\0';
 				mnode = mnode->next;
 
-			}			
+			}
 			else
 			{
 				op = mnode->value_char_ptr;
@@ -1785,9 +1792,9 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 node* get_close_part(node* t)
 {
 	if (t->ref_node != NULL &&
-	    ((t->btype.name == s_index && t->ref_node->type_ == s_index_c )||
+		((t->btype.name == s_index && t->ref_node->type_ == s_index_c) ||
 		(t->btype.name == parentheses1 && t->ref_node->type_ == parentheses1_c) ||
-		(t->btype.name == parentheses4 && t->ref_node->type_ == parentheses4_c)))
+			(t->btype.name == parentheses4 && t->ref_node->type_ == parentheses4_c)))
 	{
 		return t->ref_node;
 	}
@@ -1819,6 +1826,15 @@ void set_value_copy_var(var* dstn, var* scr)
 		*dstn->val_str_ptr = (char*)malloc(strlen(*scr->val_str_ptr) + 1);
 		strcpy(*dstn->val_str_ptr, *scr->val_str_ptr);
 	}
+	else if (T_CHAR == dstn->type_define)
+	{
+		*dstn->value_char_ptr = *scr->value_char_ptr;
+	}
+	else
+	{
+		printf("un imp type...");
+		exit;
+	}
 }
 
 ///var type and memory must already setted  //for value  //  only parse int
@@ -1845,7 +1861,7 @@ void set_value_copy_node(var* dstn, node* scr)
 	}
 	else if (T_CHAR == dstn->type_define)
 	{
-		
+
 		*dstn->value_char_ptr = *scr->value_char_ptr;
 	}
 }
@@ -1855,69 +1871,69 @@ void set_value_copy_node(var* dstn, node* scr)
 
 func_deftion simple_function_array[] = {
 	{
-		.start_func_parmeters = {0}, .func_code = &print, .func_name = "print", .function_type = f_main,
+		.start_func_parmeters = {0},.func_code = &print,.func_name = "print",.function_type = f_main,
 		.return_type = T_INT,
-		.ref = 0, .stack_next = simple_function_array + 1
+		.ref = 0,.stack_next = simple_function_array + 1
 	},
 	{
 		//vprint
-		.start_func_parmeters = {0}, .func_code = &print, .func_name = "vprint", .function_type = f_main,
+		.start_func_parmeters = {0},.func_code = &print,.func_name = "vprint",.function_type = f_main,
 		.return_type = T_INT,
 		.ref = 0,
 		.stack_next = simple_function_array + 2
 	},
 	{
-		.start_func_parmeters = {0}, .func_code = &time_x, .func_name = "time", .function_type = f_main,
+		.start_func_parmeters = {0},.func_code = &time_x,.func_name = "time",.function_type = f_main,
 		.return_type = T_STRING,
 		.ref = 0,
 		.stack_next = simple_function_array + 3
 	},
 	{
-		.start_func_parmeters = {T_STRING}, .func_code = &scan, .func_name = "scan", .function_type = f_main,
+		.start_func_parmeters = {T_STRING},.func_code = &scan,.func_name = "scan",.function_type = f_main,
 		.return_type = T_INT,
 		.ref = 0,
 		.stack_next = simple_function_array + 4
 	},
 	{
-		.start_func_parmeters = {T_INT}, .start_parm_count = 1, .func_code = &random_, .func_name = "random",
-		.function_type = f_main, .return_type = T_INT,
+		.start_func_parmeters = {T_INT},.start_parm_count = 1,.func_code = &random_,.func_name = "random",
+		.function_type = f_main,.return_type = T_INT,
 		.ref = 0,
 		.stack_next = simple_function_array + 5
 	},
 	{
-		.start_func_parmeters = {T_INT}, .start_parm_count = 1, .func_code = &str, .func_name = "str",
+		.start_func_parmeters = {T_INT},.start_parm_count = 1,.func_code = &str,.func_name = "str",
 		.function_type = f_main,
 		.return_type = T_STRING,
 		.ref = 0,
 		.stack_next = simple_function_array + 6
 	},
 	{
-		.start_func_parmeters = {T_STRING}, .start_parm_count = 1, .func_code = &import, .func_name = "import",
+		.start_func_parmeters = {T_STRING},.start_parm_count = 1,.func_code = &import,.func_name = "import",
 		.function_type = f_main,
 		.return_type = T_INT,
 		.ref = 0,
 		.stack_next = simple_function_array + 7
 	},
 	{
-		.start_func_parmeters = {0}, .func_code = &print, .func_name = "xxxx", .function_type = f_main,
+		.start_func_parmeters = {0},.func_code = &print,.func_name = "xxxx",.function_type = f_main,
 		.return_type = T_INT,
 		.ref = 0,
 		.stack_next = simple_function_array + 8
 	},
 	{
-		.start_func_parmeters = {0}, .func_code = &print, .func_name = "pxcrint", .function_type = f_main,
+		.start_func_parmeters = {0},.func_code = &print,.func_name = "pxcrint",.function_type = f_main,
 		.return_type = T_INT,
 		.ref = 0,
-		.stack_next = simple_function_array+ 9
+		.stack_next = simple_function_array + 9
 	},
 	{
-	.start_func_parmeters = {0}, .func_code = &_exit_, .func_name = "exit", .function_type = f_main,
+	.start_func_parmeters = {0},.func_code = &_exit_,.func_name = "exit",.function_type = f_main,
 		.return_type = T_INT,
 		.ref = 0,
 		.stack_next = NULL
 	}
 };
-func_stack base_function = {.top = simple_function_array + 9, .size = 10, .root = simple_function_array + 0};
+func_stack base_function = { .top = simple_function_array + 9,.size = 10,.root = simple_function_array + 0 };
 
 fcall* create_fcall(func_deftion* fd)
 {
