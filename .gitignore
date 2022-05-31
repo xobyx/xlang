@@ -11,3 +11,4 @@
 /packages.config
 *.txt
 /obj
+*.lnk

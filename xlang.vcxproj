@@ -120,6 +120,7 @@
   <ItemGroup>
     <ClInclude Include="compile.h" />
     <ClInclude Include="debuge.h" />
+    <ClInclude Include="echo.h" />
     <ClInclude Include="functions.h" />
     <ClInclude Include="func_stack.h" />
     <ClInclude Include="md5.h" />
@@ -140,6 +141,7 @@
   <ItemGroup>
     <ClCompile Include="compile.c" />
     <ClCompile Include="debuge.c" />
+    <ClCompile Include="echo.c" />
     <ClCompile Include="functions.c" />
     <ClCompile Include="func_stack.c" />
     <ClCompile Include="http.c" />

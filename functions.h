@@ -27,6 +27,7 @@ extern int fi;
 #define T_ARRAY (SIMPLE_TYPE+6)
 #define T_OBJECT  (SIMPLE_TYPE+7)
 #define T_NEW_INC  (SIMPLE_TYPE+8)
+#define T_FUNC  (SIMPLE_TYPE+9)
 
 extern func_stack base_function;
 

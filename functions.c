@@ -5,7 +5,7 @@
 #endif
 #include <time.h>
 #include "http.h"
-
+#include "echo.h"
 //#define F
 
 #ifdef F
@@ -40,13 +40,14 @@ void len(fcall* y);
 func_deftion len_obj_function = {
 	.start_func_parmeters = {0},.func_code = &len,.func_name = "len",.function_type = f_main,.access = PUBLIC,
 	.return_type = T_INT,.ref = 0,
+	
 	.stack_next = 0,.start_parm_count = 1,
 };
 //func_deftion xd = {
 //	.start_func_parmeters = {T_INT},.func_code = &index_,.func_name = "index",.function_type = f_main,
 //	.return_type = T_INT,.ref = 0,/* func* STACK_NEXT*/0
 //};
-type_stack simple_type_stack = { .top = T_NEW_INC,.root = T_LONG,.size = 9 };
+type_stack simple_type_stack = { .top = T_FUNC,.root = T_LONG,.size = 10 };
 type_def SIMPLE_TYPE[] = {
 	{
 		.type_id = 0,.type_name = "long",.d_propertys = {0},.d_functions = {0},.base = 0,
@@ -65,7 +66,9 @@ type_def SIMPLE_TYPE[] = {
 		.type_id = 7,.type_name = "_array",.d_propertys = {0},.d_functions = {&len_obj_function},.d_function_size = 1,.base = 0,
 		.stack_next = T_NEW_INC
 	},
-	{.type_id = 8,.type_name = "new",.d_propertys = {0},.d_functions = {0},.base = 0,.stack_next = 0}
+	{.type_id = 8,.type_name = "new",.d_propertys = {0},.d_functions = {0},.base = 0,.stack_next = T_FUNC}
+
+	,{.type_id = 9,.type_name = "func",.d_propertys = {0},.d_functions = {0},.base = 0,.stack_next = 0}
 
 
 };
@@ -239,7 +242,7 @@ node* get_first_type_with_value(node* in, node_type b, void* value)
 				return temp;
 			if (b == keyword)
 			{
-				if (value == temp->value_keyword)
+				if (((int)value) == temp->value_keyword)
 					return temp;
 			}
 
@@ -360,7 +363,7 @@ void set_value(var* context, fcall* temp, node** cx)
 
 		if ((*cx)->next->type_ == equles)
 		{
-			calc_result->type_define = ((me->type_define == SIMPLE_TYPE + 1) && index_assian) ? T_CHAR : me->type_define;
+			calc_result->type_define = ((me->type_define == T_STRING) && index_assian) ? T_CHAR : me->type_define;
 
 
 			//c = calculate(res, c->next->next, temp);
@@ -1014,9 +1017,18 @@ func_deftion* get_obj_function(var* object_var, char* name)
 		printf("error : get_func_by_name_with_var | %s", name);
 		exit(-1);
 	}
+	func_deftion* funcs=NULL;
+	if(is_base_type(object_var->type_define))
+	{
+		funcs= *object_var->type_define->d_functions;
+		
+	}
+	else
+	{
+		funcs =  object_var->value_type_instsance->functions.root;
+	}
 
-
-	for (func_deftion* i = object_var->value_type_instsance->functions.root; i != NULL; i = i->stack_next)
+	for (func_deftion* i =funcs; i != NULL; i = i->stack_next)
 	{
 		if (strcmp(name, i->func_name) == 0)
 		{
@@ -1103,25 +1115,10 @@ var* all_get_var_by_name(char* name, fcall* called_function, var* called_var)
 	return get_globle_var_by_name(name);
 }
 
-bool is_base_type1(type_def* t)
-{
-	type_def* u = types->root;
-	int x = 0;
-
-	while (x < 5)
-	{
-		if (u == t)
-			return true;
-		u = u->stack_next;
-		x++;
-	}
-
-	return false;
-}
 
 bool is_base_type(type_def* t)
 {
-	return t->type_id < 7;
+	return t->type_id < simple_type_stack.size;
 }
 
 void* install_memory(var* n)
@@ -1844,7 +1841,7 @@ void set_value_copy_node(var* dstn, node* scr)
 		*dstn->value_int = atoi(scr->value_char_ptr);
 	else if (T_STRING == dstn->type_define)
 	{
-		*dstn->val_str_ptr = (char*)malloc(strlen(scr->value_char_ptr) + 1);
+		*dstn->val_str_ptr = (char*)calloc(1,strlen(scr->value_char_ptr) + 1);
 		strcpy(*dstn->val_str_ptr, scr->value_char_ptr);
 	}
 	else if (T_FLOAT == dstn->type_define)
@@ -1930,15 +1927,29 @@ func_deftion simple_function_array[] = {
 	.start_func_parmeters = {0},.func_code = &_exit_,.func_name = "exit",.function_type = f_main,
 		.return_type = T_INT,
 		.ref = 0,
+		.stack_next = simple_function_array + 10
+	},
+	{
+	.start_func_parmeters = {0},.func_code = &len,.func_name = "len",.function_type = f_main,
+		.return_type = T_INT,
+		.start_parm_count = 1,
+		.ref = 0,
+		.stack_next =  simple_function_array + 11
+	},
+	{
+	.start_func_parmeters = {0},.func_code = &_echo,.func_name = "echo",.function_type = f_main,
+		.return_type = T_INT,
+		.start_parm_count = 1,
+		.ref = 0,
 		.stack_next = NULL
 	}
+
 };
-func_stack base_function = { .top = simple_function_array + 9,.size = 10,.root = simple_function_array + 0 };
+func_stack base_function = { .top = simple_function_array + 11,.size = 12,.root = simple_function_array + 0 };
 
 fcall* create_fcall(func_deftion* fd)
 {
-	fcall* function_c = malloc(sizeof(fcall));
-	memset(function_c, 0, sizeof(fcall));
+	fcall* function_c = (fcall*)calloc(1,sizeof(fcall));
 	function_c->deftion = fd;
 	for (int i = 0; i < fd->start_parm_count; i++)
 	{
