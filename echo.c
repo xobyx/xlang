@@ -5,6 +5,7 @@
 #define l(i) printf("%*s",i*4," ");
 void echo_type_instance(type_instance* c, int level);
 void echo_type_def(type_def c, int level);
+void echo_func_def(func_deftion m, int le);
 void echo_var(var p, int level);
 void _echo(fcall* v)
 {
@@ -34,12 +35,20 @@ void echo_var(var v, int le)
 		l(le)p("value_int : %d", *v.value_int);
 		break;
 	case 4://bool
-		l(le)p("value_bool : %d", *v.value_bool ? "true" : "false");
+		l(le)p("value_bool : %s", *v.value_bool ? "true" : "false");
 		break;
 	case 5://float
 		l(le)p("value float : %f", *v.value_float);
 		break;
-
+	case 9: //T_FUNC
+	{
+		l(le)p("value function :\n");
+		l(le)p("{\n");
+		
+		echo_func_def( *v.value_func,le+1);
+		l(le)p("}\n");
+		break;
+	}
 	default:
 		p("unimpl %d %s", __LINE__, __FILE__);
 		break;

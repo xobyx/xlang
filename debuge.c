@@ -58,7 +58,7 @@ void _do_work(Debug* x, node* temp)
 			x->cprintf(x, 0x02, "\x1B[32m\x1B[40m%s", temp->value_raw != NULL ? (char*)temp->value_raw : "NONE");
 		printf(" ]");
 	}
-	x->cprintf(x, 0x04, temp->type_ == endl ? "\x1B[34m\n" : "\x1B[34m --> ","");
+	x->cprintf(x, 0x04, temp->type_ == endl ? "\n" : "\x1B[34m --> ","");
 
 
 	if (temp->next == NULL) printf("\n\n");

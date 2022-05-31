@@ -40,7 +40,7 @@ void len(fcall* y);
 func_deftion len_obj_function = {
 	.start_func_parmeters = {0},.func_code = &len,.func_name = "len",.function_type = f_main,.access = PUBLIC,
 	.return_type = T_INT,.ref = 0,
-	
+
 	.stack_next = 0,.start_parm_count = 1,
 };
 //func_deftion xd = {
@@ -482,6 +482,7 @@ void scap_string(char* m)
 
 void print_f(fcall* temp)
 {
+	
 	//va_list a;
 	void** margs = (void**)malloc(sizeof(char**) * (temp->parm_count_c - 1));//arg list
 	var* fparms = temp->func_parmeters;
@@ -491,7 +492,7 @@ void print_f(fcall* temp)
 		for (int i = 1; i < temp->parm_count_c; i++)
 		{
 			x = x + i;
-			*(margs + (i - 1)) = x->type_define == T_STRING ? *x->val_str_ptr : *x->value_int;
+			*(margs + (i - 1)) = x->type_define == T_STRING ? *x->val_str_ptr : x->value_int;
 		}
 #if !defined(__GNUC__)&& !defined(__MINGW64__)
 
@@ -771,10 +772,10 @@ void str(fcall* d)
 	}
 	else if (d->func_parmeters->type_define == T_CHAR)
 	{
-		
+
 		int size = (sizeof(char) * d->func_parmeters->size) + 1;
-		char* ubuff = (char*)calloc(1,size);
-		
+		char* ubuff = (char*)calloc(1, size);
+
 
 		strcpy(ubuff, d->func_parmeters->value_char_ptr);
 
@@ -788,36 +789,6 @@ void str(fcall* d)
 }
 
 
-func_deftion* add_function_gloable(char* name, type_def* return_type, int pcount, const function_node fe,
-	char** par_name,
-	type_def** par_type)
-{
-	return add_function(funcs, name, return_type, pcount, fe, par_name, par_type);
-}
-
-func_deftion* add_function(func_stack* s, char* name, type_def* return_type, int pcount, const function_node fe,
-	char** par_name,
-	type_def** par_type)
-{
-	func_deftion* nx2 = new_func_on_stack(s);
-
-	nx2->func_code = fe;
-	nx2->return_type = return_type;
-	nx2->func_name = name;
-	//var_stack* y = &nx2->func_parmeters;
-
-	int u = 0;
-	type_def** a = par_type;
-	for (char** c = par_name; u < pcount; c++, a++)
-	{
-		//var* v = new_var_on_stack(y, *c, *a);
-		nx2->start_func_parmeters[u] = par_type[u];
-
-		u++;
-	}
-
-	return nx2;
-}
 
 
 void install_default_functions()
@@ -843,10 +814,10 @@ void len(fcall* y)
 	{
 		if (y->context->type_define == T_STRING)
 		{
-			if(y->context->size==1)
-			y->_return.value_int = new_int(1, strlen(*y->context->val_str_ptr));
+			if (y->context->size == 1)
+				y->_return.value_int = new_int(1, strlen(*y->context->val_str_ptr));
 			else
-			y->_return.value_int = new_int(1, y->context->size);
+				y->_return.value_int = new_int(1, y->context->size);
 		}
 		if (y->context->type_define->base == T_ARRAY)
 		{
@@ -952,7 +923,9 @@ void install_default_types()
 		}
 		*/
 }
-
+int calls = 0;
+char* temp = "";
+var* tempv;
 
 func_deftion* new_func()
 {
@@ -985,31 +958,7 @@ func_deftion* get_func_by_name(char* name)
 	return NULL;
 }
 
-/*
-func* copy_func(func* i)
-{
-	func* m = new_func_on_stack(t_funcs);
-	var_stack* malloc1 = (var_stack*)malloc(sizeof(var_stack));
-	memset(malloc1, 0, sizeof(var_stack));
 
-	m->fun_p = *malloc1;
-	for (var* v = i->fun_p.root; v != NULL; v = v->stack_next)
-	{
-		var* vb = new_var_on_stack(&m->fun_p, v->name, v->var_type);
-	}
-	m->func_return.values = install_memory_with_type(i->func_return.var_type,m->func_return.size);
-	m->ref = i->ref;
-	m->context = i->context;
-	m->function_type = i->function_type;
-	m->func_code = i->func_code;
-
-	//////////
-	m->func_return.var_type=i->func_return.var_type;
-
-
-	return m;
-}
-*/
 func_deftion* get_obj_function(var* object_var, char* name)
 {
 	if (NULL == object_var)
@@ -1017,18 +966,18 @@ func_deftion* get_obj_function(var* object_var, char* name)
 		printf("error : get_func_by_name_with_var | %s", name);
 		exit(-1);
 	}
-	func_deftion* funcs=NULL;
-	if(is_base_type(object_var->type_define))
+	func_deftion* funcs = NULL;
+	if (is_base_type(object_var->type_define))
 	{
-		funcs= *object_var->type_define->d_functions;
-		
+		funcs = *object_var->type_define->d_functions;
+
 	}
 	else
 	{
-		funcs =  object_var->value_type_instsance->functions.root;
+		funcs = object_var->value_type_instsance->functions.root;
 	}
 
-	for (func_deftion* i =funcs; i != NULL; i = i->stack_next)
+	for (func_deftion* i = funcs; i != NULL; i = i->stack_next)
 	{
 		if (strcmp(name, i->func_name) == 0)
 		{
@@ -1042,18 +991,22 @@ func_deftion* get_obj_function(var* object_var, char* name)
 
 var* get_globle_var_by_name(char* name)
 {
+	if (name == temp)
+		return tempv;
 	for (var* i = varss->root; i != NULL; i = i->stack_next)
 	{
 		if (strcmp(name, i->name) == 0)
+		{
+			tempv = i;
+			temp = name;
 			return i;
+		}
 	}
 	return NULL;
 }
 
 
-int calls = 0;
-char* temp = "";
-var* tempv;
+
 
 var* fget_var_by_name_fc(char* name, fcall* y)
 {
@@ -1090,7 +1043,7 @@ var* get_var_by_name_on_stack(char* name, var_stack* y)
 		}
 	}
 
-	tempv = get_globle_var_by_name(name);
+	//tempv = get_globle_var_by_name(name);
 	temp = tempv != NULL ? name : 0;
 	return tempv;
 }
@@ -1130,7 +1083,7 @@ void instance_type(type_def* type_protype, void* dstn_array, int size)
 {
 	for (int i = 0; i < size; i++)
 	{
-		type_instance* type_new_instance = (type_instance*)dstn_array + i;
+		type_instance* type_new_instance = ((type_instance*)dstn_array) + i;
 
 		var_stack* props = (var_stack*)malloc(sizeof(var_stack));
 		var_stack_init(props);
@@ -1153,8 +1106,8 @@ void instance_type(type_def* type_protype, void* dstn_array, int size)
 					inctance_prop->access = protype_prop->access;
 					if ((protype_prop)->access == STATIC)
 					{
-						//TODO:2022
-						//(*y)->values = x->values;
+
+						inctance_prop->values = protype_prop->values;
 					}
 					else
 					{
@@ -1246,7 +1199,7 @@ void* install_memory_with_type(type_def* mtype, const int count)
 {
 	int size = count == 0 ? 1 : count;
 	void* r = NULL;
-	if (mtype == NULL) return r;
+	if (mtype == NULL ) return r;
 	if (T_INT == mtype)
 	{
 		r = (int*)calloc(count, sizeof(int));
@@ -1255,8 +1208,8 @@ void* install_memory_with_type(type_def* mtype, const int count)
 		r = (long*)calloc(count, sizeof(long));
 	else if (T_CHAR == mtype)
 	{
-		r = (char*)malloc(sizeof(char)*count +1);
-		memset(r,0,sizeof(char)*count +1);
+		r = (char*)malloc(sizeof(char)*count + 1);
+		memset(r, 0, sizeof(char)*count + 1);
 	}
 	else if (T_FLOAT == mtype)
 		r = (float*)calloc(count, sizeof(float));
@@ -1265,7 +1218,7 @@ void* install_memory_with_type(type_def* mtype, const int count)
 	else if (T_BOOL == mtype)
 		r = (bool*)calloc(count, sizeof(int));
 
-	else
+	else if(!is_base_type(mtype))
 	{
 		type_instance* n_copy_array = (type_instance*)calloc(count, sizeof(type_instance));
 
@@ -1321,6 +1274,53 @@ var* get_type_inc_obj_var(node** mnode, var* called_object, func_deftion** outp)
 			func_deftion* func1 = get_obj_function(base, (*mnode)->value_char_ptr);
 			if (func1 != NULL)
 			{
+				*outp = func1;
+				return base;
+			}
+		}
+	}
+
+	return fvar;
+}
+
+var* get_type_inc_obj_var2(node** mnode, var* called_object, fcall* cfanc, func_deftion** outp)
+{
+	var* fvar = NULL;
+	if (cfanc != NULL)
+	{
+		fvar = fget_var_by_name_fc((*mnode)->value_char_ptr, cfanc);
+	}
+	else if (called_object != NULL) // inc class
+	{
+		fvar = get_var_by_name_on_stack((*mnode)->value_char_ptr, &called_object->value_type_instsance->propertys);
+	}
+	else
+	{
+		fvar = get_globle_var_by_name((*mnode)->value_char_ptr);
+	}
+
+	if (fvar == NULL)
+	{
+		printf("error: var %s not defined on line %d  on\nC: %s:%d\n", (*mnode)->value_char_ptr, (*mnode)->line, __FILE__, __LINE__);
+		exit(-1);
+	}
+	while ((*mnode)->next != NULL && (*mnode)->next->type_ == dot)
+	{
+		*mnode = (*mnode)->next->next; //after .
+		var* base = fvar;
+		if ((*mnode)->opt_name_type == var_call)
+		{
+			fvar = get_var_by_name_on_stack((*mnode)->value_char_ptr, &fvar->value_type_instsance->propertys);
+		}
+
+		if ((*mnode)->opt_name_type == function_call)
+		{
+			func_deftion* func1 = get_obj_function(base, (*mnode)->value_char_ptr);
+			if (func1 != NULL)
+			{
+				//fcall* s= create_fcall(func1);
+				//node * m =setup_function_parms(mnode,s,called_object,cfanc);
+				//call_function(s,)
 				*outp = func1;
 				return base;
 			}
@@ -1452,17 +1452,20 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 				}
 				else if (mnode->opt_name_type == var_call && calling_function != NULL)
 				{
-					name_var = fget_var_by_name_fc(mnode->value_char_ptr, calling_function);
-				}
-				////////
-				else if (calling_object != NULL || mnode->next->type_ == dot)
-				{
-					name_var = get_type_inc_obj_var(&mnode, calling_object, &name_function);
+					name_var = get_type_inc_obj_var2(&mnode, calling_object, calling_function, &name_function);
+					
 				}
 				else if (mnode->opt_name_type == var_call)
 				{
 					name_var = get_globle_var_by_name(mnode->value_char_ptr);
+					if (mnode->next->type_ == dot)
+					{
+						name_var = get_type_inc_obj_var(&mnode, name_var, &name_function);
+					}
+
+
 				}
+				//get value from function
 				if (name_var != NULL && name_function == NULL)
 				{
 					if (mnode->next->btype.node_type_bit.s_index)
@@ -1483,6 +1486,7 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 						f = 0;
 					}
 				}
+				//get value from var
 				else if (name_function != NULL)
 				{
 					//node* y = get_close_part(get_first_type(mnode, parentheses4)); ///1
@@ -1523,22 +1527,26 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 				setup_t(calc_result, &saved_return_type, indexx, name_var);
 				if (memory == NULL)
 					memory = calc_result->values == NULL ? install_memory(calc_result) : calc_result->values;
+				if (memory == NULL)  //// T_FUNC
+				{
+					memory = name_var->values;
+				}
 				//copy array [int string]
 				if (!indexx && calc_result->size > 1 && name_var->size > 1)
 				{
 					copy_array(calc_result, memory, name_var);
 				}
 
-				else if (calc_result->type_define->type_name == T_INT->type_name)
+				else if (calc_result->type_define == T_INT)
 					((int*)memory)[i++] = name_var->value_int[in];
 
-				else if (calc_result->type_define->type_name == T_FLOAT->type_name)
+				else if (calc_result->type_define == T_FLOAT)
 					((float*)memory)[i++] = name_var->value_float[in];
 
-				else if (calc_result->type_define->type_name == T_LONG->type_name)
+				else if (calc_result->type_define == T_LONG)
 					((long*)memory)[i++] = name_var->value_long[in];
 
-				else if (calc_result->type_define->type_name == T_CHAR->type_name)
+				else if (calc_result->type_define == T_CHAR)
 					((char*)memory)[i++] = name_var->type_define != T_STRING
 					? name_var->value_char_ptr[in]
 					: name_var->val_str_ptr[0][in];
@@ -1549,10 +1557,10 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 					strcpy(((char**)memory)[i], val);
 					i++;
 				}
-				else if (calc_result->type_define->type_name == T_BOOL->type_name)
-					((bool*)memory)[i++] = ((bool*)name_var->values)[in];
+				else if (calc_result->type_define == T_BOOL)
+					((bool*)memory)[i++] = name_var->value_bool[in];
 
-				else
+				else if(!is_base_type(calc_result->type_define))
 				{
 					///FIXME:
 					((type_instance*)memory)[i++] = name_var->value_type_instsance[in];
@@ -1591,7 +1599,7 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 					float to = name_var->type_define != NULL && name_var->type_define->type_name == T_INT->type_name
 						? (float)name_var->value_int[y]
 						: name_var->value_float[y];
-					///MATH_OPERATORS
+					//MATH_OPERATORS
 				}
 				else if (calc_result->type_define == T_LONG)
 				{
@@ -1640,7 +1648,7 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 					}
 					in = 0;
 				}
-				else
+				else  // type_inctance
 				{
 					//int y = get_index_value(funct, k);
 					/*
@@ -1664,22 +1672,7 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 		}
 		else if (mnode->type_ == operators_n || is_double_equle(mnode))
 		{
-			/*
-				if (!is_double_equle(mnode) &&(*(char*)mnode->value_raw == '+' && *(char*)mnode->next->value_raw == '+'))
-				{
-					if (last_var_name != NULL)
-					{
-						mnode = mnode->next;
-						//*last_var_name->value_int++;
-						last_var_name = NULL;
-					}
-					else
-					{
-						mnode = mnode->next;
-						f = 1;
-					}
-				}
-			 */
+
 			if (is_double_oprater(mnode))
 			{
 				op = (char*)malloc(3);
@@ -1719,73 +1712,6 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 	return mnode;
 }
 
-
-/*node* calculate2(node* m, func* funct, var* contxt, node_type stop, node* end, var* out)
-{
-	var* h1 = NULL;
-	var* h2 = NULL;
-	var* r = NULL;
-	while (true)
-	{
-		var* t = g(h1, h2);
-		switch (m->btype.name)
-		{
-		case itype: break;
-		case keyword: break;
-		case var_name:
-			t = get_var_by_name((char*)m->value);
-			if (t == NULL)
-			{
-				func* x = get_func_by_name(contxt, (char*)m->value);
-				//call_function(m, x, contxt,NULL, false);
-				t = &x->func_return;
-			}
-			break;
-		case value:
-			t = new_var("",T_INT);
-			//void* mem = install_memory(T(m->opt), 1);
-			t->value = m->value;
-			break;
-		case operators_n:
-			do
-			{
-				switch (*(char*)m->value)
-				{
-				case '+':
-
-					break;
-				case '-':
-					break;
-				case '*':
-					break;
-				case '/':
-					break;
-				default: ;
-				}
-				m = m->next;
-			}
-			while (m->type_ == operators_n);
-			break;
-		case equles: break;
-		case endl: break;
-		case s_index: break;
-		case parentheses1: break;
-		case parentheses1c: break;
-		case comma: break;
-		case s_index_c: break;
-		case parentheses4: break;
-		case parentheses4c: break;
-		case dot: break;
-		case twodot: break;
-		case PARS: break;
-		case HAVE_value: break;
-		case NON_ONE_CHAR: break;
-		default: ;
-		}
-		m = m->next;
-	}
-}*/
-
 node* get_close_part(node* t)
 {
 	if (t->ref_node != NULL &&
@@ -1813,9 +1739,10 @@ char* get_file_buffer(FILE* sf)
 	return buff;
 }
 
-//memory must by installed string char **;
+//memory must allocted before call 
 void set_value_copy_var(var* dstn, var* scr)
 {
+
 	if (T_INT == dstn->type_define)
 		*dstn->value_int = *scr->value_int;
 	else if (T_STRING == dstn->type_define)
@@ -1834,14 +1761,14 @@ void set_value_copy_var(var* dstn, var* scr)
 	}
 }
 
-///var type and memory must already setted  //for value  //  only parse int
+//var type and memory must already alocated  //for value  //  only parse int
 void set_value_copy_node(var* dstn, node* scr)
 {
 	if (T_INT == dstn->type_define)
 		*dstn->value_int = atoi(scr->value_char_ptr);
 	else if (T_STRING == dstn->type_define)
 	{
-		*dstn->val_str_ptr = (char*)calloc(1,strlen(scr->value_char_ptr) + 1);
+		*dstn->val_str_ptr = (char*)calloc(1, strlen(scr->value_char_ptr) + 1);
 		strcpy(*dstn->val_str_ptr, scr->value_char_ptr);
 	}
 	else if (T_FLOAT == dstn->type_define)
@@ -1934,7 +1861,7 @@ func_deftion simple_function_array[] = {
 		.return_type = T_INT,
 		.start_parm_count = 1,
 		.ref = 0,
-		.stack_next =  simple_function_array + 11
+		.stack_next = simple_function_array + 11
 	},
 	{
 	.start_func_parmeters = {0},.func_code = &_echo,.func_name = "echo",.function_type = f_main,
@@ -1949,7 +1876,7 @@ func_stack base_function = { .top = simple_function_array + 11,.size = 12,.root 
 
 fcall* create_fcall(func_deftion* fd)
 {
-	fcall* function_c = (fcall*)calloc(1,sizeof(fcall));
+	fcall* function_c = (fcall*)calloc(1, sizeof(fcall));
 	function_c->deftion = fd;
 	for (int i = 0; i < fd->start_parm_count; i++)
 	{

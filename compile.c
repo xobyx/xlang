@@ -42,7 +42,7 @@ void define_new_var_on_function(char* name, fcall * mfun, type_def* new_var_type
 	var* svar = fget_var_by_name_fc(name, mfun);
 	if (svar != NULL)//&& svar->type_define != NULL && new_var_type != NULL && new_var_type == svar->type_define)
 	{
-		printf("\ndefine_new_var_onfunction: multi definiton var [ %s ]\n", name);
+		printf("\ndefine_new_var_onfunction: multi definiton var [ %s ] on line %d\n", name ,mfun->deftion->ref->line);
 		exit(-1);
 		//*out_var = svar;
 	}
@@ -50,10 +50,11 @@ void define_new_var_on_function(char* name, fcall * mfun, type_def* new_var_type
 
 	else
 	{
-
-		mfun->func_parmeters[mfun->parm_count_c].name = name;
-		mfun->func_parmeters[mfun->parm_count_c].type_define = new_var_type;
-		*out_var = &mfun->func_parmeters[mfun->parm_count_c];
+		int count= mfun->parm_count_c;
+		var* parms= mfun->func_parmeters;
+		parms[count].name = name;
+		parms[count].type_define = new_var_type;
+		*out_var = parms + count;
 		mfun->parm_count_c++;
 	}
 
@@ -95,14 +96,16 @@ node* add_new_func_code(node* c, type_def* container_class)
 	else
 	{
 		m->func_name = c->value_char_ptr;
+		var * funcvr= new_var(m->func_name,T_FUNC);
+		funcvr->value_func = m;
 	}
-
+	
 	//parse paramater
 	c = c->next; //(
 	node* close = get_close_part(c);
 	if (c->type_ != parentheses4 || close == NULL)
 	{
-		printf("ERROR: function def new function");
+		printf("ERROR: missing \'()\' for function %s on line %d __ C:%s:%d ",m->func_name,c->line,__FILE__,__LINE__);
 		exit(-1);
 	}
 
@@ -133,6 +136,7 @@ node* add_new_func_code(node* c, type_def* container_class)
 	if (end == NULL)
 	{
 		printf("error { not closed");
+		printf("ERROR: missing \'}\'  in function %s on line %d __ C:%s:%d ",m->func_name,func_decl->line, __FILE__,__LINE__);
 		exit(-1);
 	}
 	m->func_code = &call_func_in;
@@ -145,7 +149,7 @@ void step_forwrod(node** nod)
 {
 	*nod = (*nod)->next;
 }
-
+ //change node pos and return close ) 
 node* setup_function_parms(node** nod, fcall* function, var* context, fcall* in_function)
 {
 	*nod = get_first_type(*nod, parentheses4);
