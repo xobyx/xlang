@@ -581,11 +581,18 @@ void parse_line(char* buff, node* n_node, const int line)
 			{
 				next->type_ = operators_n | endl;////
 			}
+			int len= strlen(mfind->bn);
+			if(len>1 && *mfind->bn=='\\'){if((mfind->bn+1)=='n'){n_node->value_raw = &"\n";}}
+			else
+			{
+				n_node->value_raw = mfind->bn;
+			}
 			n_node->type_ = value;
 			n_node->opt_type_ptr = T_CHAR;
 			n_node->opt_type = 1;
 			n_node->value_raw = mfind->bn;
-			parse_line(buff + strlen(mfind->bn) + 2, next, line);
+
+			parse_line(buff +len + 2, next, line);
 			return;
 		}
 		mfind = match("^(false|true)", buff);
@@ -630,7 +637,9 @@ void parse_line(char* buff, node* n_node, const int line)
 				// parse   "\d+";
 
 				n_node->type_ = value;
-				n_node->opt_type_ptr = T_INT;
+				n_node->opt_type_ptr =strstr(mfind->bn,".")?T_FLOAT:T_INT;
+				
+				
 				n_node->opt_type = 1;
 				if (n_node->is_flagged)
 				{

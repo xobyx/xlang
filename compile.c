@@ -9,12 +9,12 @@ void define_new_class_prop(char* name, type_def* contern_class, type_def* new_va
 
 	if (contern_class != NULL)
 	{
-		var* by_name;
+		var* by_name = NULL;
 		for (int i = 0; i < contern_class->d_propertys_size; i++)
 		{
-			if (contern_class->d_propertys[i]->name == name)
+			if ((contern_class->d_propertys +i )->name == name)
 			{
-				by_name = contern_class->d_propertys[i];
+				by_name = contern_class->d_propertys + i;
 			}
 		}
 		if (by_name != NULL)
@@ -25,9 +25,9 @@ void define_new_class_prop(char* name, type_def* contern_class, type_def* new_va
 
 		else
 		{
-			contern_class->d_propertys[contern_class->d_propertys_size]->type_define = new_var_type;
-			var *ivar = contern_class->d_propertys[contern_class->d_propertys_size];
-			contern_class->d_propertys[contern_class->d_propertys_size]->name = name;
+			(contern_class->d_propertys + contern_class->d_propertys_size)->type_define = new_var_type;
+			var *ivar = (contern_class->d_propertys + contern_class->d_propertys_size);
+			 (contern_class->d_propertys + contern_class->d_propertys_size)->name = name;
 			contern_class->d_propertys_size++;
 			*out_var = ivar;
 
@@ -76,7 +76,7 @@ node* add_new_func_code(node* c, type_def* container_class)
 	//TODO: check if already found
 
 	const bool cons = c->value_type == T_NEW_INC;
-	func_deftion* m = container_class == NULL || cons ? new_func() : container_class->d_functions[container_class->d_function_size++];
+	func_deftion* m = container_class == NULL || cons ? new_func() : container_class->d_functions + container_class->d_function_size++;
 
 	memset(m, 0, sizeof(func_deftion));
 	m->return_type = cons ? container_class : c->value_type;

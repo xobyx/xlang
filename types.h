@@ -207,7 +207,7 @@ typedef struct var
 		long * value_long;
 		float * value_float;
 		char * value_char_ptr;
-		char ** val_str_ptr;
+		char ** value_str_ptr;
 		bool * value_bool;
 		struct func_deftion* value_func;
 
@@ -272,8 +272,8 @@ enum w_type { super = 0, child };
 typedef struct type_def
 {
 
-	struct var* d_propertys[100];
-	struct func_deftion* d_functions[100];
+	struct var d_propertys[100];
+	struct func_deftion d_functions[100];
 
 	int d_propertys_size;
 	int d_function_size;

@@ -26,7 +26,7 @@ void echo_var(var v, int le)
 		l(le)p("value long : %ld", *v.value_long);
 		break;
 	case 1://string
-		l(le)p("value string : %s", *v.val_str_ptr);
+		l(le)p("value string : %s", *v.value_str_ptr);
 		break;
 	case 2://char
 		l(le)p("value char : %c", *v.value_char_ptr);
@@ -117,7 +117,7 @@ void echo_type_def(type_def c, int le)
 	l(le)p("{\n");
 	for (int i = 0; i < c.d_propertys_size; i++)
 	{
-		echo_var(*c.d_propertys[i], le + 1);
+		echo_var(c.d_propertys[i], le + 1);
 
 	}
 	l(le)p("}\n");
@@ -127,7 +127,7 @@ void echo_type_def(type_def c, int le)
 	l(le)p("{\n");
 	for (int i = 0; i < c.d_function_size; i++)
 	{
-		echo_func_def(*c.d_functions[i], le + 1);
+		echo_func_def(c.d_functions[i], le + 1);
 
 	}
 	l(le)p("}\n");
