@@ -13,7 +13,43 @@ void(*checknode)(Debug x, node* y);
 
 
 */
+ const char* fuk[] = { "function_def","function_call","fucnction_parm","var_def","var_call","class_def","class_base_def" };
 
+ const char* parse_obj_str(node* nod)
+{
+	switch (nod->btype.name)
+	{
+	case itype: return "itype";
+	case keyword: return "keyword";
+	case var_name:
+	{
+
+		return fuk[nod->opt_name_type - 10];
+	}
+	case value: return "value";
+	case operators_n: return "operators_n";
+	case equles: return "equles";
+	case endl: return "endl";
+	case s_index: return "s_index";
+	case parentheses1: return "parentheses1";
+	case parentheses1_c: return "parentheses1c";
+	case comma: return "comma";
+	case s_index_c: return "s_index_c";
+	case parentheses4: return "parentheses4";
+	case parentheses4_c: return "parentheses4c";
+	case dot: return "dot";
+	case twodot: return "twodot";
+	case pars: return "PARS";
+	case have_var_value: return "HAVE_VAR_VALUE";
+	case a: return "a";
+	case non_one_char: return "NON_ONE_CHAR";
+	case none: break;
+		/* etc... */
+	default:
+		exit(0);
+	}
+	return NULL;
+}
 
 #if defined(__GNUC__)|| defined(__MINGW64__)
 
@@ -48,7 +84,7 @@ void _do_work(Debug* x, node* temp)
 		printf(" [ ");
 		if (temp->type_ == itype)
 			x->cprintf(x, 0x02, "\x1B[32m\x1B[40m%s", temp->value_type->type_name);
-		if (temp->type_ == var_name)
+		else if (temp->type_ == var_name)
 		{
 			x->cprintf(x, 0x02, "\x1B[32m\x1B[40m%s",temp->value_char_ptr);
 		}
@@ -202,15 +238,21 @@ void _do_work(Debug* x, node* temp)
 	{
 		printf(" [ ");
 		if (temp->type_ == itype)
-			x->cprintf(x, 0x02, "%s", ((type_def*)temp->value_raw)->type_name);
-		if (temp->type_ == var_name)
+		{
+			x->cprintf(x, 0x02, "%s", temp->value_type->type_name);
+		}
+		else if (temp->type_ == var_name)
 		{
 			x->cprintf(x, 0x02, "%s",temp->value_char_ptr);
 		}
 		else if (temp->type_ == keyword)
+		{
 			x->cprintf(x, 0x02, "%s", key_word[(int)temp->value_raw]);
+		}
 		else
+		{
 			x->cprintf(x, 0x02, "%s", temp->value_raw != NULL ? (char*)temp->value_raw : "NONE");
+		}
 		printf(" ]");
 	}
 	x->cprintf(x, 0x04, temp->type_ == endl ? "\n" : " --> ");

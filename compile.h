@@ -4,8 +4,8 @@
 
 
 
-/*XLANG*/ node* compile (var* parent, node* out, fcall* temp, node* stop);
-/*XLANG*/ void compile_var_name_start(node ** pnode, fcall * function_c, var * calling_object);
+/*XLANG*/ node* compile (var* parent, node* out, fcall* temp, node* stop, type_def* ncalss);
+
 
 /*XLANG*/ type_def* get_type_by_name(char* value);
 /*XLANG*/ bool call_function(fcall* temp, var** context);

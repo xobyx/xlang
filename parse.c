@@ -5,7 +5,7 @@
 //[if[0],for[1],while[2],do[3],else[4],print[5],return[6]]
 
 bool out_put;
-#define ALL_POS 255
+
 
 
 
@@ -16,12 +16,12 @@ bool out_put;
 
 bool mbool = false;
 
-void* getchar_x(const char f)
+char* getchar_x(const char f)
 {
 	for (int i = 0; i < 33; i += 2)
 	{
 		if (one_c[i] == f)
-			return (void*)&one_c[i];
+			return one_c + i;
 	}
 	return NULL;
 }
@@ -117,7 +117,7 @@ void parse_line(char* buff, node* n_node, const int line)
 			debuge->print_line_debuge(debuge, n_node, line);
 
 
-		compile(NULL, n_node, NULL, NULL);
+		compile(NULL, n_node, NULL, NULL, NULL);
 
 
 
@@ -179,7 +179,7 @@ void parse_line(char* buff, node* n_node, const int line)
 		if (*buff == '[')
 		{
 			n_node->type_ = s_index;
-			n_node->value_raw = getchar_x(*buff);
+			n_node->value_char_ptr = getchar_x(*buff);
 
 			static_flag_op2(s_index, n_node, false);
 			static_flag_op2(s_index_c, n_node, true);
@@ -213,7 +213,7 @@ void parse_line(char* buff, node* n_node, const int line)
 			n_node->type_ = s_index_c;
 
 			node* open_node = static_flag_op2(s_index_c, n_node, false);
-			n_node->value_raw = getchar_x(*buff);
+			n_node->value_char_ptr = getchar_x(*buff);
 			//FIXME:
 
 			if (open_node->opt_name_type == psize)
@@ -239,7 +239,7 @@ void parse_line(char* buff, node* n_node, const int line)
 
 		n_node->type_ = parentheses1;
 		inherit_parent_flag(n_node, next);
-		n_node->value_raw = getchar_x(*buff);
+		//n_node->value_char_ptr = getchar_x(*buff);
 
 		mbool = true;
 
@@ -275,7 +275,7 @@ void parse_line(char* buff, node* n_node, const int line)
 		node * open = static_flag_op2(parentheses1_c, n_node, false);
 		n_node->ref_node = open;
 		n_node->type_ = parentheses1_c;
-		n_node->value_raw = getchar_x(*buff);
+		n_node->value_char_ptr = getchar_x(*buff);
 
 		mbool = false;
 
@@ -291,7 +291,7 @@ void parse_line(char* buff, node* n_node, const int line)
 	{
 
 		n_node->type_ = comma;
-		n_node->value_raw = getchar_x(*buff);
+		n_node->value_char_ptr = getchar_x(*buff);
 
 
 		next->type_ = value | var_name | itype;
@@ -306,7 +306,7 @@ void parse_line(char* buff, node* n_node, const int line)
 		if (*buff == '(')
 		{
 			n_node->type_ = parentheses4;
-			n_node->value_raw = getchar_x(*buff);
+			n_node->value_char_ptr = getchar_x(*buff);
 
 			static_flag_op2(parentheses4, n_node, false);
 			static_flag_op2(parentheses4_c, n_node, true);
@@ -353,7 +353,7 @@ void parse_line(char* buff, node* n_node, const int line)
 
 			node* pp = static_flag_op2(parentheses4_c, n_node, false);
 			n_node->ref_node = pp;
-			n_node->value_raw = getchar_x(*buff);
+			n_node->value_char_ptr = getchar_x(*buff);
 			//FIXME:
 			if (pp != NULL && pp->opt_name_type == function_def)
 			{
@@ -582,7 +582,7 @@ void parse_line(char* buff, node* n_node, const int line)
 				next->type_ = operators_n | endl;////
 			}
 			int len= strlen(mfind->bn);
-			if(len>1 && *mfind->bn=='\\'){if((mfind->bn+1)=='n'){n_node->value_raw = &"\n";}}
+			if(len>1 && *mfind->bn=='\\'){if(*(mfind->bn+1)=='n'){n_node->value_raw = &"\n";}}
 			else
 			{
 				n_node->value_raw = mfind->bn;
@@ -706,6 +706,7 @@ void parse_line(char* buff, node* n_node, const int line)
 			{
 				if (n_node->parent->type_ == keyword && n_node->parent->value_keyword == _class_)
 				{
+					
 					next->type_ = parentheses4;
 					n_node->opt_name_type = class_def; //k;
 					next->is_flagged = true;
@@ -723,7 +724,7 @@ void parse_line(char* buff, node* n_node, const int line)
 					parse_line(buff + strlen(mfind->bn), next, line);
 					return;
 				}
-				if (n_node->parent->type_ == itype)
+				if (n_node->parent->type_ == itype || n_node->parent->type_==s_index_c)
 				{
 					n_node->opt_name_type = var_def;
 				}
@@ -779,7 +780,7 @@ void parse_line(char* buff, node* n_node, const int line)
 			else if (*i == '=')
 			{
 				n_node->type_ = equles;
-				n_node->value_raw = getchar_x(*i);
+				n_node->value_char_ptr = getchar_x(*i);
 
 
 				if (n_node->is_flagged)
@@ -806,11 +807,10 @@ void parse_line(char* buff, node* n_node, const int line)
 				return;
 				////do next->.
 			}
-
 			else if ((*i >= 42 && *i <= 47) || *i == 0x3c || *i == 0x3e || *i == 38 || *i == '|')//oprator +-*/
 			{
 				n_node->type_ = operators_n;
-				n_node->value_raw = getchar_x(*i);
+				n_node->value_char_ptr = getchar_x(*i);
 				next->parent = n_node;
 
 				if (n_node->parent->type_ == operators_n)

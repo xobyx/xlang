@@ -8,22 +8,54 @@
 #include "echo.h"
 //#define F
 
+void step(node** nod)
+{
+	if ((*nod)->type_ != endl)
+		*nod = (*nod)->next;
+}
+
+bool eat(node** nod, enum node_type_enum next,bool must)
+{
+	node* n =(*nod)->next;
+
+	if (must && n->type_!= next )
+	{
+		printf("Error : missing in line %d - c-%s:%s:%d", (*nod)->line,__FILE__, __FUNCTION__,__LINE__);
+		exit(0);
+	}
+	
+	*nod = n->type_== next ? n : *nod;
+	return (*nod)->type_ == next;
+}
 
 void len(fcall* y);
 //void index_(func_deftion* y);
 //var t = {.type_define = T_INT, .name = "a"};
 ///func_deftion xd;
-func_deftion len_obj_function = {
-	.start_func_parmeters = {0}, .func_code = &len, .func_name = "len", .function_type = f_main, .access = PUBLIC,
-	.return_type = T_INT, .ref = 0,
 
-	.stack_next = 0, .start_parm_count = 1,
-};
 //func_deftion xd = {
 //	.start_func_parmeters = {T_INT},.func_code = &index_,.func_name = "index",.function_type = f_main,
 //	.return_type = T_INT,.ref = 0,/* func* STACK_NEXT*/0
 //};
 type_stack simple_type_stack = {.top = T_FUNC, .root = T_LONG, .size = 10};
+
+void int_add(fcall* fcall)
+{
+	switch (fcall->func_parmeters->type_define->type_id)
+	{
+	case 0:
+
+	default:
+		break;
+	}
+}
+
+const func_deftion int_function[] = {
+	{
+		.start_func_parmeters = {T_ANY}, .func_code = &int_add, .func_name = "add", .function_type = f_main,
+		.access = PUBLIC, .start_parm_count = 1, .return_type = T_INT, .ref = 0, .stack_next = 0
+	}
+};
 type_def SIMPLE_TYPE[] = {
 	{
 		.type_id = 0, .type_name = "long", .d_propertys = {0}, .d_functions = {0}, .base = 0,
@@ -43,18 +75,28 @@ type_def SIMPLE_TYPE[] = {
 		.stack_next = T_CHAR
 	},
 	{.type_id = 2, .type_name = "char", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = T_INT},
-	{.type_id = 3, .type_name = "int", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = T_BOOL},
+	{
+		.type_id = 3, .type_name = "int", .d_propertys = {0}, .d_functions = int_function, .base = 0,
+		.stack_next = T_BOOL
+	},
 	{.type_id = 4, .type_name = "bool", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = T_FLOAT},
 	{.type_id = 5, .type_name = "float", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = T_OBJECT},
 	{.type_id = 6, .type_name = "object", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = T_ARRAY},
 	{
 		.type_id = 7, .type_name = "array", .d_propertys = {{.name = "type", .type_define = T_TYPE_INFO}},
-		.d_functions = {&len_obj_function}, .d_function_size = 1, .base = 0,
-		.stack_next = T_NEW_INC
+		.d_functions = {
+			{
+			.start_func_parmeters = {0}, .func_code = &len, .func_name = "len",
+			.function_type = f_main, .access = PUBLIC,.return_type = T_INT, .ref = 0,
+			.stack_next = 0, .start_parm_count = 1
+			}
+		},
+		.d_function_size = 1, .base = 0,
+		.stack_next = T_ANY
 	},
-	{.type_id = 8, .type_name = "new", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = T_FUNC},
-	{.type_id = 9, .type_name = "func", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = 0}
-
+	{.type_id = 8, .type_name = "T", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = T_FUNC},
+	{.type_id = 9, .type_name = "func", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = T_TYPE_INFO},
+	{.type_id = 10, .type_name = "itype", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = 0}
 
 };
 
@@ -67,11 +109,11 @@ fl staic_flag2[] = {
 
 
 int fi = 0;
-#define INT_TYPE types->root
+
 
 node* get_root(node* j)
 {
-	printf("%s", __FUNCTION__);
+	//printf("%s", __FUNCTION__);
 	if (j->type_ != endl)
 	{
 		//printf("\nerror line %d \nfile: %s",__LINE__,__FILE__);
@@ -102,20 +144,34 @@ char* parse_obj_to_str(const node_type t)
 {
 	char* y = (char*)malloc(1024);
 	memset(y, 0, 1024);
-	if (t & itype) S(y, "itype,");
-	if (t & keyword)S(y, "keyword,");
-	if (t & var_name)S(y, "var_name,");
-	if (t & value)S(y, "value,");
-	if (t & operators_n)S(y, "operators_n,");
-	if (t & equles)S(y, "equles,");
-	if (t & endl)S(y, "endl,");
-	if (t & s_index)S(y, "s_index,");
-	if (t & parentheses1)S(y, "parentheses1,");
-	if (t & parentheses1_c)S(y, "parentheses1c,");
-	if (t & comma)S(y, "comma,");
-	if (t & s_index_c)S(y, "s_index_c,");
-	if (t & parentheses4)S(y, "parentheses4,");
-	if (t & parentheses4_c)S(y, "parentheses4c,");
+	if (t & itype)
+		S(y, "itype,");
+	if (t & keyword)
+		S(y, "keyword,");
+	if (t & var_name)
+		S(y, "var_name,");
+	if (t & value)
+		S(y, "value,");
+	if (t & operators_n)
+		S(y, "operators_n,");
+	if (t & equles)
+		S(y, "equles,");
+	if (t & endl)
+		S(y, "endl,");
+	if (t & s_index)
+		S(y, "s_index,");
+	if (t & parentheses1)
+		S(y, "parentheses1,");
+	if (t & parentheses1_c)
+		S(y, "parentheses1c,");
+	if (t & comma)
+		S(y, "comma,");
+	if (t & s_index_c)
+		S(y, "s_index_c,");
+	if (t & parentheses4)
+		S(y, "parentheses4,");
+	if (t & parentheses4_c)
+		S(y, "parentheses4c,");
 	return y;
 }
 
@@ -155,7 +211,7 @@ node* static_flag_op2(const node_type mtype, node* w_node, bool added)
 
 bool static_flag_check2x(node_type* m)
 {
-	short* ma = (short*)m;
+	int* ma = (int*)m;
 	bool cont = false;
 	for (int i = 0; i < 10; i++)
 		if (staic_flag2[i].wait_type != 0)
@@ -262,41 +318,43 @@ node* get_last_type(node* in, const node_type b)
 }
 
 
-void do_work1(var* calc_result, var* me, int index)
+// ReSharper disable CppParameterMayBeConstPtrOrRef
+void assign_array_index(var* nvalue, var* marray, int index)
+
 {
 	//if(index >= me->size ){printf("error index out range ..");exit(0);}
-	if (me->type_define == T_INT)
+	if (marray->type_define == T_INT)
 	{
-		me->value_int[index] = *calc_result->value_int;
+		marray->value_int[index] = *nvalue->value_int;
 	}
-	else if (me->type_define == T_FLOAT)
+	else if (marray->type_define == T_FLOAT)
 	{
-		me->value_float[index] = *calc_result->value_float;
+		marray->value_float[index] = *nvalue->value_float;
 	}
-	else if (me->type_define == T_LONG)
+	else if (marray->type_define == T_LONG)
 	{
-		me->value_long[index] = *calc_result->value_long;
+		marray->value_long[index] = *nvalue->value_long;
 	}
-	else if (me->type_define == T_CHAR)
+	else if (marray->type_define == T_CHAR)
 	{
-		me->value_char_ptr[index] = *calc_result->value_char_ptr;
+		marray->value_char_ptr[index] = *nvalue->value_char_ptr;
 	}
-	else if (me->type_define == T_BOOL)
+	else if (marray->type_define == T_BOOL)
 	{
-		me->value_int[index] = *calc_result->value_int;
+		marray->value_int[index] = *nvalue->value_int;
 	}
-	else if (me->type_define == T_STRING && calc_result->type_define == T_STRING)
+	else if (marray->type_define == T_STRING && nvalue->type_define == T_STRING)
 	{
-		me->value_str_ptr[index] = *calc_result->value_str_ptr;
+		marray->value_str_ptr[index] = *nvalue->value_str_ptr;
 	}
-	else if (me->type_define == T_STRING && calc_result->type_define == T_CHAR)
+	else if (marray->type_define == T_STRING && nvalue->type_define == T_CHAR)
 	{
-		char* dst = me->value_str_ptr[0];
-		dst[index] = *calc_result->value_char_ptr;
+		char* dst = marray->value_str_ptr[0];
+		dst[index] = *nvalue->value_char_ptr;
 	}
 	else
 	{
-		me->value_type_instsance[index] = *calc_result->value_type_instsance;
+		marray->value_type_instsance[index] = *nvalue->value_type_instsance;
 	}
 }
 
@@ -365,7 +423,7 @@ void set_value(var* context, fcall* temp, node** cx)
 			me->values = calc_result->values;
 			return;
 		}
-		do_work1(calc_result, me, index);
+		assign_array_index(calc_result, me, index);
 		if ((*cx)->type_ != endl)
 		{
 			*cx = get_first_type(*cx, endl);
@@ -610,7 +668,7 @@ void call_func_in(fcall* mfunc)
 	//d->ref must be parth
 	node* stop = get_close_part(mfunc->deftion->ref);
 	//c = (node*)temp->func_code;
-	compile(mfunc->context, mfunc->deftion->ref->parent, mfunc, stop);
+	compile(mfunc->context, mfunc->deftion->ref->parent, mfunc, stop, NULL);
 	if (mfunc->deftion->function_type == constr)
 	{
 		//TODO:2022
@@ -741,7 +799,7 @@ void str(fcall* d)
 		float* u = d->func_parmeters->value_float;
 		buff = (char*)malloc(sizeof(float) * 4 + 1);
 		sprintf(buff, "%f", *u);
-		char* t = (char *)malloc(strlen(buff) + 1);
+		char* t = (char*)malloc(strlen(buff) + 1);
 		strcpy(t, buff);
 
 		d->_return.value_str_ptr = get_pptr_string(t);
@@ -751,7 +809,7 @@ void str(fcall* d)
 		int* u = d->func_parmeters->value_int;
 		buff = (char*)malloc(sizeof(int) * 4 + 1);
 		sprintf(buff, "%d", *u);
-		char* t = (char *)malloc(strlen(buff) + 1);
+		char* t = (char*)malloc(strlen(buff) + 1);
 		strcpy(t, buff);
 
 
@@ -1465,7 +1523,7 @@ node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_
 						f = 0;
 					}
 				}
-					//get value from var
+				//get value from var
 				else if (name_function != NULL)
 				{
 					//node* y = get_close_part(get_first_type(mnode, parentheses4)); ///1
@@ -1854,6 +1912,30 @@ func_deftion simple_function_array[] = {
 };
 func_stack base_function = {.top = simple_function_array + 12, .size = 13, .root = simple_function_array + 0};
 
+var tinfo[6] = {
+	{.name = "_int", .type_define = T_TYPE_INFO, .values = T_INT, .size = 1, .stack_next = tinfo + 1},
+	{.name = "_string", .type_define = T_TYPE_INFO, .values = T_INT, .size = 1, .stack_next = tinfo + 2},
+	{.name = "_char", .type_define = T_TYPE_INFO, .values = T_INT, .size = 1, .stack_next = tinfo + 3},
+	{.name = "_bool", .type_define = T_TYPE_INFO, .values = T_INT, .size = 1, .stack_next = tinfo + 4},
+	{.name = "_long", .type_define = T_TYPE_INFO, .values = T_INT, .size = 1, .stack_next = tinfo + 5},
+	{.name = "_object", .type_define = T_TYPE_INFO, .values = T_INT, .size = 1, .stack_next = 0}
+};
+
+
+type_instance tnc = {
+	.functions = {
+		.top = simple_function_array + 12, .size = 13, .root = simple_function_array + 0
+	},
+	.size = 1, .type = T_OBJECT,
+	.propertys = {.size = 6, .top = tinfo + 5, .root = tinfo + 0, .stack_holder = 0}
+};
+var start_var[] = {
+	{
+		.name = "xlang", .type_define = T_OBJECT, .value_type_instsance = &tnc,
+		.size = 1, .holder = NULL, .base_type = 0, .ref = 0, .stack_next = 0, .access = PUBLIC
+	}
+};
+
 fcall* create_fcall(func_deftion* fd)
 {
 	fcall* function_c = (fcall*)calloc(1, sizeof(fcall));
@@ -1866,4 +1948,94 @@ fcall* create_fcall(func_deftion* fd)
 	function_c->parm_count_c = fd->start_parm_count;
 	function_c->_return.type_define = fd->return_type;
 	return function_c;
+}
+
+
+var* get_array_item(var* name, int index)
+{
+	var* ret = NULL;
+	switch (name->type_define->type_id)
+	{
+	case t_long:
+
+		ret = new_var(NULL, T_LONG);
+		ret->value_long = name->value_long + index;
+		break;
+	case t_string:
+		{
+			if (name->size > 1)
+			{
+				ret = new_var(NULL, T_STRING);
+				ret->value_str_ptr = name->value_str_ptr + index;
+			}
+			else
+			{
+				ret = new_var(NULL, T_CHAR);
+				ret->value_char_ptr = *name->value_str_ptr + index;
+			}
+			break;
+		}
+	case t_char:
+		ret = new_var(NULL, T_CHAR);
+		ret->value_str_ptr = name->value_str_ptr + index;
+		break;
+	case t_int:
+		ret = new_var(NULL, T_INT);
+		ret->value_int = name->value_int + index;
+		break;
+	case t_bool:
+		ret = new_var(NULL, T_BOOL);
+		ret->value_bool = name->value_bool + index;
+		break;
+	case t_float:
+		ret = new_var(NULL, T_FLOAT);
+		ret->value_float = name->value_float + index;
+		break;
+	case t_array:
+
+		break;
+	default:
+		printf("error");
+	}
+
+
+	return ret;
+}
+
+
+func_deftion* get_obj_function2(var* object_var, char* name)
+{
+	if (NULL == object_var)
+	{
+		printf("error : get_func_by_name_with_var | %s - C:%s:%d", name, __FILE__, __LINE__);
+		exit(-1);
+	}
+	func_deftion* funcs = NULL;
+	if (is_base_type(object_var->type_define))
+	{
+		funcs = object_var->type_define->d_functions;
+	}
+	else
+	{
+		funcs = object_var->value_type_instsance->functions.root;
+	}
+
+	for (func_deftion* i = funcs; i != NULL; i = i->stack_next)
+	{
+		if (strcmp(name, i->func_name) == 0)
+		{
+			return i;
+		}
+	}
+	printf("error : get_func_by_name_with_var | %s", name);
+	exit(-1);
+	return NULL;
+}
+
+
+bool stop_here(node_type stop_in_type, node* stop_in_node, node* mnode)
+{
+	if ((stop_in_type != none && mnode->type_ == stop_in_type) || (stop_in_node != NULL && (mnode == stop_in_node ||
+		mnode->parent == stop_in_node)))return true;
+	return false;
 }

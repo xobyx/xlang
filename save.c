@@ -292,7 +292,7 @@ void s_compile_(node_stack* stack)
 
 	//	if(m->type_ != var_name || m->value_raw == NULL || !eql((char*)m->value_raw,"import"))
 		{
-		i=compile(0,m,0,0);
+		i=compile(0,m,0,0, NULL);
 		}
 
 	}

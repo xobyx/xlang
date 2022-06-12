@@ -95,7 +95,7 @@ void echo_func_def(func_deftion m, int le)
 	
 	}
 	l(le)p("}\n");
-	l(le)p("function code: %#x \n", (int)m.func_code);
+	l(le)p("function code: %p \n", m.func_code);
 
 	//function_type function_type;
 	l(le)p("return type : \n");

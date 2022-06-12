@@ -28,12 +28,12 @@ bool save_code = false;
 int print_parse_log = 1;
 
 #define STR_VALUE(val) #val
-#define STR(name) STR_VALUE(name)
+
 
 char* g = STR_VALUE("int") "ds";
-#define PATH_LEN 256
-#define MD5_LEN 32
-void start_compile();
+
+
+void start_compile(void);
 
 void getsavedMD5(FILE* cf);
 unsigned int file_md5[4];
@@ -54,31 +54,29 @@ int fopen_s(FILE **f, const char *name, const char *mode) {
 }
 #define gets_s(x,y) fgets(x,500,stdin)
 #endif
-int GetDir(char* fullPath, char* dir)
+int GetDir(const char* full_path, char* dir)
 {
-
-	const int buffSize = 1024;
-
-	char buff[1024] = { 0 };
+	char buff2[1024] = { 0 };
 	int buffCounter = 0;
 	int dirSymbolCounter = 0;
 
-	for (unsigned int i = 0; i < strlen(fullPath); i++)
+	for (unsigned int i = 0; i < strlen(full_path); i++)
 	{
-		if (fullPath[i] != L'\\')
+		if (full_path[i] != L'\\')
 		{
-			if (buffCounter < buffSize) buff[buffCounter++] = fullPath[i];
+			const int buff_size = 1024;
+			if (buffCounter < buff_size) buff2[buffCounter++] = full_path[i];
 			else return -1;
 		}
 		else
 		{
 			for (int i2 = 0; i2 < buffCounter; i2++)
 			{
-				dir[dirSymbolCounter++] = buff[i2];
-				buff[i2] = 0;
+				dir[dirSymbolCounter++] = buff2[i2];
+				buff2[i2] = 0;
 			}
 
-			dir[dirSymbolCounter++] = fullPath[i];
+			dir[dirSymbolCounter++] = full_path[i];
 			buffCounter = 0;
 		}
 	}
@@ -111,7 +109,7 @@ void int_xlang()
 
 bool b;
 
-#define C_ASSERT(e) typedef char __C_ASSERT__[(e)?1:-1]
+
 void change_dir(char** argv)
 {
 
@@ -126,7 +124,34 @@ void change_dir(char** argv)
 
 int main(const int argc, char ** argv);
 
-void clean_memory();
+void clean_memory(void);
+
+void interupter(void)
+{
+	bool unclosed = false;
+
+	node_type which_type = none;
+	char txt[1024 * 5];
+	while (true)
+	{
+		memset(txt, 0, 1024 * 5);
+
+		if (unclosed)
+		{
+			printf("\n...");
+			gets_s(txt, 500);
+		}
+		else
+		{
+			printf("\n>>>");
+			gets_s(txt, 500);
+		}
+
+
+		start_parse_lines(txt, true);
+		unclosed = static_flag_check2x(&which_type);
+	}
+}
 
 int main(const int argc, char** argv)
 {
@@ -134,37 +159,11 @@ int main(const int argc, char** argv)
 	t = clock();
 	if (argc == 1)
 	{
-		bool unclosed = false;
-
-		node_type which_type = (node_type)0;
-		char code_txt[1024 * 5];
-
-		while (true)
-		{
-			memset(code_txt, 0, 1024 * 5);
-
-			if (unclosed)
-			{
-				printf("\n...");
-				//gets(a);		
-				gets_s(code_txt, 500);
-			}
-			else
-			{
-				printf("\n>>>");
-				gets_s(code_txt, 500);
-			}
-
-
-			start_parse_lines(code_txt, true);
-			unclosed = static_flag_check2x(&which_type);
-		}
-
-		return 0;
+		interupter();
 	}
-	if (argc == 3)
+	if (argc == 3)  // xlang file
 		b = false;
-	//find_all = 1;
+	
 
 	FILE* code_file = NULL;
 	FILE* saved_code_file = NULL;
@@ -225,12 +224,12 @@ int main(const int argc, char** argv)
 	const double time_taken = ((double)t) / CLOCKS_PER_SEC; // in seconds
 
 	printf("\ntook %f seconds to execute \n", time_taken);
-	printf("\nvar num: %d , temp var num: %d", varss->size, t_varss->size);
+	printf("\nvar num: %d , temp var num: %d\n", varss->size, t_varss->size);
 
 
 
-	getchar();
-	getchar();
+	//getchar();
+	///getchar();
 	free(saved_code_file_path);
 	free(buff);
 	//	_CrtDumpMemoryLeaks();
@@ -239,7 +238,7 @@ int main(const int argc, char** argv)
 
 
 
-void clean_memory()
+void clean_memory(void)
 {
 	clean_stack(nodes);
 	var_clean_stack(varss);
@@ -251,7 +250,7 @@ void clean_memory()
 	free(types);
 }
 
-void start_compile()
+void start_compile(void)
 {
 	clock_t t2 = clock();
 	start_parse_lines(buff, false);
