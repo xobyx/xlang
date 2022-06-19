@@ -1,6 +1,8 @@
 #include "types.h"
 #include "functions.h"
-
+#if defined(__GNUC__)|| defined(__MINGW64__)
+#define strcat_s(x,y,z) strcat(x,z)
+#endif
 
 //void step2(node** v) { *v = (*v)->next; }
 
