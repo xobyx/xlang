@@ -358,78 +358,7 @@ void assign_array_index(var* nvalue, var* marray, int index)
 	}
 }
 
-void set_value(var* context, fcall* temp, node** cx)
-{
-	bool array_copy = false;
-	if (((*cx)->next->type_ == equles) ||
-		((*cx)->next->type_ == s_index && get_first_type(*cx, s_index_c)->next->type_ == equles))
-	{
-		var* calc_result = new_temp_var(NULL);
-		var* me = NULL;
 
-		int index = 0;
-
-		if (context != NULL)
-		{
-			me = get_var_by_name_on_stack((*cx)->value_char_ptr, &context->value_type_instsance->propertys);
-		}
-		else if (temp != NULL)
-		{
-			me = fget_var_by_name_fc((*cx)->value_char_ptr, temp);
-		}
-
-		if (me == NULL)
-		{
-			me = get_globle_var_by_name((*cx)->value_char_ptr);
-		}
-		bool index_assian = false;
-
-
-		if ((*cx)->next->btype.node_type_bit.s_index)
-		{
-			var* get_index = new_temp_var(T_INT);
-
-
-			node* close = get_close_part((*cx)->next);
-			calculate((*cx)->next->next, temp, context, (node_type)0, close, get_index);
-
-			index = *get_index->value_int;
-			free_temp_var(get_index);
-			*cx = close;
-			index_assian = true;
-		}
-		else if (me->size > 1)
-		{
-			calc_result->size = me->size;
-			array_copy = true;
-		}
-
-		if ((*cx)->next->type_ == equles)
-		{
-			calc_result->type_define = ((me->type_define == T_STRING) && index_assian) ? T_CHAR : me->type_define;
-
-
-			//c = calculate(res, c->next->next, temp);
-			*cx = calculate((*cx)->next->next, temp, context, endl, NULL, calc_result);
-
-			if (*cx == NULL)
-			{
-				return;
-			}
-		}
-		if (array_copy)
-		{
-			free(me->values);
-			me->values = calc_result->values;
-			return;
-		}
-		assign_array_index(calc_result, me, index);
-		if ((*cx)->type_ != endl)
-		{
-			*cx = get_first_type(*cx, endl);
-		}
-	}
-}
 
 
 #define  START(index) if((index)==0) printf("["); else printf(",") ;
@@ -1958,37 +1887,37 @@ var* get_array_item(var* name, int index)
 	{
 	case t_long:
 
-		ret = new_var(NULL, T_LONG);
+		ret = new_temp_var(T_LONG);
 		ret->value_long = name->value_long + index;
 		break;
 	case t_string:
 		{
 			if (name->size > 1)
 			{
-				ret = new_var(NULL, T_STRING);
+				ret = new_temp_var(T_STRING);
 				ret->value_str_ptr = name->value_str_ptr + index;
 			}
 			else
 			{
-				ret = new_var(NULL, T_CHAR);
+				ret = new_temp_var( T_CHAR);
 				ret->value_char_ptr = *name->value_str_ptr + index;
 			}
 			break;
 		}
 	case t_char:
-		ret = new_var(NULL, T_CHAR);
+		ret = new_temp_var( T_CHAR);
 		ret->value_str_ptr = name->value_str_ptr + index;
 		break;
 	case t_int:
-		ret = new_var(NULL, T_INT);
+		ret = new_temp_var( T_INT);
 		ret->value_int = name->value_int + index;
 		break;
 	case t_bool:
-		ret = new_var(NULL, T_BOOL);
+		ret = new_temp_var(T_BOOL);
 		ret->value_bool = name->value_bool + index;
 		break;
 	case t_float:
-		ret = new_var(NULL, T_FLOAT);
+		ret = new_temp_var(T_FLOAT);
 		ret->value_float = name->value_float + index;
 		break;
 	case t_array:

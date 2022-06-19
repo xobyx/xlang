@@ -475,8 +475,11 @@ void parse_line(char* buff, node* n_node, const int line)
                     }
                     else
                     {
-                            printf("ERROR: no parent if-eif body");
-							//exit(-1);
+						if(i != _if_ )
+						{
+                    	printf("ERROR: no parent if-eif body");
+						exit(-1);
+						}
                     }
 					n_node->next_jump = NULL;
 					next->flag_ = var_name | value;

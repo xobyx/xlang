@@ -263,42 +263,93 @@ node* gelastjump(node* b)
 	return i;
 }
 
-void if_eif_function(node** cx, fcall* temp, var* calling_obj)
+void if_eif_function(node** cx, fcall* cfunction, var* calling_obj)
 {
-	var* m = new_temp_var(T_BOOL);
-	node* save = *cx; ///{if-eif}
-	if_block* heif = (if_block*)malloc(sizeof(if_block));
+	node* ifeif = *cx; ///{if-eif}	
+	node* prev = ifeif->ref_node;
+	node* close = NULL;
+	bool skip = (*cx)->value_keyword != _if_ && (prev != NULL && prev->taked == true);
 
-
-	int bt = (*cx)->value_keyword;
-	if (bt != _else_)
+	if ((*cx)->value_keyword != _else_)
 	{
-		node* el = get_close_part((*cx)->next);
-		node* last = calculate((*cx)->next->next, temp, NULL, (node_type)0, el, m);
-		(*cx) = last;
-
-		(*cx) = get_first_type((*cx), parentheses1);
-		node* close = get_close_part((*cx));
-		(*cx) = (*cx)->next;
-		if (*(bool*)m->values) /// true
+		eat(cx, parentheses4,true); //(
+		if (skip == false)
 		{
-			heif->value = 1;
-			heif->setted = 1;
-			save->opt_raw = heif;
+			eat(cx, endl,false);
+			var* bool_result = new_temp_var(T_BOOL);
+			calc((*cx)->next, cfunction, calling_obj, none, (*cx)->ref_node, bool_result);
+			skip = ! *bool_result->value_bool;
+		}
+		*cx =(*cx)->ref_node;
+	}
 
-			compile(calling_obj, *cx, temp, close, NULL);
-			//  [{|(]    [}|)]
-			*cx = save->next_jump != NULL ? get_first_type(gelastjump(save), parentheses1)->ref_node : close;
+	eat(cx, endl,false);
+	eat(cx, parentheses1,true);
+	close = get_close_part(*cx);
 
-			//*cx=close;
+
+	if (skip)
+	{
+		ifeif->taked = prev != NULL ? prev->taked : false;
+	}
+	else
+	{
+		ifeif->taked = true;
+		compile(calling_obj, *cx, cfunction, close, NULL);
+	}
+	*cx = close;
+}
+
+void if_eif_function2(node** cx, fcall* cfunction, var* calling_obj)
+{
+	node* close = NULL;
+	node* ifeif = *cx; ///{if-eif}
+	//if_block* heif = (if_block*)malloc(sizeof(if_block));
+	node* lcond = ifeif->ref_node;
+
+	if ((*cx)->value_keyword == _if_ || lcond != NULL && lcond->taked == false)
+	{
+		if ((*cx)->value_keyword != _else_)
+		{
+			var* bool_result = new_temp_var(T_BOOL);
+
+			eat(cx, parentheses4,true);
+			node* el = get_close_part(*cx);
+			*cx = calc((*cx)->next, cfunction, NULL, none, el, bool_result);
+
+
+			*cx = get_first_type(*cx, parentheses1);
+			close = get_close_part((*cx));
+			*cx = (*cx)->next;
+			if (bool_result->value_bool) /// true
+			{
+				ifeif->taked = true;
+				compile(calling_obj, *cx, cfunction, close, NULL);
+				//  [{|(]    [}|)]
+				//*cx = ifeif->next_jump != NULL ? 
+				//	get_first_type(gelastjump(ifeif), parentheses1)->ref_node
+				//: close;
+
+
+				//*cx=close;
+			}
+			else
+			{
+				ifeif->taked = false;
+				(*cx) = close;
+			}
 		}
 		else
 		{
-			(*cx) = close;
+			*cx = get_first_type(*cx, parentheses1);
+			close = get_close_part((*cx));
+			*cx = (*cx)->next;
+			compile(calling_obj, *cx, cfunction, close, NULL);
 		}
 	}
 	else
 	{
+		(*cx) = close;
 	}
 }
 
@@ -309,7 +360,7 @@ void while_function(node** c, fcall* temp, var* calling_obj)
 
 	node* el = get_close_part((*c)->next);
 	node* cond = (*c)->next->next;
-	*c = calculate(cond, temp, NULL, none, el, m);
+	*c = calc(cond, temp, NULL, none, el, m);
 
 
 	*c = get_first_type(*c, parentheses1);
@@ -323,7 +374,7 @@ void while_function(node** c, fcall* temp, var* calling_obj)
 		//as.print_line_debuge(c,1);
 		compile(NULL, *c, temp, close, NULL);
 		//check the condition again
-		calculate(cond, temp, NULL, (node_type)0, el, m);
+		calc(cond, temp, NULL, (node_type)0, el, m);
 	}
 
 	*c = close; //getFirstType(c, parse_obj::parentheses1c);
@@ -338,7 +389,7 @@ void for_function(node** c, fcall* funcall, var* calling_object)
 	node* el = get_close_part(*c); //)
 	*c = (*c)->next; //start_exp
 	node* start_exp = *c;
-	*c = calculate(start_exp, funcall, calling_object, comma, NULL, for_v);
+	*c = calc(start_exp, funcall, calling_object, comma, NULL, for_v);
 	*c = (*c)->next; //step_exp
 	node* step_exp = *c;
 
@@ -350,7 +401,7 @@ void for_function(node** c, fcall* funcall, var* calling_object)
 	//func_deftion* y = new_func();
 
 	//*c = calculate(*c, funcall,calling_object, comma,*c, bool_var);
-	*c = calculate(cond, funcall, calling_object, (node_type)0, el, bool_var);
+	*c = calc(cond, funcall, calling_object, (node_type)0, el, bool_var);
 
 
 	*c = get_first_type(*c, parentheses1);
@@ -371,9 +422,9 @@ void for_function(node** c, fcall* funcall, var* calling_object)
 		//as.print_line_debuge(c,1);
 		compile(calling_object, *c, funcall, for_close, NULL);
 		//check the condition again
-		calculate(step_exp, funcall, calling_object, comma, NULL, for_v);
+		calc(step_exp, funcall, calling_object, comma, NULL, for_v);
 
-		calculate(cond, funcall, calling_object, (node_type)0, el, bool_var);
+		calc(cond, funcall, calling_object, (node_type)0, el, bool_var);
 	}
 
 	*c = for_close; //getFirstType(c, parse_obj::parentheses1c);
@@ -394,7 +445,6 @@ void install_class(node** n)
 
 	if (eat(n, parentheses4,false))
 	{
-		
 		if (eat(n, var_name,false))
 		{
 			mtype->base = get_type_by_name((*n)->value_char_ptr);
@@ -592,7 +642,6 @@ node* compile(var* parent, node* out, fcall* c_function, node* stop, type_def* n
 					c = calc(c->next, c_function, parent, none, c->ref_node, vsize);
 					asize = *vsize->value_int;
 					free_temp_var(vsize);
-				
 				}
 				if (eat(&c, var_name,true))
 				{
@@ -602,11 +651,11 @@ node* compile(var* parent, node* out, fcall* c_function, node* stop, type_def* n
 					}
 					else if (c->opt_name_type == var_def)
 					{
-						var* n_var = add_var_to(&c, c_function, parent, ncalss, var_type,asize );
+						var* n_var = add_var_to(&c, c_function, parent, ncalss, var_type, asize);
 
 						if (eat(&c, equles,false))
 						{
-							c=calc(c->next, c_function, parent, none,NULL, n_var);
+							c = calc(c->next, c_function, parent, none,NULL, n_var);
 						}
 						else //endl
 						{
@@ -641,7 +690,7 @@ node* compile(var* parent, node* out, fcall* c_function, node* stop, type_def* n
 					{
 						var* re = &c_function->_return;
 
-						calculate(c->next, c_function, parent, 0, NULL, re);
+						calc(c->next, c_function, parent, 0, NULL, re);
 						c = stop;
 						return c;
 					}

@@ -196,7 +196,9 @@ typedef struct node
 		var_name_def opt_name_type;
 
 
+
 	};
+	bool taked;
 }node;
 
 typedef struct node_stack
