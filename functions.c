@@ -1444,9 +1444,7 @@ bool is_double_oprater(node* mnode)
 	return (mnode->type_ == operators_n && (mnode->next->type_ == operators_n || mnode->next->type_ == equles))
 		|| (mnode->type_ == equles && mnode->next->type_ == equles);
 }
-#if defined(__GNUC__)|| defined(__MINGW64__)
-#define strcat_s(x,y,z) strcat(x,z)
-#endif
+
 node* calculate(node* cnode, fcall* calling_function, var* calling_object, node_type stop_in_type, node* stop_in_node,
                 var* calc_result)
 {

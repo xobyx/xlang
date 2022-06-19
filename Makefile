@@ -40,9 +40,9 @@ OBJDIR_RELEASE = obj/Release
 DEP_RELEASE =
 OUT_RELEASE = bin/Release/xlang
 
-OBJ_DEBUG = $(OBJDIR_DEBUG)/xlang.o $(OBJDIR_DEBUG)/var_stack.o $(OBJDIR_DEBUG)/type_stack.o $(OBJDIR_DEBUG)/stack.o $(OBJDIR_DEBUG)/save.o $(OBJDIR_DEBUG)/compile.o $(OBJDIR_DEBUG)/parse.o $(OBJDIR_DEBUG)/md5.o $(OBJDIR_DEBUG)/functions.o $(OBJDIR_DEBUG)/func_stack.o $(OBJDIR_DEBUG)/debuge.o $(OBJDIR_DEBUG)/echo.o #$(OBJDIR_DEBUG)/http.o
+OBJ_DEBUG = $(OBJDIR_DEBUG)/calc.o $(OBJDIR_DEBUG)/xlang.o $(OBJDIR_DEBUG)/var_stack.o $(OBJDIR_DEBUG)/type_stack.o $(OBJDIR_DEBUG)/stack.o $(OBJDIR_DEBUG)/save.o $(OBJDIR_DEBUG)/compile.o $(OBJDIR_DEBUG)/parse.o $(OBJDIR_DEBUG)/md5.o $(OBJDIR_DEBUG)/functions.o $(OBJDIR_DEBUG)/func_stack.o $(OBJDIR_DEBUG)/debuge.o $(OBJDIR_DEBUG)/echo.o #$(OBJDIR_DEBUG)/http.o
 
-OBJ_RELEASE = $(OBJDIR_RELEASE)/xlang.o $(OBJDIR_RELEASE)/var_stack.o $(OBJDIR_RELEASE)/type_stack.o $(OBJDIR_RELEASE)/stack.o $(OBJDIR_RELEASE)/save.o $(OBJDIR_RELEASE)/compile.o $(OBJDIR_RELEASE)/parse.o $(OBJDIR_RELEASE)/md5.o $(OBJDIR_RELEASE)/functions.o $(OBJDIR_RELEASE)/func_stack.o $(OBJDIR_RELEASE)/debuge.o $(OBJDIR_RELEASE)/echo.o #$(OBJDIR_RELEASE)/http.o
+OBJ_RELEASE = $(OBJDIR_RELEASE)/calc.o $(OBJDIR_RELEASE)/xlang.o $(OBJDIR_RELEASE)/var_stack.o $(OBJDIR_RELEASE)/type_stack.o $(OBJDIR_RELEASE)/stack.o $(OBJDIR_RELEASE)/save.o $(OBJDIR_RELEASE)/compile.o $(OBJDIR_RELEASE)/parse.o $(OBJDIR_RELEASE)/md5.o $(OBJDIR_RELEASE)/functions.o $(OBJDIR_RELEASE)/func_stack.o $(OBJDIR_RELEASE)/debuge.o $(OBJDIR_RELEASE)/echo.o #$(OBJDIR_RELEASE)/http.o
 
 all: debug release
 
@@ -89,6 +89,9 @@ $(OBJDIR_DEBUG)/md5.o: md5.c
 $(OBJDIR_DEBUG)/functions.o: functions.c
 	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c functions.c -o $(OBJDIR_DEBUG)/functions.o
 
+$(OBJDIR_DEBUG)/calc.o: calc.c
+	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c calc.c -o $(OBJDIR_DEBUG)/calc.o
+	
 $(OBJDIR_DEBUG)/func_stack.o: func_stack.c
 	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c func_stack.c -o $(OBJDIR_DEBUG)/func_stack.o
 
@@ -143,6 +146,9 @@ $(OBJDIR_RELEASE)/md5.o: md5.c
 
 $(OBJDIR_RELEASE)/functions.o: functions.c
 	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c functions.c -o $(OBJDIR_RELEASE)/functions.o
+	
+$(OBJDIR_RELEASE)/calc.o: calc.c
+	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c calc.c -o $(OBJDIR_RELEASE)/calc.o
 
 $(OBJDIR_RELEASE)/func_stack.o: func_stack.c
 	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c func_stack.c -o $(OBJDIR_RELEASE)/func_stack.o

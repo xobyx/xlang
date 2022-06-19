@@ -1,6 +1,8 @@
 #pragma once
 #include "xlang_main.h"
-
+#if defined(__GNUC__)|| defined(__MINGW64__)
+#define strcat_s(x,y,z) strcat(x,z)
+#endif
 
 /*XLANG*/extern type_def SIMPLE_TYPE[];
 //#define T(O) get_type_by_name((char*)O)
