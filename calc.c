@@ -53,7 +53,7 @@ var* name_exp(node ** nod, fcall* calling_function, var* calling_object, node_ty
 		switch ((*nod)->type_)
 		{
 		case var_name:
-			if ((*nod)->opt_name_type == var_call)
+			if ((*nod)->opt_name_type == var_call ||(*nod)->opt_name_type==var_call_ref)
 			{
 				if (mvar != NULL)
 				{
@@ -150,7 +150,7 @@ var* name_exp(node ** nod, fcall* calling_function, var* calling_object, node_ty
 		{
 			mvar = new_temp_var(NULL);
 			//change mvar->value
-			*nod = calc(*nod, calling_function, calling_object, 0, (*nod)->ref_node, mvar);
+			*nod = calc((*nod)->next, calling_function, calling_object, 0, (*nod)->ref_node, mvar);
 			if(stop_in_node!=NULL&& stop_in_node==*nod) return mvar;	
 			step(nod);
 			break;
@@ -223,17 +223,21 @@ node* calc(node* cnode, fcall* calling_function, var* calling_object, node_type 
 
 	bool indexx = false;
 	void* memory = NULL;
-
+	var * memory_var = NULL;
 	int i = 0;
 
 	while ((mnode->btype.value & (node_type)0xc043) == 0)
 	{
-		struct var* name_var = NULL;
+		
 		if (stop_here(stop_in_type, stop_in_node, mnode)) break;
-
+		struct var* name_var = NULL;
+		int ref=false;
 		if(mnode->type_ & (var_name|value|parentheses4))
 		{
-
+		if(mnode->type_ == var_name && mnode->opt_name_type == var_call_ref )
+		{
+			ref = true;
+		}
 		name_var = name_exp(&mnode,calling_function,calling_object,stop_in_type,stop_in_node);
 
 		if (op == NULL) //
@@ -241,11 +245,14 @@ node* calc(node* cnode, fcall* calling_function, var* calling_object, node_type 
 
 
 			setup_t2(calc_result, name_var);
-			if (memory == NULL)
-				memory = calc_result->values == NULL ? install_memory(calc_result) : calc_result->values;
-			if (memory == NULL)  //// T_FUNC
+			if (ref)  //// T_FUNC
 			{
 				memory = name_var->values;
+				memory_var= name_var;
+			}
+			if (memory == NULL)
+			{
+				memory = calc_result->values == NULL ? install_memory(calc_result) : calc_result->values;
 			}
 			//copy array [int string]
 			move(calc_result, memory, &i, name_var);
@@ -350,9 +357,9 @@ node* calc(node* cnode, fcall* calling_function, var* calling_object, node_type 
 		calc_result->type_define = saved_return_type;
 	}
 
-	if (calc_result->values == NULL)
+	if (memory_var != NULL)
 	{
-		calc_result->values = memory;
+		calc_result = memory_var;
 	}
 	else
 	{

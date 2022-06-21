@@ -79,7 +79,7 @@ void parse_line(char* buff, node* n_node, const int line)
 {
 
 
-	n_node->type_ |= operators_n;
+	n_node->type_ |= operators_n | parentheses4;
 
 	while (buff != NULL && (*buff == ' ' || *buff == '\t' || *buff == '\n' || *buff == '\r' || *buff == ';'))
 	{
@@ -202,7 +202,7 @@ void parse_line(char* buff, node* n_node, const int line)
 			next->parent = n_node;
 			next->flag_ = s_index_c;
 			/*,} */
-			;
+			
 			next->is_flagged = true;
 			parse_line(buff + 1, next, line);
 
@@ -680,16 +680,23 @@ void parse_line(char* buff, node* n_node, const int line)
 	if (n_node->btype.node_type_bit.var_name)
 	{
 		//?([0-9|A-Z|a-z_]+[_0-9|A-Z|a-z]+)[ \n]
-		find* mfind = match("^(:?\\b\\w+)", buff);//var name
+		find* mfind = match("^(&?[a-zA-Z_]?[a-zA-Z_0-9]+)", buff);//var name
 
-
-
+		
 		if (mfind->isFind && *mfind->bn == *buff && strcmp(mfind->bn, "string") != 0)
 		{
 			//TODO:: if is BASE parse_obj
-
+			bool ref=false;
 			n_node->line = line;
-			n_node->value_raw = mfind->bn;
+			if (*mfind->bn != '&')
+			{
+				n_node->value_char_ptr = mfind->bn;
+			}
+			else
+			{
+				n_node->value_char_ptr = mfind->bn + 1;
+				ref=true;
+			}
 			n_node->type_ = var_name;
 			next->parent = n_node;
 			n_node->next = next;
@@ -731,9 +738,9 @@ void parse_line(char* buff, node* n_node, const int line)
 				{
 					n_node->opt_name_type = var_def;
 				}
-				else
+				else 
 				{
-					n_node->opt_name_type = var_call;
+					n_node->opt_name_type = ref?var_call_ref: var_call;
 				}
 			}
 			else

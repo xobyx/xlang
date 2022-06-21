@@ -151,7 +151,7 @@ node* setup_function_parms(node** nod, fcall* function, var* context, fcall* in_
 		// allow to get parameters form current function old_call
 
 
-		var* n = &function->func_parmeters[i++];
+		var* n = function->func_parmeters + (i++);
 		n->values = NULL;
 		n->type_define = NULL;
 

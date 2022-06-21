@@ -70,9 +70,6 @@ var* fget_var_by_name_fc(char* name,fcall* y);
 var* all_get_var_by_name(char* name, fcall * called_function, var* called_var);
 void* install_memory_with_type(type_def * tc,const int s);
 void* install_memory(var * n);
-node* calculate(node * cnode, fcall * calling_function, var * calling_object, node_type stop_in_type, node * stop_in_node, var * calc_result);
-node* calculate4(var* ms, node* m, node_type z, fcall* km);
-node* calculate3(var* ms, node* m, fcall* km);
 
 node* get_close_part(node* t);
 

@@ -109,8 +109,8 @@ typedef enum var_name_def
 	class_def,//k
 	class_base_def,//x,
 	psize,
-	pindex
-
+	pindex,
+	var_call_ref
 }var_name_def;
 
 typedef enum  function_type
