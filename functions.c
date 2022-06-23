@@ -56,6 +56,7 @@ const func_deftion int_function[] = {
 		.access = PUBLIC, .start_parm_count = 1, .return_type = T_INT, .ref = 0, .stack_next = 0
 	}
 };
+void xeql(fcall* fcall);
 type_def SIMPLE_TYPE[] = {
 	{
 		.type_id = 0, .type_name = "long", .d_propertys = {0}, .d_functions = {0}, .base = 0,
@@ -68,10 +69,15 @@ type_def SIMPLE_TYPE[] = {
 			{
 				.start_func_parmeters = {0}, .func_code = &len, .func_name = "len", .function_type = f_main,
 				.access = PUBLIC,
+				.return_type = T_INT, .ref = 0, .stack_next = T_STRING->d_functions+1, .start_parm_count = 1
+			},
+			{
+				.start_func_parmeters = {T_STRING}, .func_code = &xeql, .func_name = "eql", .function_type = f_main,
+				.access = PUBLIC,
 				.return_type = T_INT, .ref = 0, .stack_next = 0, .start_parm_count = 1
 			}
 		},
-		.d_function_size = 1, .base = 0,
+		.d_function_size = 2, .base = 0,
 		.stack_next = T_CHAR
 	},
 	{.type_id = 2, .type_name = "char", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = T_INT},
@@ -96,7 +102,7 @@ type_def SIMPLE_TYPE[] = {
 	},
 	{.type_id = 8, .type_name = "T", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = T_FUNC},
 	{.type_id = 9, .type_name = "func", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = T_TYPE_INFO},
-	{.type_id = 10, .type_name = "itype", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = 0}
+	{.type_id = 10, .type_name = "type", .d_propertys = {0}, .d_functions = {0}, .base = 0, .stack_next = 0}
 
 };
 
@@ -483,17 +489,17 @@ void print(fcall* temp)
 	char* k;
 	if (m->type_define == T_INT)
 	{
-		char* k2 = "%d]\n";
-		k = "%d\n";
+		
+		 
 		if (m->size > 1)
 		{
 			k = "%d,";
-			*r = printf("%s(%d)=[", m->type_define->type_name, m->size);
-			for (int ms = 0; ms < m->size - 1; ms++)
+			
+			for (int ms = 0; ms < m->size; ms++)
 			{
-				*r = printf(k, (m->value_int)[ms]);
+				*r = printf("%d\n", (m->value_int)[ms]);
 			}
-			*r = printf(k2, (m->value_int)[m->size - 1]);
+			
 		}
 		else
 		{
@@ -502,17 +508,16 @@ void print(fcall* temp)
 	}
 	else if (m->type_define == T_STRING)
 	{
-		char* k2 = "%s]\n";
-		k = "%s\n";
+		
 		if (m->size > 1)
 		{
-			k = "%s,";
-			*r = printf("%s(%d)=[", m->type_define->type_name, m->size);
-			for (int ms = 0; ms < m->size - 1; ms++)
+			
+			//*r = printf("%s(%d)=[", m->type_define->type_name, m->size);
+			for (int ms = 0; ms < m->size; ms++)
 			{
-				*r = printf(k, (m->value_str_ptr)[ms]);
+				*r = printf("%s \n", (m->value_str_ptr)[ms]);
 			}
-			*r = printf(k2, (m->value_str_ptr)[m->size - 1]);
+			
 		}
 		else
 		{
@@ -523,24 +528,32 @@ void print(fcall* temp)
 	{
 		for (int i = 0; i < m->size; i++)
 		{
-			k = "%lu\n";
-			*r = printf(k, (m->value_long)[i]);
+			
+			*r = printf("%lu\n", (m->value_long)[i]);
 		}
 	}
 	else if (m->type_define == T_CHAR)
 	{
 		for (int i = 0; i < m->size; i++)
 		{
-			k = "%c\n";
-			*r = printf(k, m->value_char_ptr[i]);
+			
+			*r = printf("%c\n", m->value_char_ptr[i]);
 		}
 	}
 	else if (m->type_define == T_FLOAT)
 	{
 		for (int i = 0; i < m->size; i++)
 		{
-			k = "%f\n";
-			*r = printf(k, *m->value_float);
+			
+			*r = printf("%f\n", *m->value_float);
+		}
+	}
+	else if (m->type_define == T_BOOL)
+	{
+		for (int i = 0; i < m->size; i++)
+		{
+			
+			*r = printf("%s\n", *m->value_bool?"True":"False");
 		}
 	}
 	else
@@ -770,7 +783,39 @@ int* new_int(int count, int value)
 	*re = value;
 	return re;
 }
+void xeql(fcall * y)
+{
+	var *a ,*b =NULL;
 
+	if(y->context != NULL)
+	{
+		b= y->func_parmeters;
+		a = y->context;
+	}
+	else
+	{
+		b= y->func_parmeters +1 ;
+		a =y->func_parmeters;
+	}
+
+	if(a->type_define != b->type_define)
+	{
+		y->_return.value_int=new_int(1,0);
+	}
+	else
+	{
+		if(a->type_define == T_STRING)
+		{
+			y->_return.value_int = new_int(1,strcmp(*a->value_str_ptr,*b->value_str_ptr)==0);
+		}
+		else
+		{
+			y->_return.value_int = new_int(1,*a->value_int == *a->value_int);
+		}
+		
+	}
+
+}
 void len(fcall* y)
 {
 	if (y->context != NULL)
@@ -1431,11 +1476,18 @@ func_deftion simple_function_array[] = {
 		.return_type = T_INT,
 		.start_parm_count = 1,
 		.ref = 0,
-		.stack_next = NULL
+		.stack_next = simple_function_array + 13
+	},
+	{
+		.start_func_parmeters = {T_ANY,T_ANY}, .func_code = &xeql, .func_name = "eql", .function_type = f_main,
+		.return_type = T_INT,
+		.start_parm_count = 2,
+		.ref = 0,
+		.stack_next = 0
 	}
 
 };
-func_stack base_function = {.top = simple_function_array + 12, .size = 13, .root = simple_function_array + 0};
+func_stack base_function = {.top = simple_function_array + 13, .size = 14, .root = simple_function_array + 0};
 
 var tinfo[6] = {
 	{.name = "_int", .type_define = T_TYPE_INFO, .values = T_INT, .size = 1, .stack_next = tinfo + 1},
