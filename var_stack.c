@@ -49,7 +49,7 @@ void var_clean_stack(var_stack* s)
 		if (bi->type_define->type_name == T_STRING->type_name)
 			for (int i = 0; i < bi->size; i++)
 			{
-				free(*(bi->val_str_ptr+i));
+				free(*(bi->value_str_ptr+i));
 			}
 		free(bi->values);
 		free(bi);
@@ -60,10 +60,10 @@ void var_clean_stack(var_stack* s)
 void free_temp_var(var* bi)
 {
 	
-	if (bi->type_define->type_name == T_STRING->type_name)
+	if (bi->type_define == T_STRING)
 		for (int i = 0; i < bi->size; i++)
 		{
-			free(*(bi->val_str_ptr+i));
+			free(*(bi->value_str_ptr+i));
 		}
 	free(bi->values);
 	free(bi);

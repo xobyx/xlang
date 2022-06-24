@@ -114,14 +114,14 @@ void http(fcall* cs)
 {
 	int i = cs->parm_count_c;
 
-	char * met = *cs->func_parmeters[cs->parm_count_c - i--].val_str_ptr;
-	char * link = *cs->func_parmeters[cs->parm_count_c - i--].val_str_ptr;
+	char * met = *cs->func_parmeters[cs->parm_count_c - i--].value_str_ptr;
+	char * link = *cs->func_parmeters[cs->parm_count_c - i--].value_str_ptr;
 	int  size = *cs->func_parmeters[cs->parm_count_c - i--].value_int;
-	char ** headers = cs->func_parmeters[cs->parm_count_c - i--].val_str_ptr;
+	char ** headers = cs->func_parmeters[cs->parm_count_c - i--].value_str_ptr;
 
 	char* buff = getHttp(met, link, size, headers);
 
-	cs->_return.val_str_ptr = get_pptr_string(buff);
+	cs->_return.value_str_ptr = get_pptr_string(buff);
 
 }
 
@@ -129,7 +129,7 @@ void http(fcall* cs)
 type_def * get_type()
 {
 	type_def*  a;
-	a->type_name = "http";
+//	a->type_name = "http";
 	//a.functions.root= 
 	///func* function = add_function(&a.functions,":http", &a,4,http,0,0);
 	//function->function_type= f_type::constr;

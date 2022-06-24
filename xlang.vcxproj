@@ -56,10 +56,10 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(MSBuildProjectDirectory)\pcre\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <BufferSecurityCheck>false</BufferSecurityCheck>
-      <AssemblerOutput>NoListing</AssemblerOutput>
+      <AssemblerOutput>AssemblyAndSourceCode</AssemblerOutput>
       <PrecompiledHeaderFile />
       <PrecompiledHeaderOutputFile />
       <BrowseInformation>true</BrowseInformation>
@@ -68,6 +68,8 @@
       <EnablePREfast>false</EnablePREfast>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <ExceptionHandling>false</ExceptionHandling>
+      <TreatWarningAsError>false</TreatWarningAsError>
+      <PreprocessKeepComments>true</PreprocessKeepComments>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -76,6 +78,7 @@
       <ShowProgress>NotSet</ShowProgress>
       <AdditionalLibraryDirectories>
       </AdditionalLibraryDirectories>
+      <GenerateMapFile>true</GenerateMapFile>
     </Link>
     <Bscmake>
       <PreserveSbr>true</PreserveSbr>
@@ -91,7 +94,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(MSBuildProjectDirectory)\pcre\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeaderFile />
       <PrecompiledHeaderOutputFile />
@@ -117,6 +120,7 @@
   <ItemGroup>
     <ClInclude Include="compile.h" />
     <ClInclude Include="debuge.h" />
+    <ClInclude Include="echo.h" />
     <ClInclude Include="functions.h" />
     <ClInclude Include="func_stack.h" />
     <ClInclude Include="md5.h" />
@@ -135,8 +139,11 @@
     <Library Include="..\..\..\..\..\_old\Users\xobyx\Documents\Visual Studio 2012\Projects\pcre-win-build-master\build-VS2017\Debug\libpcre-static.lib" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="array.c" />
+    <ClCompile Include="calc.c" />
     <ClCompile Include="compile.c" />
     <ClCompile Include="debuge.c" />
+    <ClCompile Include="echo.c" />
     <ClCompile Include="functions.c" />
     <ClCompile Include="func_stack.c" />
     <ClCompile Include="http.c" />
@@ -149,6 +156,10 @@
     <ClCompile Include="xlang.c" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="Makefile">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</DeploymentContent>
+    </None>
     <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -10,3 +10,5 @@
 /New Text Document.txt
 /packages.config
 *.txt
+/obj
+*.lnk

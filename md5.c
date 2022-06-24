@@ -159,24 +159,15 @@ void md5(uint8_t *initial_msg, size_t initial_len) {
 void SWAP(unsigned int *num) {
 	*num = ((*num>>24)&0xff) |((*num<<8)&0xff0000) |((*num>>8)&0xff00) |((*num<<24)&0xff000000);
 } 
-void maintxt(char * yy,unsigned int s[4]) {
- 
-    
- 
+void calc_md5(char * yy,unsigned int s[4]) {
     char *msg = yy;
     size_t len = strlen(msg);
-
-	long x=0;
- 
-    // benchmark
-    // int i;
-    // for (i = 0; i < 1000000; i++) {
+	long x=0;  
 	md5((uint8_t*)msg, len);
-    // }
  
     //var char digest[16] := h0 append h1 append h2 append h3 //(Output is in little-endian)
     uint8_t *p;
-	int a= sizeof(uint8_t);
+	//int a= sizeof(uint8_t);
     // display result
 	char digest[33]={0};
 	

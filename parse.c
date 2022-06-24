@@ -5,7 +5,7 @@
 //[if[0],for[1],while[2],do[3],else[4],print[5],return[6]]
 
 bool out_put;
-#define ALL_POS 255
+
 
 
 
@@ -16,12 +16,12 @@ bool out_put;
 
 bool mbool = false;
 
-void* getchar_x(const char f)
+char* getchar_x(const char f)
 {
 	for (int i = 0; i < 33; i += 2)
 	{
 		if (one_c[i] == f)
-			return (void*)&one_c[i];
+			return one_c + i;
 	}
 	return NULL;
 }
@@ -79,7 +79,7 @@ void parse_line(char* buff, node* n_node, const int line)
 {
 
 
-	n_node->type_ |= operators_n;
+	n_node->type_ |= operators_n | parentheses4;
 
 	while (buff != NULL && (*buff == ' ' || *buff == '\t' || *buff == '\n' || *buff == '\r' || *buff == ';'))
 	{
@@ -117,7 +117,7 @@ void parse_line(char* buff, node* n_node, const int line)
 			debuge->print_line_debuge(debuge, n_node, line);
 
 
-		compile(NULL, n_node, NULL, NULL);
+		compile(NULL, n_node, NULL, NULL, NULL);
 
 
 
@@ -179,7 +179,7 @@ void parse_line(char* buff, node* n_node, const int line)
 		if (*buff == '[')
 		{
 			n_node->type_ = s_index;
-			n_node->value_raw = getchar_x(*buff);
+			n_node->value_char_ptr = getchar_x(*buff);
 
 			static_flag_op2(s_index, n_node, false);
 			static_flag_op2(s_index_c, n_node, true);
@@ -202,7 +202,7 @@ void parse_line(char* buff, node* n_node, const int line)
 			next->parent = n_node;
 			next->flag_ = s_index_c;
 			/*,} */
-			;
+			
 			next->is_flagged = true;
 			parse_line(buff + 1, next, line);
 
@@ -213,7 +213,7 @@ void parse_line(char* buff, node* n_node, const int line)
 			n_node->type_ = s_index_c;
 
 			node* open_node = static_flag_op2(s_index_c, n_node, false);
-			n_node->value_raw = getchar_x(*buff);
+			n_node->value_char_ptr = getchar_x(*buff);
 			//FIXME:
 
 			if (open_node->opt_name_type == psize)
@@ -239,7 +239,7 @@ void parse_line(char* buff, node* n_node, const int line)
 
 		n_node->type_ = parentheses1;
 		inherit_parent_flag(n_node, next);
-		n_node->value_raw = getchar_x(*buff);
+		//n_node->value_char_ptr = getchar_x(*buff);
 
 		mbool = true;
 
@@ -275,7 +275,7 @@ void parse_line(char* buff, node* n_node, const int line)
 		node * open = static_flag_op2(parentheses1_c, n_node, false);
 		n_node->ref_node = open;
 		n_node->type_ = parentheses1_c;
-		n_node->value_raw = getchar_x(*buff);
+		n_node->value_char_ptr = getchar_x(*buff);
 
 		mbool = false;
 
@@ -291,7 +291,7 @@ void parse_line(char* buff, node* n_node, const int line)
 	{
 
 		n_node->type_ = comma;
-		n_node->value_raw = getchar_x(*buff);
+		n_node->value_char_ptr = getchar_x(*buff);
 
 
 		next->type_ = value | var_name | itype;
@@ -306,7 +306,7 @@ void parse_line(char* buff, node* n_node, const int line)
 		if (*buff == '(')
 		{
 			n_node->type_ = parentheses4;
-			n_node->value_raw = getchar_x(*buff);
+			n_node->value_char_ptr = getchar_x(*buff);
 
 			static_flag_op2(parentheses4, n_node, false);
 			static_flag_op2(parentheses4_c, n_node, true);
@@ -353,7 +353,7 @@ void parse_line(char* buff, node* n_node, const int line)
 
 			node* pp = static_flag_op2(parentheses4_c, n_node, false);
 			n_node->ref_node = pp;
-			n_node->value_raw = getchar_x(*buff);
+			n_node->value_char_ptr = getchar_x(*buff);
 			//FIXME:
 			if (pp != NULL && pp->opt_name_type == function_def)
 			{
@@ -475,8 +475,11 @@ void parse_line(char* buff, node* n_node, const int line)
                     }
                     else
                     {
-                            printf("ERROR: no parent if-eif body");
-							//exit(-1);
+						if(i != _if_ )
+						{
+                    	printf("ERROR: no parent if-eif body");
+						exit(-1);
+						}
                     }
 					n_node->next_jump = NULL;
 					next->flag_ = var_name | value;
@@ -545,7 +548,7 @@ void parse_line(char* buff, node* n_node, const int line)
 		n_node->next = next;
 		next->parent = n_node;
 		// parse   ".*" string;
-		find* mfind = match("^[\"\'](.+?)[\"\']", buff);
+		find* mfind = match("^\"(.+?)\"", buff);
 		if (mfind->isFind && *(buff + 1) == *mfind->bn)
 
 		{
@@ -565,12 +568,34 @@ void parse_line(char* buff, node* n_node, const int line)
 			scap_string(mfind->bn);
 			n_node->value_raw = mfind->bn;
 
-			//((var*)d->opt)->value=mfind->bn;
 
-			///TODO: check type match
-			//v2/setVar(&d);
 			parse_line(buff + strlen(mfind->bn) + 2, next, line);
-			//parse_line(buff + strlen(mfind->bn) , next, line);
+			
+			return;
+		}
+		mfind = match("^\'(.{1,2})\'",buff);
+		if(mfind->isFind && *(buff + 1) == *mfind->bn)
+		{
+			if (n_node->is_flagged)
+			{
+				next->type_ = operators_n | n_node->flag_;
+			}
+			else
+			{
+				next->type_ = operators_n | endl;////
+			}
+			int len= strlen(mfind->bn);
+			if(len>1 && *mfind->bn=='\\'){if(*(mfind->bn+1)=='n'){n_node->value_raw = &"\n";}}
+			else
+			{
+				n_node->value_raw = mfind->bn;
+			}
+			n_node->type_ = value;
+			n_node->opt_type_ptr = T_CHAR;
+			n_node->opt_type = 1;
+			n_node->value_raw = mfind->bn;
+
+			parse_line(buff +len + 2, next, line);
 			return;
 		}
 		mfind = match("^(false|true)", buff);
@@ -615,7 +640,9 @@ void parse_line(char* buff, node* n_node, const int line)
 				// parse   "\d+";
 
 				n_node->type_ = value;
-				n_node->opt_type_ptr = T_INT;
+				n_node->opt_type_ptr =strstr(mfind->bn,".")?T_FLOAT:T_INT;
+				
+				
 				n_node->opt_type = 1;
 				if (n_node->is_flagged)
 				{
@@ -653,16 +680,23 @@ void parse_line(char* buff, node* n_node, const int line)
 	if (n_node->btype.node_type_bit.var_name)
 	{
 		//?([0-9|A-Z|a-z_]+[_0-9|A-Z|a-z]+)[ \n]
-		find* mfind = match("^(:?\\b\\w+)", buff);//var name
+		find* mfind = match("^(&?[a-zA-Z_]?[a-zA-Z_0-9]+)", buff);//var name
 
-
-
+		
 		if (mfind->isFind && *mfind->bn == *buff && strcmp(mfind->bn, "string") != 0)
 		{
 			//TODO:: if is BASE parse_obj
-
+			bool ref=false;
 			n_node->line = line;
-			n_node->value_raw = mfind->bn;
+			if (*mfind->bn != '&')
+			{
+				n_node->value_char_ptr = mfind->bn;
+			}
+			else
+			{
+				n_node->value_char_ptr = mfind->bn + 1;
+				ref=true;
+			}
 			n_node->type_ = var_name;
 			next->parent = n_node;
 			n_node->next = next;
@@ -680,8 +714,9 @@ void parse_line(char* buff, node* n_node, const int line)
 
 			if (n_node->parent != NULL)
 			{
-				if (n_node->parent->type_ == keyword && n_node->parent->value_short == _class_)
+				if (n_node->parent->type_ == keyword && n_node->parent->value_keyword == _class_)
 				{
+					
 					next->type_ = parentheses4;
 					n_node->opt_name_type = class_def; //k;
 					next->is_flagged = true;
@@ -699,13 +734,13 @@ void parse_line(char* buff, node* n_node, const int line)
 					parse_line(buff + strlen(mfind->bn), next, line);
 					return;
 				}
-				if (n_node->parent->type_ == itype)
+				if (n_node->parent->type_ == itype || n_node->parent->type_==s_index_c)
 				{
 					n_node->opt_name_type = var_def;
 				}
-				else
+				else 
 				{
-					n_node->opt_name_type = var_call;
+					n_node->opt_name_type = ref?var_call_ref: var_call;
 				}
 			}
 			else
@@ -755,7 +790,7 @@ void parse_line(char* buff, node* n_node, const int line)
 			else if (*i == '=')
 			{
 				n_node->type_ = equles;
-				n_node->value_raw = getchar_x(*i);
+				n_node->value_char_ptr = getchar_x(*i);
 
 
 				if (n_node->is_flagged)
@@ -777,23 +812,22 @@ void parse_line(char* buff, node* n_node, const int line)
 					if (n_node->type_ != equles)
 						next->type_ |= equles;
 				}
-				next->type_ |= value | var_name | parentheses1 | equles;
+				next->type_ |= value | var_name | parentheses1 | equles|parentheses4;
 				parse_line(i + 1, next, line);
 				return;
 				////do next->.
 			}
-
 			else if ((*i >= 42 && *i <= 47) || *i == 0x3c || *i == 0x3e || *i == 38 || *i == '|')//oprator +-*/
 			{
 				n_node->type_ = operators_n;
-				n_node->value_raw = getchar_x(*i);
+				n_node->value_char_ptr = getchar_x(*i);
 				next->parent = n_node;
 
 				if (n_node->parent->type_ == operators_n)
 				{
 					if (*(char*)n_node->value_raw == *(char*)n_node->parent->value_raw)
 					{
-						next->type_ = var_name | value;
+						next->type_ = var_name | value |parentheses4;
 						inherit_parent_flag(n_node, next);
 						if (n_node->parent->is_flagged || n_node->is_flagged)
 						{
@@ -819,8 +853,9 @@ void parse_line(char* buff, node* n_node, const int line)
 				}
 				else
 				{
-					//next->parent=d;
-					next->type_ = value | var_name | operators_n | equles;
+					
+					next->type_ = value | var_name | operators_n | equles |parentheses4;
+
 					if (n_node->parent->is_flagged || n_node->is_flagged)
 					{
 						next->flag_ = n_node->flag_;

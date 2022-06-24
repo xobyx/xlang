@@ -63,6 +63,9 @@
     <ClInclude Include="xlang_main.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="echo.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Library Include="..\..\..\..\..\_old\Users\xobyx\Documents\Visual Studio 2012\Projects\pcre-win-build-master\build-VS2017\Debug\libpcre-static.lib" />
@@ -104,8 +107,18 @@
     <ClCompile Include="xlang.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="echo.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="calc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="array.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+    <None Include="Makefile" />
   </ItemGroup>
 </Project>
