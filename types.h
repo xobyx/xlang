@@ -233,6 +233,7 @@ typedef struct var
 		char ** value_str_ptr;
 		bool * value_bool;
 		struct func_deftion* value_func;
+		struct type_def* value_type;
 
 	};
 

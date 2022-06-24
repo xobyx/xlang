@@ -84,11 +84,11 @@ int GetDir(const char* full_path, char* dir)
 	return dirSymbolCounter;
 }
 
-
+extern var_stack var_start_stack;
 void int_xlang()
 {
 	nodes = (node_stack*)malloc(sizeof(node_stack));
-	varss = (var_stack*)malloc(sizeof(var_stack));
+	varss = &var_start_stack;
 	funcs = (func_stack*)malloc(sizeof(func_stack));
 	types = (type_stack*)malloc(sizeof(type_stack));
 
@@ -96,7 +96,7 @@ void int_xlang()
 	t_funcs = (func_stack*)malloc(sizeof(func_stack));
 	debuge = init_debug();
 	stack_init(nodes);
-	var_stack_init(varss);
+	///var_stack_init(varss);
 	var_stack_init(t_varss);
 	func_stack_init(funcs);
 	func_stack_init(t_funcs);
@@ -105,6 +105,8 @@ void int_xlang()
 
 	install_default_types();
 	install_default_functions();
+	
+
 }
 
 bool b;
