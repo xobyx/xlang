@@ -333,7 +333,7 @@ node* calc(node* cnode, fcall* calling_function, var* calling_object, node_type 
 
 	calc_result->values = memory;
 
-	if (name_var != NULL) { printf("\nname_var.(%s).\n",name_var->name); }
+//	if (name_var != NULL) { printf("\nname_var.(%s).\n",name_var->name); }
 
 	return mnode;
 }
