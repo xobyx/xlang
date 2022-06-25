@@ -1,0 +1,16 @@
+string pp(string c, int x)
+{
+  string f="5";
+    int y;
+    for y(0,y+1,y< x)
+    {
+        f= f + c + str(y);
+        if(y>=6)
+        {
+            f= f+ "66666";
+        }
+    }
+    return f;
+}
+
+print(pp("im oby",10));
