@@ -271,6 +271,7 @@ typedef struct func_deftion
 	enum var_access access;
 	//unused
 	struct func_deftion* stack_next;
+	int return_size;
 }func_deftion;
 typedef struct fcall
 {

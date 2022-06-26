@@ -176,8 +176,19 @@ void move(var* calc_result, void* memory, int* i, var* name_var)
 		((char*)memory)[(*i)++] = *name_var->value_char_ptr;
 	else if (calc_result->type_define == T_STRING)
 	{
+        if(*name_var->value_str_ptr==NULL)
+        {
+            ((char**)memory)[(*i)] = (char*)calloc(1,2);
+            return;
+        }
+		char *strp =((char**)memory)[(*i)];
+		char *save= *name_var->value_str_ptr ;
+		if(strp ==*name_var->value_str_ptr)
+		{
+			
+		}
 		((char**)memory)[(*i)] = (char*)malloc(strlen(*name_var->value_str_ptr) + 1);
-		strcpy(((char**)memory)[(*i)], *name_var->value_str_ptr);
+		strcpy(((char**)memory)[(*i)], save);
 		(*i)++;
 	}
 	else if (calc_result->type_define == T_BOOL)
