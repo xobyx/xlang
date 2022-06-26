@@ -1490,6 +1490,7 @@ fcall* create_fcall(func_deftion* fd)
 	}
 	function_c->parm_count_c = fd->start_parm_count;
 	function_c->_return.type_define = fd->return_type;
+	function_c->_return.size = fd->return_size;
 	return function_c;
 }
 

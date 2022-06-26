@@ -126,7 +126,7 @@ node* add_new_func_code(node* c, type_def* return_type, type_def* container_clas
 	}
 	m->func_code = &call_func_in;
 	m->ref = func_decl;
-
+	m->return_size = 1;
 	return end->next;
 }
 

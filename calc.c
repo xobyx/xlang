@@ -176,8 +176,21 @@ void move(var* calc_result, void* memory, int* i, var* name_var)
 		((char*)memory)[(*i)++] = *name_var->value_char_ptr;
 	else if (calc_result->type_define == T_STRING)
 	{
+		char *strp =((char**)memory)[(*i)];
+
+        if(*name_var->value_str_ptr==NULL)
+        {
+			 (*i)++;
+             return;
+        }
+		
+		char *save= *name_var->value_str_ptr ;
+		if(strp ==*name_var->value_str_ptr)
+		{
+			
+		}
 		((char**)memory)[(*i)] = (char*)malloc(strlen(*name_var->value_str_ptr) + 1);
-		strcpy(((char**)memory)[(*i)], *name_var->value_str_ptr);
+		strcpy(((char**)memory)[(*i)], save);
 		(*i)++;
 	}
 	else if (calc_result->type_define == T_BOOL)
@@ -234,6 +247,7 @@ node* calc(node* cnode, fcall* calling_function, var* calling_object, node_type 
 					}
 					else
 					{
+						
 						memory = calc_result->values == NULL ? install_memory(calc_result) : calc_result->values;
 					}
 				}
@@ -278,20 +292,28 @@ node* calc(node* cnode, fcall* calling_function, var* calling_object, node_type 
 				}
 				else if (calc_result->type_define == T_STRING)
 				{
-					char** mem = (char**)memory + (i - 1);
+					char** mem = ((char**)memory) + (i - 1);
 					char* to = *name_var->value_str_ptr;
 					//char* mtype = mb == NULL ? (char*)k->opt : (char*)mb->var_type->name;
-
-					if (*op == '+')
+					if(to==NULL)
+					{
+						
+					}					
+					else if (*op == '+')
 					{
 						//strcat(mx,to);
-						long mxlen = strlen(*mem);
-						long tolen = strlen(to);
-						char* exp = realloc(*mem, mxlen + tolen + 1);
-
-
-						strcat_s(exp, mxlen + tolen + 1, to);
-						*mem = exp;
+						if(*mem ==NULL )
+						{
+							*mem = (char*)malloc(strlen(to) + 1);
+							strcpy(*mem, to);
+						}
+						else
+						{
+							long mxlen = strlen(*mem);
+							long tolen = strlen(to);
+							*mem = realloc(*mem, mxlen + tolen + 1);
+							strcat_s(*mem, mxlen + tolen + 1, to);							
+						}
 					}
 				}
 				else // type_inctance
