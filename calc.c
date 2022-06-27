@@ -177,7 +177,7 @@ void move(var* calc_result, void* memory, int* i, var* name_var)
 	else if (calc_result->type_define == T_STRING)
 	{
 
-		char *strp =((char**)memory)[(*i)];
+		char **strp =(char**)memory + *i;
 
         if(*name_var->value_str_ptr==NULL)
         {
@@ -187,12 +187,12 @@ void move(var* calc_result, void* memory, int* i, var* name_var)
 		
 
 		char *save= *name_var->value_str_ptr ;
-		if(strp ==*name_var->value_str_ptr)
+		if(*strp ==*name_var->value_str_ptr)
 		{
 			
 		}
-		((char**)memory)[(*i)] = (char*)malloc(strlen(*name_var->value_str_ptr) + 1);
-		strcpy(((char**)memory)[(*i)], save);
+		*strp = (char*)calloc(1,strlen(*name_var->value_str_ptr) + 1);
+		strcpy(*strp, save);
 		(*i)++;
 	}
 	else if (calc_result->type_define == T_BOOL)
@@ -306,7 +306,7 @@ node* calc(node* cnode, fcall* calling_function, var* calling_object, node_type 
 						//strcat(mx,to);
 						if(*mem ==NULL )
 						{
-							*mem = (char*)malloc(strlen(to) + 1);
+							*mem = (char*)calloc(1,strlen(to) + 1);
 							strcpy(*mem, to);
 						}
 						else

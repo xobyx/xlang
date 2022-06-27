@@ -74,24 +74,34 @@ void _do_work(Debug* x, node* temp)
 {
 	x->cprintf(x,0x8f,"\x1B[1;37m\x1B[47;100m%s", parse_obj_str(temp));
 	if ( temp->type_ == value && temp->opt_raw != NULL )
+	{
 		x->cprintf(x, 0x05, "\x1B[35m\x1B[40m(%s)", temp->opt_type_ptr->type_name);
+	}
 	x->checknode(x, temp);
 	if (temp->ref_node != NULL)
+	{
 		x->addnode(x, temp);
+	}
 ////// 
 	if ((temp->btype.value) & (have_var_value))
 	{
 		printf(" [ ");
 		if (temp->type_ == itype)
+		{
 			x->cprintf(x, 0x02, "\x1B[32m\x1B[40m%s", temp->value_type->type_name);
+		}
 		else if (temp->type_ == var_name)
 		{
 			x->cprintf(x, 0x02, "\x1B[32m\x1B[40m%s",temp->value_char_ptr);
 		}
 		else if (temp->type_ == keyword)
+		{
 			x->cprintf(x, 0x02, "\x1B[32m\x1B[40m%s", key_word[temp->value_keyword]);
+		}
 		else
+		{
 			x->cprintf(x, 0x02, "\x1B[32m\x1B[40m%s", temp->value_raw != NULL ? (char*)temp->value_raw : "NONE");
+		}
 		printf(" ]");
 	}
 	x->cprintf(x, 0x04, temp->type_ == endl ? "\n" : "\x1B[34m --> ","");
@@ -104,48 +114,20 @@ void _do_work(Debug* x, node* temp)
 
 void _print_line_debuge(Debug* x, node* bx, int line)
 {
-
-	//FlushConsoleInputBuffer(this->hConsole);
-
-	//!out_put
-	//if(false)return;
 	node* temp = get_root(bx);
-
-	// COORD t= csbiInfo.dwSize;
-
-
-	 //* First save the current color information
-
-
-	// COORD tm;
-	//	int i=0;
 	while (temp != NULL)
 	{
-		//	CONSOLE_SCREEN_BUFFER_INFO y;
-				//	GetConsoleScreenBufferInfo(hConsole,&y);
-
-				//	y.dwCursorPosition.X=y.dwCursorPosition.X+  t.X/2;
-				//	SetConsoleCursorPosition(this->hConsole,y.dwCursorPosition);
+	
 		x->do_work(x, temp);
-
-
-		//if (temp->type_ == parse_obj::endl)
-		//printf("[ f-%s ]\n--> ", this->list[b].name);
-
-
 		temp = temp->next;
-
-
-
-
-		//temp=temp==NULL?NULL:temp->next;
 	}
-	//
-	//SetConsoleTextAttribute(x->hConsole, x->wOldColorAttrs);
+	
 }
 char* co[]={"\x1B[41m %d ","\x1B[42m %d ","\x1B[43m %d ","\x1B[44m %d ","\x1B[45m %d ","\x1B[46m %d "};
 void _addnode(Debug* x, node* y)
 {
+
+	if((y->type_ & (parentheses1 | parentheses4))==0) return;
 	for (int i = 0; i < 10; i++)
 	{
 		if (x->stack[i].m == NULL)
@@ -166,6 +148,7 @@ void _addnode(Debug* x, node* y)
 
 void _checknode(Debug* x, node* y)
 {
+	if((y->type_ & (parentheses1 | parentheses4))==0) return;
 	for (int i = 9; i >= 0; i--)
 	{
 		if (x->stack[i].m == y)
