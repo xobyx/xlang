@@ -176,6 +176,7 @@ void move(var* calc_result, void* memory, int* i, var* name_var)
 		((char*)memory)[(*i)++] = *name_var->value_char_ptr;
 	else if (calc_result->type_define == T_STRING)
 	{
+
 		char *strp =((char**)memory)[(*i)];
 
         if(*name_var->value_str_ptr==NULL)
@@ -184,6 +185,7 @@ void move(var* calc_result, void* memory, int* i, var* name_var)
              return;
         }
 		
+
 		char *save= *name_var->value_str_ptr ;
 		if(strp ==*name_var->value_str_ptr)
 		{
