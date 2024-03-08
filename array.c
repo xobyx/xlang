@@ -3,6 +3,7 @@
 
 void array_len(fcall* fcall)
 {
+	//hello
 }
 
 
