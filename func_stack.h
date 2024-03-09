@@ -1,6 +1,6 @@
 #pragma once
 #include "types.h"
-
+#include "stdlib.h"
 
 
  void func_stack_init(func_stack * S) ;
