@@ -1,6 +1,6 @@
 #include "func_stack.h"
 
-
+#include <stdlib.h>
 
  void func_stack_init(func_stack * S) {
 	S->size = 0;
