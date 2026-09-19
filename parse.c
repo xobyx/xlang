@@ -3,7 +3,7 @@
 
 
 //[if[0],for[1],while[2],do[3],else[4],print[5],return[6]]
-const char* key_word[] = { "if", "for", "while", "do", "else", "eif", "return", "break", "class", "static", "import", "new" };
+const char* key_word[] = { "if", "for", "while", "do", "else", "eif", "return", "break", "class", "static", "import", "new", "in" };
 static char one_c[] = { '+', 0, '-', 0, '/', 0, '*', 0, '%', 0, '=', 0, '(', 0, ')', 0, '{', 0, '}', 0, '[', 0, ']', 0, ',', 0, '>', 0, '<', 0, '|', 0, '&', 0, '!', 0, '.', 0, ':', 0 };
 
 bool out_put;
@@ -210,6 +210,17 @@ bool parser_delim_check_unclosed(ParserContext* ctx, node_type* m)
 		}
 	}
 	return cont;
+}
+
+void parser_delim_clear(ParserContext* ctx)
+{
+	if (ctx == NULL)
+		ctx = current_parser_ctx;
+	if (ctx != NULL && ctx->delim_stack != NULL)
+	{
+		memset(ctx->delim_stack, 0, ctx->delim_capacity * sizeof(fl));
+		ctx->save = NULL;
+	}
 }
 
 fl* parser_delim_get_first_unclosed(ParserContext* ctx)
@@ -591,17 +602,24 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 
 			next->type_ = value | var_name;
 
-			if (n_node->parent->type_ == itype)
+			if (n_node->parent != NULL && n_node->parent->type_ == itype)
 			{
 				n_node->opt_name_type = psize;
 			}
-			else if (n_node->parent->type_ == var_name)
+			else if (n_node->parent != NULL && n_node->parent->type_ == var_name)
 			{
 				n_node->opt_name_type = pindex;
 			}
 			else
 			{
-				printf("Error");
+				/* List Literal */
+				n_node->opt_name_type = pindex;
+				next->type_ = value | var_name | s_index_c | s_index | parentheses4 | keyword;
+				next->flag_ = s_index_c | comma;
+				next->is_flagged = true;
+				next->parent = n_node;
+				n_node->next = next;
+				parse_line_ctx(ctx, buff + 1, next, line);
 				return;
 			}
 			next->parent = n_node;
@@ -621,14 +639,14 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 			n_node->value_char_ptr = getchar_x(*buff);
 			//FIXME:
 
-			if (open_node->opt_name_type == psize)
+			if (open_node != NULL && open_node->opt_name_type == psize)
 			{
 				next->type_ = var_name;
 				next->flag_ = equles | endl;
 			}
 			else
 			{
-				next->type_ = operators_n | equles;
+				next->type_ = operators_n | equles | comma | parentheses4_c | s_index_c | dot | endl;
 				next->flag_ = endl;
 			}
 
@@ -739,7 +757,7 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 		n_node->value_char_ptr = getchar_x(*buff);
 
 
-		next->type_ = value | var_name | itype | keyword;
+		next->type_ = value | var_name | itype | keyword | s_index;
 		next->flag_ = parentheses1_c | comma/*,} */;
 		next->is_flagged = true;
 		parse_line_ctx(ctx, buff + 1, next, line);
@@ -756,7 +774,7 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 			static_flag_op2(parentheses4, n_node, false);
 			static_flag_op2(parentheses4_c, n_node, true);
 
-			next->type_ = value | var_name | parentheses4_c | parentheses4 | keyword;
+			next->type_ = value | var_name | parentheses4_c | parentheses4 | keyword | s_index;
 			if (n_node->parent != NULL && n_node->parent->type_ == var_name)
 			{
 				const int typ = n_node->parent->opt_name_type;
@@ -771,7 +789,7 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 					else
 					{
 						n_node->opt_name_type = function_call;
-						next->type_ = value | var_name | parentheses4_c | parentheses4 | keyword;
+						next->type_ = value | var_name | parentheses4_c | parentheses4 | keyword | s_index;
 						next->flag_ = comma;
 					}
 				}
@@ -786,7 +804,7 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 				else if (typ == var_call) //switch form var call
 				{
 					//WHY
-					next->type_ = value | var_name | parentheses4_c | keyword;
+					next->type_ = value | var_name | parentheses4_c | keyword | s_index;
 					next->flag_ = comma;
 					n_node->parent->_opt_ptr_ = function_call;//changed form var call
 					n_node->opt_name_type = function_call;//a
@@ -961,7 +979,7 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 				}
 				else if (i == _return_)
 				{
-					next->type_ = var_name | value | keyword;
+					next->type_ = var_name | value | keyword | s_index;
 				}
 				else if (i == _static_)
 				{
@@ -975,12 +993,34 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 				}
 				else if (i == _for_)
 				{
-					next->type_ = var_name;
-					next->flag_ = parentheses4;
-
-
-					static_flag_op2(parentheses1, NULL, true);
-					static_flag_op2(parentheses4, NULL, true);
+					char* p = buff + strlen(key_word[i]);
+					while (*p == ' ' || *p == '\t') p++;
+					if (*p == '(')
+					{
+						next->type_ = parentheses4;
+						next->flag_ = parentheses4;
+						static_flag_op2(parentheses1, NULL, true);
+					}
+					else
+					{
+						char* pvar = p;
+						while ((*pvar >= 'a' && *pvar <= 'z') || (*pvar >= 'A' && *pvar <= 'Z') || (*pvar >= '0' && *pvar <= '9') || *pvar == '_')
+							pvar++;
+						while (*pvar == ' ' || *pvar == '\t') pvar++;
+						if (strncmp(pvar, "in", 2) == 0 && (pvar[2] == ' ' || pvar[2] == '\t' || pvar[2] == '[' || pvar[2] == '('))
+						{
+							next->type_ = var_name;
+							next->flag_ = keyword;
+							static_flag_op2(parentheses1, NULL, true);
+						}
+						else
+						{
+							next->type_ = var_name;
+							next->flag_ = parentheses4;
+							static_flag_op2(parentheses1, NULL, true);
+							static_flag_op2(parentheses4, NULL, true);
+						}
+					}
 				}
 				else if (i == _class_)
 				{
@@ -1004,6 +1044,16 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 					next->type_ = var_name;
 					next->flag_ = parentheses4;
 					next->is_flagged = true;
+					parse_line_ctx(ctx, buff + strlen(key_word[i]), next, line);
+					return;
+				}
+				else if (i == _in_)
+				{
+					next->type_ = var_name | value | parentheses4 | s_index;
+					next->flag_ = parentheses4_c | parentheses1;
+					next->is_flagged = true;
+					next->parent = n_node;
+					n_node->next = next;
 					parse_line_ctx(ctx, buff + strlen(key_word[i]), next, line);
 					return;
 				}
@@ -1265,7 +1315,7 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 			//if(d->parent->btype.node_type_bit.comma)equles|endl;
 
 			next->type_ = (equles | endl | operators_n | s_index |
-				parentheses4 | dot);
+				parentheses4 | dot | keyword);
 			inherit_parent_flag(n_node, next);
 			if (n_node->is_flagged)
 			{
@@ -1324,7 +1374,7 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 					if (n_node->type_ != equles)
 						next->type_ |= equles;
 				}
-				next->type_ |= value | var_name | parentheses1 | equles | parentheses4 | keyword;
+				next->type_ |= value | var_name | parentheses1 | equles | parentheses4 | keyword | s_index;
 				parse_line_ctx(ctx, i + 1, next, line);
 				return;
 				////do next->.

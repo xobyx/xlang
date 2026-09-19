@@ -8,6 +8,7 @@
 #include "functions.h"
 #include "xgc.h"
 #include "xdiag.h"
+#include "xcollection.h"
 
 /* Report an error with source line snippets and caret pointers */
 #define XERROR(L, ...)                                                            \
@@ -352,9 +353,59 @@ var* name_exp(node** nod, fcall* calling_function, var* calling_object, node_typ
 		{
 			if (mvar == NULL)
 			{
-				XERROR((*nod)->line, "index applied to nothing");
-				step(nod);
-				return NULL;
+				/* List Literal: [elem1, elem2, ...] */
+				int list_id = x_list_alloc();
+				step(nod); /* skip '[' */
+				while (*nod != NULL && (*nod)->type_ != s_index_c && (*nod)->type_ != endl)
+				{
+					if ((*nod)->type_ == comma)
+					{
+						step(nod);
+						continue;
+					}
+					var elem;
+					memset(&elem, 0, sizeof(var));
+					node* before = *nod;
+					*nod = calc(*nod, calling_function, calling_object, (node_type)(comma | s_index_c), NULL, &elem);
+					if (elem.type_define == T_INT && elem.value_int != NULL)
+						x_list_append_int(list_id, *elem.value_int);
+					else if (elem.type_define == T_STRING && elem.value_str_ptr != NULL && *elem.value_str_ptr != NULL)
+						x_list_append_str(list_id, *elem.value_str_ptr);
+					else if (elem.type_define == T_FLOAT && elem.value_float != NULL)
+						x_list_append_float(list_id, *elem.value_float);
+					else if (elem.type_define == T_BOOL && elem.value_bool != NULL)
+						x_list_append_int(list_id, *elem.value_bool ? 1 : 0);
+					else if (elem.type_define == T_LONG && elem.value_long != NULL)
+						x_list_append_int(list_id, (int)*elem.value_long);
+					else if (elem.value_str_ptr != NULL && *elem.value_str_ptr != NULL)
+						x_list_append_str(list_id, *elem.value_str_ptr);
+					else if (elem.value_int != NULL)
+						x_list_append_int(list_id, *elem.value_int);
+					if (*nod == before)
+						step(nod);
+				}
+				if (*nod != NULL && (*nod)->type_ == s_index_c)
+					step(nod); /* skip ']' */
+
+				type_def* list_td = get_type_by_name("List");
+				if (list_td != NULL && !is_base_type(list_td))
+				{
+					mvar = new_temp_var(list_td);
+					mvar->size = 1;
+					mvar->values = install_memory_with_type(list_td, 1);
+					mvar->value_type_instsance = (type_instance*)mvar->values;
+					var* id_prop = get_var_by_name_on_stack("id", &mvar->value_type_instsance->propertys);
+					if (id_prop != NULL && id_prop->value_int != NULL)
+						*id_prop->value_int = list_id;
+				}
+				else
+				{
+					mvar = new_temp_var(T_INT);
+					mvar->size = 1;
+					mvar->value_int = new_int(1, list_id);
+					mvar->values = mvar->value_int;
+				}
+				break;
 			}
 
 			const int index_value = get_index_value2(nod, calling_function, calling_object);
@@ -848,7 +899,7 @@ node* calc(node* cnode, fcall* calling_function, var* calling_object, node_type 
 			}
 		}
 
-		if (mnode->type_ & (var_name | value | parentheses4 | itype))
+		if (mnode->type_ & (var_name | value | parentheses4 | itype | s_index))
 		{
 			const bool by_ref = (val_top == 0 && mnode->type_ == var_name && mnode->opt_name_type == var_call_ref);
 			node* before = mnode;

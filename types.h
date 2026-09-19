@@ -52,7 +52,8 @@ typedef enum key_word_enum
 	_class_,
 	_static_,
 	_import_,
-	_new_
+	_new_,
+	_in_
 } key_word_enum;
 
 // long[0],string[1],char[2],int[3]

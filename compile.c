@@ -2,6 +2,7 @@
 #include "ximport.h"
 #include "xgc.h"
 #include "xdiag.h"
+#include "xcollection.h"
 #include <execinfo.h>
 extern int get_index_value2(node** nod, fcall* calling_function, var* calling_object);
 extern node* calc(node* cnode, fcall* calling_function, var* calling_object, node_type stop_in_type, node* stop_in_node,
@@ -444,9 +445,199 @@ void do_while_function(node** c, fcall* temp, var* calling_obj)
 	*c = cond_close;
 }
 
-//for VAR_NAME ((start)EXP,(end)EXP[cond])
+static void assign_loop_var(var* loop_v, var* item_v)
+{
+	if (loop_v == NULL || item_v == NULL) return;
+	loop_v->type_define = item_v->type_define;
+	loop_v->size = 1;
+	loop_v->values = install_memory_with_type(item_v->type_define, 1);
+	if (item_v->type_define == T_INT && item_v->value_int != NULL)
+	{
+		*loop_v->value_int = *item_v->value_int;
+	}
+	else if (item_v->type_define == T_FLOAT && item_v->value_float != NULL)
+	{
+		*loop_v->value_float = *item_v->value_float;
+	}
+	else if (item_v->type_define == T_STRING && item_v->value_str_ptr != NULL && *item_v->value_str_ptr != NULL)
+	{
+		*loop_v->value_str_ptr = (char*)gc_calloc(1, strlen(*item_v->value_str_ptr) + 1, GC_KIND_STRING);
+		strcpy(*loop_v->value_str_ptr, *item_v->value_str_ptr);
+	}
+	else if (item_v->type_define == T_BOOL && item_v->value_bool != NULL)
+	{
+		*loop_v->value_bool = *item_v->value_bool;
+	}
+	else if (item_v->type_define == T_LONG && item_v->value_long != NULL)
+	{
+		*loop_v->value_long = *item_v->value_long;
+	}
+	else
+	{
+		loop_v->values = item_v->values;
+		loop_v->value_type_instsance = item_v->value_type_instsance;
+	}
+}
+
+//for VAR_NAME ((start)EXP,(end)EXP[cond]) or for (item in coll) or for item in coll
 void for_function(node** c, fcall* funcall, var* calling_object)
 {
+	node* p_for = *c;
+	node* first = p_for->next;
+	if (first == NULL) return;
+
+	bool is_for_in = false;
+	char* var_name_str = NULL;
+	node* coll_start = NULL;
+	node* stop_in_node = NULL;
+	node* body_open = NULL;
+	node* body_close = NULL;
+
+	if (first->type_ == parentheses4 && first->next != NULL &&
+	    first->next->type_ == var_name && first->next->next != NULL &&
+	    first->next->next->type_ == keyword && first->next->next->value_keyword == _in_)
+	{
+		/* for (item in coll) { ... } */
+		is_for_in = true;
+		var_name_str = first->next->value_char_ptr;
+		coll_start = first->next->next->next;
+		node* p_close = get_close_part(first);
+		stop_in_node = p_close;
+		body_open = get_first_type(p_close, parentheses1);
+		body_close = get_close_part(body_open);
+	}
+	else if (first->type_ == var_name && first->next != NULL &&
+	         first->next->type_ == keyword && first->next->value_keyword == _in_)
+	{
+		/* for item in coll { ... } */
+		is_for_in = true;
+		var_name_str = first->value_char_ptr;
+		coll_start = first->next->next;
+		body_open = get_first_type(coll_start, parentheses1);
+		stop_in_node = body_open;
+		body_close = get_close_part(body_open);
+	}
+
+	if (is_for_in)
+	{
+		var coll_var;
+		memset(&coll_var, 0, sizeof(var));
+		calc(coll_start, funcall, calling_object, (stop_in_node == body_open) ? parentheses1 : (node_type)0, stop_in_node, &coll_var);
+
+		var* loop_v = all_get_var_by_name(var_name_str, funcall, calling_object);
+		if (loop_v == NULL)
+		{
+			if (funcall != NULL)
+				define_new_var_on_function(var_name_str, funcall, T_STRING, &loop_v);
+			else
+				define_new_var_globle(&loop_v, T_STRING, var_name_str);
+		}
+
+		/* Check if collection is List */
+		int list_id = -1;
+		if (coll_var.type_define != NULL && strcmp(coll_var.type_define->type_name, "List") == 0)
+		{
+			if (coll_var.value_type_instsance != NULL)
+			{
+				var* id_prop = get_var_by_name_on_stack("id", &coll_var.value_type_instsance->propertys);
+				if (id_prop != NULL && id_prop->value_int != NULL)
+					list_id = *id_prop->value_int;
+			}
+		}
+		else if (coll_var.type_define == T_INT && coll_var.value_int != NULL)
+		{
+			if (x_list_count(*coll_var.value_int) >= 0)
+				list_id = *coll_var.value_int;
+		}
+
+		/* Check if collection is Map */
+		int map_id = -1;
+		if (coll_var.type_define != NULL && strcmp(coll_var.type_define->type_name, "Map") == 0)
+		{
+			if (coll_var.value_type_instsance != NULL)
+			{
+				var* id_prop = get_var_by_name_on_stack("id", &coll_var.value_type_instsance->propertys);
+				if (id_prop != NULL && id_prop->value_int != NULL)
+					map_id = *id_prop->value_int;
+			}
+		}
+
+		if (list_id > 0)
+		{
+			int total = x_list_count(list_id);
+			for (int i = 0; i < total; i++)
+			{
+				var* it_var = x_list_get_var(list_id, i);
+				assign_loop_var(loop_v, it_var);
+				compile(calling_object, body_open->next, funcall, body_close, NULL);
+				if (g_loop_broken)
+				{
+					g_loop_broken = false;
+					break;
+				}
+				if (funcall != NULL && funcall->has_returned)
+					break;
+				gc_check_auto();
+			}
+		}
+		else if (map_id > 0)
+		{
+			char** keys = NULL;
+			int total = x_map_get_all_keys(map_id, &keys);
+			for (int i = 0; i < total; i++)
+			{
+				char* pkey = keys[i];
+				var key_var;
+				memset(&key_var, 0, sizeof(var));
+				key_var.type_define = T_STRING;
+				key_var.size = 1;
+				key_var.value_str_ptr = &pkey;
+				assign_loop_var(loop_v, &key_var);
+
+				compile(calling_object, body_open->next, funcall, body_close, NULL);
+				if (g_loop_broken)
+				{
+					g_loop_broken = false;
+					break;
+				}
+				if (funcall != NULL && funcall->has_returned)
+					break;
+				gc_check_auto();
+			}
+			if (keys != NULL)
+				free(keys);
+		}
+		else if (coll_var.type_define == T_STRING && coll_var.value_str_ptr != NULL && *coll_var.value_str_ptr != NULL)
+		{
+			char* str = *coll_var.value_str_ptr;
+			int total = (int)strlen(str);
+			for (int i = 0; i < total; i++)
+			{
+				char ch_buf[2] = { str[i], '\0' };
+				char* pch = ch_buf;
+				var ch_var;
+				memset(&ch_var, 0, sizeof(var));
+				ch_var.type_define = T_STRING;
+				ch_var.size = 1;
+				ch_var.value_str_ptr = &pch;
+				assign_loop_var(loop_v, &ch_var);
+
+				compile(calling_object, body_open->next, funcall, body_close, NULL);
+				if (g_loop_broken)
+				{
+					g_loop_broken = false;
+					break;
+				}
+				if (funcall != NULL && funcall->has_returned)
+					break;
+				gc_check_auto();
+			}
+		}
+
+		*c = body_close;
+		return;
+	}
+
 	*c = (*c)->next; // for_var
 	var* for_v = all_get_var_by_name((*c)->value_char_ptr, funcall, calling_object); //var name
 	*c = (*c)->next; //(
@@ -1102,6 +1293,7 @@ node* compile(var* parent, node* out, fcall* c_function, node* stop, type_def* n
 						break;
 					}
 				case _new_:
+				case _in_:
 					break;
 				}
 			}

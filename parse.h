@@ -56,6 +56,7 @@ bool parser_delim_check_unclosed(ParserContext* ctx, node_type* m);
 fl* parser_delim_get_first_unclosed(ParserContext* ctx);
 bool parser_is_inside_func_param(ParserContext* ctx);
 bool parser_has_open_brace(ParserContext* ctx);
+void parser_delim_clear(ParserContext* ctx);
 
 /* Dynamic Scope Stack operations */
 void parser_scope_push(ParserContext* ctx, ScopeKind kind, const char* name, node* opening_node, int line);

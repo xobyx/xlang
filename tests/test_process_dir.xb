@@ -1,0 +1,45 @@
+import "lib/process.xb"
+import "lib/file.xb"
+import "lib/sys.xb"
+
+// 1. Test Process.capture
+string out = Process.capture("echo hello_world")
+print(out.trim())
+
+// 2. Test Process.run (with ProcessResult)
+ProcessResult pr = Process.run("echo process_success")
+print(pr.stdout.trim())
+print(pr.exit_code)
+print(pr.is_success())
+
+// 3. Test System get_env & set_env
+System.set_env("XLANG_TEST_VAR", "xlang_val_123")
+string env_val = System.get_env("XLANG_TEST_VAR")
+print(env_val)
+
+// 4. Test Directory create, exists, list, remove
+string test_dir = "test_temp_dir"
+if (Directory.exists(test_dir)) {
+    Directory.remove(test_dir)
+}
+
+int created = Directory.create(test_dir)
+print(created == 0)
+print(Directory.exists(test_dir))
+
+// Create dummy file inside test_dir
+string temp_file = "test_temp_dir/sample.txt"
+File.write_all_text(temp_file, "content inside sample")
+print(File.file_exists(temp_file))
+
+List files = Directory.list(test_dir)
+print(files.size())
+print(files.get(0))
+
+// Cleanup
+File f = File(temp_file)
+f.remove()
+Directory.remove(test_dir)
+print(Directory.exists(test_dir) == 0)
+
+print("test_process_dir PASS")

@@ -29,4 +29,12 @@ class System() {
     int now_ms() {
         return clock_ms()
     }
+
+    static string get_env(string name) {
+        return system_getenv(name)
+    }
+
+    static int set_env(string name, string val) {
+        return system_setenv(name, val)
+    }
 }

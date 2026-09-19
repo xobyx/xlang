@@ -1,3 +1,5 @@
+import "lib/list.xb"
+
 class File() {
     string path
     int fd
@@ -53,4 +55,34 @@ class File() {
         fd = 0 - 1
         return rc
     }
+
+    static string read_all_text(string p) {
+        return file_read_all(p)
+    }
+
+    static int write_all_text(string p, string content) {
+        return file_write_all(p, content)
+    }
 }
+
+class Directory() {
+    Directory() {
+    }
+
+    static List list(string path) {
+        return dir_list(path)
+    }
+
+    static int create(string path) {
+        return dir_create(path)
+    }
+
+    static int exists(string path) {
+        return dir_exists(path)
+    }
+
+    static int remove(string path) {
+        return dir_remove(path)
+    }
+}
+

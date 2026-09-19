@@ -32,7 +32,7 @@
 #define T_ANY  (SIMPLE_TYPE+8)
 #define T_FUNC  (SIMPLE_TYPE+9)
 #define T_TYPE_INFO (SIMPLE_TYPE+10)
-#define SIMPLE_FUNC_COUNT 151
+#define SIMPLE_FUNC_COUNT 157
 extern func_stack base_function;
 
 /*XLANG*/ var* get_type_inc_obj_var(node** nop, var* context, func_deftion ** outp);

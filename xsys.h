@@ -12,5 +12,7 @@ void x_system_exec(fcall* fc);
 void x_system_getenv(fcall* fc);
 void x_system_setenv(fcall* fc);
 void x_clock_ms(fcall* fc);
+void x_proc_capture(fcall* fc);
+void x_proc_run(fcall* fc);
 
 #endif /* XSYS_H */

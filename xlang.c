@@ -17,6 +17,8 @@ __  __   ___   | |__    _   _  __  __
 #include "xcollection.h"
 #include "ximport.h"
 #include "xgc.h"
+#include "parse.h"
+#include <ctype.h>
 clock_t t;
 //C:\Tests\t.xb
 bool load_saved_code = false;
@@ -128,32 +130,250 @@ int main(const int argc, char ** argv);
 
 void clean_memory(void);
 
+static char* repl_trim(char* str)
+{
+	while (*str && isspace((unsigned char)*str)) str++;
+	if (*str == '\0') return str;
+	char* end = str + strlen(str) - 1;
+	while (end > str && isspace((unsigned char)*end)) end--;
+	*(end + 1) = '\0';
+	return str;
+}
+
+static bool repl_is_statement(const char* s)
+{
+	while (*s == ' ' || *s == '\t') s++;
+	if (*s == '\0') return true;
+
+	if (strncmp(s, "class ", 6) == 0 || strncmp(s, "class\t", 6) == 0 || strncmp(s, "class(", 6) == 0) return true;
+	if (strncmp(s, "import ", 7) == 0 || strncmp(s, "import\t", 7) == 0 || strncmp(s, "import(", 7) == 0) return true;
+	if (strncmp(s, "if ", 3) == 0 || strncmp(s, "if(", 3) == 0) return true;
+	if (strncmp(s, "while ", 6) == 0 || strncmp(s, "while(", 6) == 0) return true;
+	if (strncmp(s, "for ", 4) == 0 || strncmp(s, "for(", 4) == 0) return true;
+	if (strncmp(s, "do ", 3) == 0 || strncmp(s, "do{", 3) == 0 || strcmp(s, "do") == 0) return true;
+	if (strncmp(s, "return ", 7) == 0 || strcmp(s, "return") == 0) return true;
+	if (strcmp(s, "break") == 0) return true;
+	if (strncmp(s, "static ", 7) == 0) return true;
+	if (strncmp(s, "print(", 6) == 0 || strncmp(s, "print ", 6) == 0) return true;
+
+	char first_word[64] = {0};
+	int len = 0;
+	while (((s[len] >= 'a' && s[len] <= 'z') || (s[len] >= 'A' && s[len] <= 'Z') ||
+	        (s[len] >= '0' && s[len] <= '9') || s[len] == '_') && len < 63)
+	{
+		first_word[len] = s[len];
+		len++;
+	}
+	first_word[len] = '\0';
+
+	if (get_type_by_name(first_word) != NULL)
+	{
+		const char* after = s + len;
+		while (*after == ' ' || *after == '\t') after++;
+		if ((*after >= 'a' && *after <= 'z') || (*after >= 'A' && *after <= 'Z') || *after == '_')
+			return true;
+	}
+
+	const char* eq = strchr(s, '=');
+	if (eq != NULL)
+	{
+		if (*(eq + 1) != '=' && (eq == s || (*(eq - 1) != '!' && *(eq - 1) != '<' && *(eq - 1) != '>')))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static void repl_print_vars(void)
+{
+	printf("\n\033[1;36m=== Variables (%d) ===\033[0m\n", varss != NULL ? varss->size : 0);
+	if (varss == NULL || varss->root == NULL)
+	{
+		printf("  (none)\n\n");
+		return;
+	}
+	for (var* v = varss->root; v != NULL; v = v->stack_next)
+	{
+		if (v->name == NULL) continue;
+		const char* tname = v->type_define ? v->type_define->type_name : "unknown";
+		if (v->type_define == T_INT && v->value_int != NULL)
+			printf("  \033[32m%s\033[0m %s = \033[33m%d\033[0m\n", tname, v->name, *v->value_int);
+		else if (v->type_define == T_STRING && v->value_str_ptr != NULL && *v->value_str_ptr != NULL)
+			printf("  \033[32m%s\033[0m %s = \033[33m\"%s\"\033[0m\n", tname, v->name, *v->value_str_ptr);
+		else if (v->type_define == T_FLOAT && v->value_float != NULL)
+			printf("  \033[32m%s\033[0m %s = \033[33m%f\033[0m\n", tname, v->name, *v->value_float);
+		else if (v->type_define == T_BOOL && v->value_bool != NULL)
+			printf("  \033[32m%s\033[0m %s = \033[33m%s\033[0m\n", tname, v->name, *v->value_bool ? "true" : "false");
+		else if (v->type_define == T_LONG && v->value_long != NULL)
+			printf("  \033[32m%s\033[0m %s = \033[33m%ld\033[0m\n", tname, v->name, *v->value_long);
+		else
+			printf("  \033[32m%s\033[0m %s = [instance]\n", tname, v->name);
+	}
+	printf("\n");
+}
+
+static void repl_print_classes(void)
+{
+	printf("\n\033[1;36m=== Classes & Types (%d) ===\033[0m\n", types != NULL ? types->size : 0);
+	if (types == NULL || types->root == NULL)
+	{
+		printf("  (none)\n\n");
+		return;
+	}
+	for (type_def* t = types->root; t != NULL; t = t->stack_next)
+	{
+		if (t->type_name == NULL) continue;
+		printf("  class \033[1;32m%s\033[0m", t->type_name);
+		if (t->base != NULL && t->base->type_name != NULL)
+			printf(" : %s", t->base->type_name);
+		printf(" (%d methods, %d properties)\n", t->d_function_size, t->d_propertys_size);
+	}
+	printf("\n");
+}
+
+static void repl_print_help(void)
+{
+	printf("\n\033[1;36m=== xlang REPL Commands ===\033[0m\n");
+	printf("  \033[1m:help, :?\033[0m         Show this help information\n");
+	printf("  \033[1m:vars\033[0m             List all defined global variables and values\n");
+	printf("  \033[1m:classes, :types\033[0m  List all loaded classes, methods, and properties\n");
+	printf("  \033[1m:ast\033[0m              Toggle AST debug parsing output (currently: %s)\n",
+	       print_parse_log ? "\033[32mON\033[0m" : "\033[31mOFF\033[0m");
+	printf("  \033[1m:gc\033[0m               Show GC metrics and run garbage collection\n");
+	printf("  \033[1m:reset\033[0m            Reset environment and clear all variables\n");
+	printf("  \033[1m:quit, :exit, :q\033[0m  Exit the REPL\n\n");
+}
+
 void interupter(void)
 {
-	bool unclosed = false;
+	bool is_interactive = isatty(fileno(stdin));
+	print_parse_log = 0;
 
+	if (is_interactive)
+	{
+		printf("\033[1;36m  __  __ _                         \033[0m\n");
+		printf("\033[1;36m  \\ \\/ /| | __ _ _ __   __ _       \033[0m\n");
+		printf("\033[1;36m   \\  / | |/ _` | '_ \\ / _` |      \033[0m\n");
+		printf("\033[1;36m   /  \\ | | (_| | | | | (_| |      \033[0m\n");
+		printf("\033[1;36m  /_/\\_\\|_|\\__,_|_| |_|\\__, |      \033[0m\n");
+		printf("\033[1;36m                       |___/       \033[0m\n");
+		printf("\033[1mxlang 0.4.0\033[0m (Interactive REPL) on Linux\n");
+		printf("Type \033[1;33m:help\033[0m for commands, \033[1;33m:quit\033[0m to exit.\n\n");
+	}
+
+	bool unclosed = false;
 	node_type which_type = none;
-	char txt[1024 * 5];
+	char line_buf[1024 * 5];
+
 	while (true)
 	{
-		memset(txt, 0, 1024 * 5);
-
 		if (unclosed)
 		{
-			printf("\n...");
-			if (fgets(txt, 500, stdin) == NULL)
-				break;
+			if (is_interactive)
+				printf("\033[1;33m...   \033[0m");
+			else
+				printf("... ");
 		}
 		else
 		{
-			printf("\n>>>");
-			if (fgets(txt, 500, stdin) == NULL)
-				break;
+			if (is_interactive)
+				printf("\033[1;32mxlang>\033[0m ");
+			else
+				printf("xlang> ");
+		}
+		fflush(stdout);
+
+		memset(line_buf, 0, sizeof(line_buf));
+		if (fgets(line_buf, sizeof(line_buf) - 1, stdin) == NULL)
+		{
+			if (is_interactive)
+				printf("\nGoodbye!\n");
+			break;
 		}
 
+		char* trimmed = repl_trim(line_buf);
 
-		start_parse_lines(txt, true);
-		unclosed = static_flag_check2x(&which_type);
+		if (!unclosed)
+		{
+			if (strcmp(trimmed, ":quit") == 0 || strcmp(trimmed, ":exit") == 0 || strcmp(trimmed, ":q") == 0)
+			{
+				if (is_interactive) printf("Goodbye!\n");
+				break;
+			}
+			if (strcmp(trimmed, ":help") == 0 || strcmp(trimmed, ":?") == 0)
+			{
+				repl_print_help();
+				continue;
+			}
+			if (strcmp(trimmed, ":vars") == 0)
+			{
+				repl_print_vars();
+				continue;
+			}
+			if (strcmp(trimmed, ":classes") == 0 || strcmp(trimmed, ":types") == 0)
+			{
+				repl_print_classes();
+				continue;
+			}
+			if (strcmp(trimmed, ":ast") == 0)
+			{
+				print_parse_log = !print_parse_log;
+				printf("AST debug parsing log: %s\n", print_parse_log ? "ENABLED" : "DISABLED");
+				continue;
+			}
+			if (strcmp(trimmed, ":gc") == 0)
+			{
+				printf("Active objects: %zu, Allocated memory: %zu bytes\n", gc_total_objects(), gc_allocated_bytes());
+				gc_collect();
+				printf("After GC: %zu objects, %zu bytes\n", gc_total_objects(), gc_allocated_bytes());
+				continue;
+			}
+			if (strcmp(trimmed, ":reset") == 0)
+			{
+				clean_memory();
+				int_xlang();
+				parser_delim_clear(NULL);
+				unclosed = false;
+				printf("Environment reset.\n");
+				continue;
+			}
+			if (trimmed[0] == '\0')
+			{
+				continue;
+			}
+		}
+		else
+		{
+			if (trimmed[0] == '\0')
+			{
+				parser_delim_clear(NULL);
+				unclosed = false;
+				printf("(multi-line block canceled)\n");
+				continue;
+			}
+		}
+
+		if (!unclosed && !repl_is_statement(trimmed))
+		{
+			char eval_buf[1024 * 5 + 32];
+			snprintf(eval_buf, sizeof(eval_buf), "print(%s)\n", trimmed);
+			start_parse_lines(eval_buf, true);
+			unclosed = static_flag_check2x(&which_type);
+			if (unclosed)
+			{
+				parser_delim_clear(NULL);
+				unclosed = false;
+				start_parse_lines(line_buf, true);
+				unclosed = static_flag_check2x(&which_type);
+			}
+		}
+		else
+		{
+			start_parse_lines(line_buf, true);
+			unclosed = static_flag_check2x(&which_type);
+		}
 	}
 }
 

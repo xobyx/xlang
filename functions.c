@@ -2339,6 +2339,38 @@ func_deftion simple_function_array[] = {
 	{
 		.start_func_parmeters = {}, .func_code = &x_datetime_clock_ms, .func_name = "datetime_clock_ms",
 		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .ref = 0,
+		.stack_next = simple_function_array + 151
+	},
+	/* Directory Operations (151 - 154) */
+	{
+		.start_func_parmeters = {T_STRING}, .func_code = &x_dir_list, .func_name = "dir_list",
+		.function_type = f_main, .return_type = T_ANY, .start_parm_count = 1, .ref = 0,
+		.stack_next = simple_function_array + 152
+	},
+	{
+		.start_func_parmeters = {T_STRING}, .func_code = &x_dir_create, .func_name = "dir_create",
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
+		.stack_next = simple_function_array + 153
+	},
+	{
+		.start_func_parmeters = {T_STRING}, .func_code = &x_dir_exists, .func_name = "dir_exists",
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
+		.stack_next = simple_function_array + 154
+	},
+	{
+		.start_func_parmeters = {T_STRING}, .func_code = &x_dir_remove, .func_name = "dir_remove",
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
+		.stack_next = simple_function_array + 155
+	},
+	/* Process Operations (155 - 156) */
+	{
+		.start_func_parmeters = {T_STRING}, .func_code = &x_proc_capture, .func_name = "proc_capture",
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .ref = 0,
+		.stack_next = simple_function_array + 156
+	},
+	{
+		.start_func_parmeters = {T_STRING}, .func_code = &x_proc_run, .func_name = "proc_run",
+		.function_type = f_main, .return_type = T_ANY, .start_parm_count = 1, .ref = 0,
 		.stack_next = 0
 	}
 };
@@ -2471,7 +2503,7 @@ func_deftion* get_obj_function2(var* object_var, char* name)
 
 bool stop_here(node_type stop_in_type, node* stop_in_node, node* mnode)
 {
-	if ((stop_in_type != none && mnode->type_ == stop_in_type) || (stop_in_node != NULL && (mnode == stop_in_node ||
+	if ((stop_in_type != none && (mnode->type_ & stop_in_type)) || (stop_in_node != NULL && (mnode == stop_in_node ||
 		mnode->parent == stop_in_node)))
 		return true;
 	return false;

@@ -1,0 +1,35 @@
+class ProcessResult() {
+    string stdout
+    int exit_code
+
+    ProcessResult() {
+        stdout = ""
+        exit_code = 0
+    }
+
+    ProcessResult(string out, int code) {
+        stdout = out
+        exit_code = code
+    }
+
+    int is_success() {
+        return exit_code == 0
+    }
+}
+
+class Process() {
+    Process() {
+    }
+
+    static ProcessResult run(string cmd) {
+        return proc_run(cmd)
+    }
+
+    static string capture(string cmd) {
+        return proc_capture(cmd)
+    }
+
+    static int exec(string cmd) {
+        return system_exec(cmd)
+    }
+}

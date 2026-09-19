@@ -56,7 +56,8 @@ void var_clean_stack(var_stack* s)
 				{
 					if (bi->value_str_ptr && *(bi->value_str_ptr + i))
 					{
-						gc_free_any(*(bi->value_str_ptr + i));
+						if (gc_is_managed(*(bi->value_str_ptr + i)))
+							gc_free(*(bi->value_str_ptr + i));
 						*(bi->value_str_ptr + i) = NULL;
 					}
 				}
@@ -108,7 +109,8 @@ void free_temp_var(var* bi)
 		{
 			if (bi->value_str_ptr && *(bi->value_str_ptr + i))
 			{
-				gc_free_any(*(bi->value_str_ptr + i));
+				if (gc_is_managed(*(bi->value_str_ptr + i)))
+					gc_free(*(bi->value_str_ptr + i));
 				*(bi->value_str_ptr + i) = NULL;
 			}
 		}

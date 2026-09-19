@@ -1,0 +1,105 @@
+// Comprehensive test suite for collection literals and for-in loops
+import "lib/list.xb"
+import "lib/map.xb"
+
+print("--- Test 1: List Literals ---")
+List int_list = [10, 20, 30, 40]
+print("Int list size: %d", int_list.size())
+if (int_list.size() == 4 && int_list.get_int(0) == 10 && int_list.get_int(3) == 40) {
+    print("PASS: Integer list literal")
+} else {
+    print("FAIL: Integer list literal")
+}
+
+List str_list = ["alpha", "beta", "gamma"]
+print("String list size: %d", str_list.size())
+if (str_list.size() == 3 && str_list.get(1) == "beta") {
+    print("PASS: String list literal")
+} else {
+    print("FAIL: String list literal")
+}
+
+print("\n--- Test 2: For-In with Parentheses on List ---")
+int sum = 0
+for (num in [1, 2, 3, 4, 5]) {
+    sum = sum + num
+}
+print("Sum of [1..5]: %d", sum)
+if (sum == 15) {
+    print("PASS: For-in loop on list literal")
+} else {
+    print("FAIL: For-in loop on list literal")
+}
+
+print("\n--- Test 3: For-In without Parentheses ---")
+int sum2 = 0
+for val in int_list {
+    sum2 = sum2 + val
+}
+print("Sum of int_list: %d", sum2)
+if (sum2 == 100) {
+    print("PASS: For-in loop without parentheses")
+} else {
+    print("FAIL: For-in loop without parentheses")
+}
+
+print("\n--- Test 4: For-In on Strings ---")
+string word = "xlang"
+string reversed = ""
+for (c in word) {
+    reversed = c + reversed
+}
+print("Reversed 'xlang': %s", reversed)
+if (reversed == "gnalx") {
+    print("PASS: For-in string iteration")
+} else {
+    print("FAIL: For-in string iteration")
+}
+
+print("\n--- Test 5: For-In on Map ---")
+Map config
+config.put("host", "localhost")
+config.put("port", "8080")
+int key_count = 0
+for (key in config) {
+    key_count = key_count + 1
+}
+print("Map key count from loop: %d", key_count)
+if (key_count == 2) {
+    print("PASS: For-in map iteration")
+} else {
+    print("FAIL: For-in map iteration")
+}
+
+print("\n--- Test 6: Break in For-In Loop ---")
+int stop_at = 0
+for (n in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+    if (n == 4) {
+        stop_at = n
+        break
+    }
+}
+print("Loop stopped at: %d", stop_at)
+if (stop_at == 4) {
+    print("PASS: Break in for-in loop")
+} else {
+    print("FAIL: Break in for-in loop")
+}
+
+print("\n--- Test 7: Nested For-In Loops ---")
+int product_sum = 0
+for (x in [1, 2, 3]) {
+    for (y in [10, 20]) {
+        product_sum = product_sum + (x * y)
+    }
+}
+// x=1: 10 + 20 = 30
+// x=2: 20 + 40 = 60
+// x=3: 30 + 60 = 90
+// total = 180
+print("Nested product sum: %d", product_sum)
+if (product_sum == 180) {
+    print("PASS: Nested for-in loops")
+} else {
+    print("FAIL: Nested for-in loops")
+}

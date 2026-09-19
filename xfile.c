@@ -305,3 +305,98 @@ void x_file_close(fcall* fc)
 	fc->_return.value_int = new_int(1, rc == 0 ? 0 : -1);
 	fc->_return.type_define = T_INT;
 }
+
+#if defined(_WIN32)
+#include <direct.h>
+#else
+#include <dirent.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+#include "xcollection.h"
+
+void x_dir_list(fcall* fc)
+{
+	const char* path = get_str_arg(fc, 0, ".");
+	int list_id = x_list_alloc();
+
+#ifndef _WIN32
+	DIR* d = opendir(path != NULL && *path != '\0' ? path : ".");
+	if (d != NULL)
+	{
+		struct dirent* entry;
+		while ((entry = readdir(d)) != NULL)
+		{
+			if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+				continue;
+			x_list_append_str(list_id, entry->d_name);
+		}
+		closedir(d);
+	}
+#endif
+
+	type_def* list_td = get_type_by_name("List");
+	if (list_td != NULL && !is_base_type(list_td))
+	{
+		type_instance* inst = (type_instance*)install_memory_with_type(list_td, 1);
+		var* id_prop = get_var_by_name_on_stack("id", &inst->propertys);
+		if (id_prop != NULL && id_prop->value_int != NULL)
+		{
+			*id_prop->value_int = list_id;
+		}
+		fc->_return.type_define = list_td;
+		fc->_return.values = inst;
+		fc->_return.value_type_instsance = inst;
+		fc->_return.size = 1;
+	}
+	else
+	{
+		fc->_return.value_int = new_int(1, list_id);
+		fc->_return.values = fc->_return.value_int;
+		fc->_return.type_define = T_INT;
+		fc->_return.size = 1;
+	}
+}
+
+void x_dir_create(fcall* fc)
+{
+	const char* path = get_str_arg(fc, 0, "");
+	int rc = -1;
+	if (path != NULL && *path != '\0')
+	{
+#ifdef _WIN32
+		rc = _mkdir(path);
+#else
+		rc = mkdir(path, 0755);
+#endif
+	}
+	fc->_return.value_int = new_int(1, rc == 0 ? 0 : -1);
+	fc->_return.type_define = T_INT;
+}
+
+void x_dir_exists(fcall* fc)
+{
+	const char* path = get_str_arg(fc, 0, "");
+	int exists = 0;
+	if (path != NULL && *path != '\0')
+	{
+		struct stat st;
+		if (stat(path, &st) == 0 && S_ISDIR(st.st_mode))
+			exists = 1;
+	}
+	fc->_return.value_int = new_int(1, exists);
+	fc->_return.type_define = T_INT;
+}
+
+void x_dir_remove(fcall* fc)
+{
+	const char* path = get_str_arg(fc, 0, "");
+	int rc = -1;
+	if (path != NULL && *path != '\0')
+	{
+		rc = rmdir(path);
+	}
+	fc->_return.value_int = new_int(1, rc == 0 ? 0 : -1);
+	fc->_return.type_define = T_INT;
+}
+
