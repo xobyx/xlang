@@ -1,0 +1,57 @@
+# Test parser context, dynamic scope stack, and class scope encapsulation
+
+class Alpha() {
+    int x = 10
+
+    Alpha(int v) {
+        this.x = v
+    }
+
+    int get_x() {
+        if (this.x > 0) {
+            if (this.x > 5) {
+                return this.x
+            }
+        }
+        return 0
+    }
+}
+
+class Beta() {
+    int y = 20
+
+    Beta(int v) {
+        this.y = v
+    }
+
+    int get_y() {
+        while (this.y > 100) {
+            this.y = this.y - 1
+        }
+        return this.y
+    }
+}
+
+# Free function after classes (tests that class scope did not leak to global)
+int standalone_func(int a, int b) {
+    int sum = a + b
+    if (sum > 10) {
+        return sum
+    }
+    return 0
+}
+
+Alpha a(42)
+Beta b(99)
+
+print("Alpha.get_x() = %d", a.get_x())
+print("Beta.get_y() = %d", b.get_y())
+print("standalone_func(7, 8) = %d", standalone_func(7, 8))
+
+# Multi-line parenthesized expression spanning multiple lines (tests ctx->save & delim_stack continuation)
+int multi = (10 +
+            20 +
+            30)
+
+print("multi-line addition = %d", multi)
+print("test_parser_scope completed successfully!")

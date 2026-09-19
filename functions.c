@@ -210,14 +210,7 @@ type_def SIMPLE_TYPE[] = {
 };
 
 
-fl staic_flag2[] = {
-	{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},
-	{0, 0}, {0, 0}, {0, 0}, {0, 0},
-	{0, 0}
-};
 
-
-int fi = 0;
 
 
 node* get_root(node* j)
@@ -287,72 +280,18 @@ char* parse_obj_to_str(const node_type t)
 
 node* static_flag_op2(const node_type mtype, node* w_node, bool added)
 {
-	if (current_parser_ctx != NULL)
-	{
-		return parser_delim_op(current_parser_ctx, mtype, w_node, added);
-	}
-	node* p = NULL;
-	if (added)
-	{
-		for (int i = 0; i < 10; i++)
-			if (staic_flag2[i].wait_type == 0)
-			{
-				staic_flag2[i].wait_type = mtype;
-				staic_flag2[i].waiting_node = w_node;
-				break;
-			}
-	}
-	else
-	{
-		for (int i = 9; i >= 0; i--)
-			if (staic_flag2[i].wait_type == mtype)
-			{
-				if (staic_flag2[i].waiting_node != NULL)
-				{
-					staic_flag2[i].waiting_node->ref_node = w_node;
-					p = staic_flag2[i].waiting_node;
-				}
-
-				staic_flag2[i].wait_type = (node_type)0;
-				staic_flag2[i].waiting_node = NULL;
-				break;
-			}
-	}
-	return p;
+	return parser_delim_op(current_parser_ctx, mtype, w_node, added);
 }
 
 
 bool static_flag_check2x(node_type* m)
 {
-	if (current_parser_ctx != NULL)
-	{
-		return parser_delim_check_unclosed(current_parser_ctx, m);
-	}
-	int* ma = (int*)m;
-	bool cont = false;
-	for (int i = 0; i < 10; i++)
-		if (staic_flag2[i].wait_type != 0)
-		{
-			cont = true;
-			*ma |= staic_flag2[i].wait_type;
-		}
-
-	return cont;
+	return parser_delim_check_unclosed(current_parser_ctx, m);
 }
 
 fl* static_flag_check2()
 {
-	if (current_parser_ctx != NULL)
-	{
-		return parser_delim_get_first_unclosed(current_parser_ctx);
-	}
-	for (int i = 0; i < 10; i++)
-		if (staic_flag2[i].wait_type != 0)
-		{
-			return &staic_flag2[i];
-		}
-
-	return NULL;
+	return parser_delim_get_first_unclosed(current_parser_ctx);
 }
 
 // check if n starts with keyword x at a word boundary

@@ -271,6 +271,7 @@ void clean_memory(void)
 	x_collections_cleanup();
 	x_import_cleanup();
 	gc_cleanup();
+	parser_interactive_cleanup();
 }
 
 void start_compile(void)

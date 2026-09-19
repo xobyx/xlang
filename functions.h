@@ -16,8 +16,7 @@
 /*XLANG*/ char* get_file_buffer(FILE* sf);
 
 
-extern fl staic_flag2[] ;
-extern int fi;
+
 
 //const static char* sbase_types_name [] = {"long","string","char","int","bool","float","_array","new"};
 //

@@ -73,9 +73,6 @@ void inherit_parent_flag(node* current_node, node* next_node)
 
 
 ParserContext* current_parser_ctx = NULL;
-node* save = NULL;
-int r = 0;
-static const char* current_parsing_class_name = NULL;
 
 void parser_context_init(ParserContext* ctx, bool interactive)
 {
@@ -83,6 +80,11 @@ void parser_context_init(ParserContext* ctx, bool interactive)
 		return;
 	ctx->delim_capacity = 64;
 	ctx->delim_stack = (fl*)calloc(ctx->delim_capacity, sizeof(fl));
+
+	ctx->scope_capacity = 32;
+	ctx->scope_top = 0;
+	ctx->scope_stack = (ScopeEntry*)calloc(ctx->scope_capacity, sizeof(ScopeEntry));
+
 	ctx->save = NULL;
 	ctx->current_parsing_class_name = NULL;
 	ctx->current_line = 1;
@@ -102,6 +104,15 @@ void parser_context_cleanup(ParserContext* ctx)
 		ctx->delim_stack = NULL;
 	}
 	ctx->delim_capacity = 0;
+
+	if (ctx->scope_stack != NULL)
+	{
+		free(ctx->scope_stack);
+		ctx->scope_stack = NULL;
+	}
+	ctx->scope_top = 0;
+	ctx->scope_capacity = 0;
+
 	ctx->save = NULL;
 	ctx->current_parsing_class_name = NULL;
 }
@@ -254,6 +265,132 @@ bool parser_has_open_brace(ParserContext* ctx)
 	return false;
 }
 
+void parser_scope_push(ParserContext* ctx, ScopeKind kind, const char* name, node* opening_node, int line)
+{
+	if (ctx == NULL)
+		ctx = current_parser_ctx;
+	if (ctx == NULL)
+		return;
+
+	if (ctx->scope_stack == NULL || ctx->scope_capacity <= 0)
+	{
+		ctx->scope_capacity = 32;
+		ctx->scope_top = 0;
+		ctx->scope_stack = (ScopeEntry*)calloc(ctx->scope_capacity, sizeof(ScopeEntry));
+	}
+	else if (ctx->scope_top >= ctx->scope_capacity)
+	{
+		int new_cap = ctx->scope_capacity * 2;
+		ScopeEntry* new_stack = (ScopeEntry*)realloc(ctx->scope_stack, new_cap * sizeof(ScopeEntry));
+		if (new_stack != NULL)
+		{
+			memset(new_stack + ctx->scope_capacity, 0, (new_cap - ctx->scope_capacity) * sizeof(ScopeEntry));
+			ctx->scope_stack = new_stack;
+			ctx->scope_capacity = new_cap;
+		}
+		else
+		{
+			return;
+		}
+	}
+
+	ScopeEntry* entry = &ctx->scope_stack[ctx->scope_top++];
+	entry->kind = kind;
+	if (name != NULL)
+	{
+		strncpy(entry->name, name, sizeof(entry->name) - 1);
+		entry->name[sizeof(entry->name) - 1] = '\0';
+	}
+	else
+	{
+		entry->name[0] = '\0';
+	}
+	entry->opening_node = opening_node;
+	entry->line = line;
+
+	if (kind == SCOPE_CLASS && name != NULL && name[0] != '\0')
+	{
+		ctx->current_parsing_class_name = entry->name;
+	}
+}
+
+ScopeEntry* parser_scope_pop(ParserContext* ctx)
+{
+	if (ctx == NULL)
+		ctx = current_parser_ctx;
+	if (ctx == NULL || ctx->scope_stack == NULL || ctx->scope_top <= 0)
+		return NULL;
+
+	ctx->scope_top--;
+	ScopeEntry* popped = &ctx->scope_stack[ctx->scope_top];
+
+	/* Recompute current class name by walking down the scope stack */
+	ctx->current_parsing_class_name = NULL;
+	for (int i = ctx->scope_top - 1; i >= 0; i--)
+	{
+		if (ctx->scope_stack[i].kind == SCOPE_CLASS)
+		{
+			ctx->current_parsing_class_name = ctx->scope_stack[i].name;
+			break;
+		}
+	}
+
+	return popped;
+}
+
+ScopeEntry* parser_scope_current(ParserContext* ctx)
+{
+	if (ctx == NULL)
+		ctx = current_parser_ctx;
+	if (ctx == NULL || ctx->scope_stack == NULL || ctx->scope_top <= 0)
+		return NULL;
+
+	return &ctx->scope_stack[ctx->scope_top - 1];
+}
+
+const char* parser_current_class_name(ParserContext* ctx)
+{
+	if (ctx == NULL)
+		ctx = current_parser_ctx;
+	if (ctx == NULL)
+		return NULL;
+
+	if (ctx->current_parsing_class_name != NULL)
+		return ctx->current_parsing_class_name;
+
+	if (ctx->scope_stack != NULL)
+	{
+		for (int i = ctx->scope_top - 1; i >= 0; i--)
+		{
+			if (ctx->scope_stack[i].kind == SCOPE_CLASS)
+			{
+				return ctx->scope_stack[i].name;
+			}
+		}
+	}
+	return NULL;
+}
+
+bool parser_is_in_class(ParserContext* ctx)
+{
+	return parser_current_class_name(ctx) != NULL;
+}
+
+bool parser_is_in_function(ParserContext* ctx)
+{
+	if (ctx == NULL)
+		ctx = current_parser_ctx;
+	if (ctx == NULL || ctx->scope_stack == NULL)
+		return false;
+
+	for (int i = ctx->scope_top - 1; i >= 0; i--)
+	{
+		if (ctx->scope_stack[i].kind == SCOPE_FUNCTION)
+			return true;
+	}
+	return false;
+}
+
 static bool is_function_def_ahead(const char* buff)
 {
 	if (buff == NULL || *buff != '(')
@@ -323,9 +460,10 @@ static bool is_function_def_ahead(const char* buff)
 	return false;
 }
 
-void parse_line(char* buff, node* n_node, const int line)
+void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line)
 {
-
+	if (ctx == NULL)
+		ctx = current_parser_ctx;
 
 	n_node->type_ |= operators_n | parentheses4;
 
@@ -337,7 +475,7 @@ void parse_line(char* buff, node* n_node, const int line)
 	n_node->line = line;
 
 	node_type a = (node_type)0;
-	if (static_flag_check2x(&a))
+	if (parser_delim_check_unclosed(ctx, &a))
 	{
 		n_node->type_ |= a;
 	}
@@ -346,18 +484,18 @@ void parse_line(char* buff, node* n_node, const int line)
 	{
 
 		///check for unclosed node if yes next line will encluded to cun node
-		if (static_flag_check2x(&a))
+		if (parser_delim_check_unclosed(ctx, &a))
 		{
 			node* nextc = new_node(nodes);
 			n_node->type_ = endl;
 			n_node->line = line;
 			n_node->next = nextc;
 			nextc->parent = n_node;
-			if (current_parser_ctx != NULL)
+			if (ctx != NULL)
+				ctx->save = nextc;
+			else if (current_parser_ctx != NULL)
 				current_parser_ctx->save = nextc;
-			else
-				save = nextc;
-			nextc->type_ = a | keyword | itype | var_name | (n_node->parent != NULL ? n_node->parent->flag_ : 0);
+			nextc->type_ = a | keyword | itype | var_name | value | (n_node->parent != NULL ? n_node->parent->flag_ : 0);
 			return;
 		}
 		n_node->type_ = endl;
@@ -410,21 +548,9 @@ void parse_line(char* buff, node* n_node, const int line)
 			{
 				is_func_param = true;
 			}
-			else if (parser_is_inside_func_param(current_parser_ctx))
+			else if (parser_is_inside_func_param(ctx))
 			{
 				is_func_param = true;
-			}
-			else
-			{
-				for (int fi = 0; fi < 10; fi++)
-				{
-					if (staic_flag2[fi].wait_type == parentheses4_c && staic_flag2[fi].waiting_node != NULL &&
-					    staic_flag2[fi].waiting_node->opt_name_type == function_def)
-					{
-						is_func_param = true;
-						break;
-					}
-				}
 			}
 			if (is_func_param)
 			{
@@ -435,7 +561,7 @@ void parse_line(char* buff, node* n_node, const int line)
 				next->flag_ = parentheses4_c;
 			}
 
-			parse_line(buff + strlen(m_type->type_name), next, line);
+			parse_line_ctx(ctx, buff + strlen(m_type->type_name), next, line);
 			return;
 		}
 		else
@@ -474,7 +600,7 @@ void parse_line(char* buff, node* n_node, const int line)
 			/*,} */
 			
 			next->is_flagged = true;
-			parse_line(buff + 1, next, line);
+			parse_line_ctx(ctx, buff + 1, next, line);
 
 			return;
 		}
@@ -500,7 +626,7 @@ void parse_line(char* buff, node* n_node, const int line)
 
 			next->parent = n_node;
 			n_node->next = next;
-			parse_line(buff + 1, next, line);
+			parse_line_ctx(ctx, buff + 1, next, line);
 			return;
 		}
 	}
@@ -513,8 +639,30 @@ void parse_line(char* buff, node* n_node, const int line)
 
 		mbool = true;
 
-		static_flag_op2(parentheses1, n_node, false);
+		node* open = static_flag_op2(parentheses1, n_node, false);
 		static_flag_op2(parentheses1_c, n_node, true);
+
+		ScopeKind s_kind = SCOPE_BLOCK;
+		const char* s_name = NULL;
+		if (open != NULL && open->ref_node != NULL && open->ref_node->opt_name_type == class_base_def)
+		{
+			s_kind = SCOPE_CLASS;
+			s_name = (open->ref_node->parent && open->ref_node->parent->value_char_ptr) ?
+			         open->ref_node->parent->value_char_ptr : (ctx ? ctx->current_parsing_class_name : NULL);
+		}
+		else if (open != NULL && open->ref_node != NULL && open->ref_node->opt_name_type == function_def)
+		{
+			s_kind = SCOPE_FUNCTION;
+			s_name = (open->ref_node->parent && open->ref_node->parent->value_char_ptr) ?
+			         open->ref_node->parent->value_char_ptr : "function";
+		}
+		else if (ctx != NULL && ctx->current_parsing_class_name != NULL && !parser_is_in_class(ctx))
+		{
+			s_kind = SCOPE_CLASS;
+			s_name = ctx->current_parsing_class_name;
+		}
+		parser_scope_push(ctx, s_kind, s_name, n_node, line);
+
 		next->type_ = value | var_name;
 		//if(d->isFlag)
 		//	nextc.flag=d->flag_|parentheses1c/*,} */;
@@ -534,7 +682,7 @@ void parse_line(char* buff, node* n_node, const int line)
 		//TEST 2
 		//next->parent=d;
 		//d->next=next;
-		parse_line(buff + 1, next, line);
+		parse_line_ctx(ctx, buff + 1, next, line);
 		return;
 
 	}
@@ -547,25 +695,10 @@ void parse_line(char* buff, node* n_node, const int line)
 		n_node->type_ = parentheses1_c;
 		n_node->value_char_ptr = getchar_x(*buff);
 
-		bool has_open_brace = false;
-		if (current_parser_ctx != NULL)
+		parser_scope_pop(ctx);
+		if (ctx != NULL && !parser_has_open_brace(ctx))
 		{
-			has_open_brace = parser_has_open_brace(current_parser_ctx);
-			if (!has_open_brace)
-				current_parser_ctx->current_parsing_class_name = NULL;
-		}
-		else
-		{
-			for (int fi = 0; fi < 10; fi++)
-			{
-				if (staic_flag2[fi].wait_type == parentheses1_c)
-				{
-					has_open_brace = true;
-					break;
-				}
-			}
-			if (!has_open_brace)
-				current_parsing_class_name = NULL;
+			ctx->current_parsing_class_name = NULL;
 		}
 
 		mbool = false;
@@ -586,7 +719,7 @@ void parse_line(char* buff, node* n_node, const int line)
 			next->is_flagged = true;
 		}
 
-		parse_line(buff + 1, next, line);
+		parse_line_ctx(ctx, buff + 1, next, line);
 		return;
 
 	}
@@ -600,7 +733,7 @@ void parse_line(char* buff, node* n_node, const int line)
 		next->type_ = value | var_name | itype;
 		next->flag_ = parentheses1_c | comma/*,} */;
 		next->is_flagged = true;
-		parse_line(buff + 1, next, line);
+		parse_line_ctx(ctx, buff + 1, next, line);
 		return;
 
 	}
@@ -656,7 +789,7 @@ void parse_line(char* buff, node* n_node, const int line)
 			/*,} */
 			;
 			next->is_flagged = true;
-			parse_line(buff + 1, next, line);
+			parse_line_ctx(ctx, buff + 1, next, line);
 			return;
 		}
 		else if (*buff == ')')
@@ -693,7 +826,7 @@ void parse_line(char* buff, node* n_node, const int line)
 
 			next->parent = n_node;
 			n_node->next = next;
-			parse_line(buff + 1, next, line);
+			parse_line_ctx(ctx, buff + 1, next, line);
 			return;
 		}
 	}
@@ -745,7 +878,7 @@ void parse_line(char* buff, node* n_node, const int line)
 
 						static_flag_op2(parentheses1, NULL, true);
 						next->is_flagged = true;
-						parse_line(buff + strlen(key_word[i]), next, line);
+						parse_line_ctx(ctx, buff + strlen(key_word[i]), next, line);
 						return;
 					}
 					if (i == _eif_)
@@ -814,7 +947,7 @@ void parse_line(char* buff, node* n_node, const int line)
 					next->type_ = parentheses1;
 					static_flag_op2(parentheses1, n_node, true);
 					next->is_flagged = true;
-					parse_line(buff + strlen(key_word[i]), next, line);
+					parse_line_ctx(ctx, buff + strlen(key_word[i]), next, line);
 					return;
 				}
 				else if (i == _return_)
@@ -846,7 +979,7 @@ void parse_line(char* buff, node* n_node, const int line)
 
 					next->flag_ = parentheses4;
 					next->is_flagged = true;
-					parse_line(buff + strlen(key_word[i]), next, line);
+					parse_line_ctx(ctx, buff + strlen(key_word[i]), next, line);
 					return;
 				}
 				else if (i == _import_)
@@ -854,7 +987,7 @@ void parse_line(char* buff, node* n_node, const int line)
 					next->type_ = value | var_name | parentheses4;
 					next->is_flagged = true;
 					next->flag_ = value | var_name | parentheses4 | parentheses4_c | endl;
-					parse_line(buff + strlen(key_word[i]), next, line);
+					parse_line_ctx(ctx, buff + strlen(key_word[i]), next, line);
 					return;
 				}
 				else
@@ -865,7 +998,7 @@ void parse_line(char* buff, node* n_node, const int line)
 				if (n_node->is_flagged) { next->flag_ |= n_node->flag_; }
 
 
-				parse_line(buff + strlen(key_word[i]), next, line);
+				parse_line_ctx(ctx, buff + strlen(key_word[i]), next, line);
 				return;
 				//setVarName(buff,h);
 			}
@@ -891,7 +1024,7 @@ void parse_line(char* buff, node* n_node, const int line)
 			n_node->type_ = value;
 			n_node->value_raw = (char*)calloc(1, 1);
 
-			parse_line(buff + 2, next, line);
+			parse_line_ctx(ctx, buff + 2, next, line);
 			return;
 		}
 		find* mfind = lex_match_string(buff);
@@ -916,7 +1049,7 @@ void parse_line(char* buff, node* n_node, const int line)
 			n_node->value_raw = mfind->bn;
 
 
-			parse_line(buff + orig_len + 2, next, line);
+			parse_line_ctx(ctx, buff + orig_len + 2, next, line);
 			
 			return;
 		}
@@ -942,7 +1075,7 @@ void parse_line(char* buff, node* n_node, const int line)
 			n_node->opt_type = 1;
 			n_node->value_raw = mfind->bn;
 
-			parse_line(buff +len + 2, next, line);
+			parse_line_ctx(ctx, buff +len + 2, next, line);
 			return;
 		}
 		mfind = lex_match_bool(buff);
@@ -966,7 +1099,7 @@ void parse_line(char* buff, node* n_node, const int line)
 
 			///TODO: check type match
 			//v2/setVar(&d);
-			parse_line(buff + strlen(mfind->bn), next, line);
+			parse_line_ctx(ctx, buff + strlen(mfind->bn), next, line);
 			return;
 		}
 		//TODO : V2
@@ -1017,7 +1150,7 @@ void parse_line(char* buff, node* n_node, const int line)
 				//v2//d->opt=&m;
 
 				//setVar(&d);
-				parse_line(buff + strlen(mfind->bn), next, line);
+				parse_line_ctx(ctx, buff + strlen(mfind->bn), next, line);
 				return;
 			}
 		}
@@ -1055,7 +1188,7 @@ void parse_line(char* buff, node* n_node, const int line)
 
 				next->is_flagged = true;
 				next->flag_ = itype | n_node->flag_;
-				parse_line(buff + strlen(mfind->bn), next, line);
+				parse_line_ctx(ctx, buff + strlen(mfind->bn), next, line);
 				return;
 			}
 
@@ -1065,10 +1198,10 @@ void parse_line(char* buff, node* n_node, const int line)
 				{
 					next->type_ = parentheses4;
 					n_node->opt_name_type = class_def; //k;
-					if (current_parser_ctx != NULL)
+					if (ctx != NULL)
+						ctx->current_parsing_class_name = n_node->value_char_ptr;
+					else if (current_parser_ctx != NULL)
 						current_parser_ctx->current_parsing_class_name = n_node->value_char_ptr;
-					else
-						current_parsing_class_name = n_node->value_char_ptr;
 					if (get_type_by_name(n_node->value_char_ptr) == NULL)
 					{
 						type_def* placeholder = new_type();
@@ -1076,7 +1209,7 @@ void parse_line(char* buff, node* n_node, const int line)
 					}
 					next->is_flagged = true;
 					next->flag_ = var_name | parentheses4_c;
-					parse_line(buff + strlen(mfind->bn), next, line);
+					parse_line_ctx(ctx, buff + strlen(mfind->bn), next, line);
 					return;
 				}
 				//class f(-)-
@@ -1086,14 +1219,14 @@ void parse_line(char* buff, node* n_node, const int line)
 					n_node->opt_raw = "i";
 					next->is_flagged = true;
 					next->flag_ = parentheses1;
-					parse_line(buff + strlen(mfind->bn), next, line);
+					parse_line_ctx(ctx, buff + strlen(mfind->bn), next, line);
 					return;
 				}
 				if (n_node->parent->type_ == keyword && n_node->parent->value_keyword == _import_)
 				{
 					n_node->opt_name_type = var_call;
 					next->type_ = endl;
-					parse_line(buff + strlen(mfind->bn), next, line);
+					parse_line_ctx(ctx, buff + strlen(mfind->bn), next, line);
 					return;
 				}
 				if (n_node->parent->type_ == itype || n_node->parent->type_==s_index_c)
@@ -1124,7 +1257,7 @@ void parse_line(char* buff, node* n_node, const int line)
 				next->type_ |= n_node->flag_;
 			}
 
-			parse_line(buff + strlen(mfind->bn), next, line);
+			parse_line_ctx(ctx, buff + strlen(mfind->bn), next, line);
 			//print_line_debuge(&nex,line,true);
 
 			return;
@@ -1135,7 +1268,7 @@ void parse_line(char* buff, node* n_node, const int line)
 	{
 		n_node->type_ = dot;
 		next->type_ = var_name;
-		parse_line(buff + 1, next, line);
+		parse_line_ctx(ctx, buff + 1, next, line);
 		return;
 	}
 	if (n_node->type_ == (equles | endl | operators_n) || n_node->btype.node_type_bit.operators_n || n_node->
@@ -1175,7 +1308,7 @@ void parse_line(char* buff, node* n_node, const int line)
 						next->type_ |= equles;
 				}
 				next->type_ |= value | var_name | parentheses1 | equles|parentheses4;
-				parse_line(i + 1, next, line);
+				parse_line_ctx(ctx, i + 1, next, line);
 				return;
 				////do next->.
 			}
@@ -1198,7 +1331,7 @@ void parse_line(char* buff, node* n_node, const int line)
 							next->is_flagged = true;
 						}
 
-						parse_line(i + 1, next, line);
+						parse_line_ctx(ctx, i + 1, next, line);
 						return;
 					}
 					////////TEST
@@ -1212,7 +1345,7 @@ void parse_line(char* buff, node* n_node, const int line)
 					//v2//strcpy_s(temps.var_type ,main->var_type);
 					//v2//temps.value = new int(1);
 
-					parse_line(i + 1, next, line);
+					parse_line_ctx(ctx, i + 1, next, line);
 					return;
 				}
 				else
@@ -1226,7 +1359,7 @@ void parse_line(char* buff, node* n_node, const int line)
 						next->is_flagged = true;
 					}
 
-					parse_line(i + 1, next, line);
+					parse_line_ctx(ctx, i + 1, next, line);
 					return;
 				}
 				//next->type_=value|var_name|operators_n;
@@ -1241,13 +1374,21 @@ void parse_line(char* buff, node* n_node, const int line)
 	//mdebuge.cprintf(12, "\nunrecognized token : [ %s ] in line [ %d ] \n", buff, line);
 }
 
+void parse_line(char* buff, node* n_node, const int line)
+{
+	parse_line_ctx(current_parser_ctx, buff, n_node, line);
+}
+
 //if()
 typedef var ver;
 
 void pre_parse_line_ctx(ParserContext* ctx, char* buff, const int line)
 {
+	if (ctx == NULL)
+		ctx = current_parser_ctx;
+
 	node* n;
-	node* cur_save = (ctx != NULL) ? ctx->save : save;
+	node* cur_save = (ctx != NULL) ? ctx->save : NULL;
 
 	if (cur_save == NULL)
 	{
@@ -1261,8 +1402,6 @@ void pre_parse_line_ctx(ParserContext* ctx, char* buff, const int line)
 		n = cur_save;
 		if (ctx != NULL)
 			ctx->save = NULL;
-		else
-			save = NULL;
 	}
 
 	char* line_to_parse = buff;
@@ -1291,7 +1430,7 @@ void pre_parse_line_ctx(ParserContext* ctx, char* buff, const int line)
 			if (*p == '(' && is_function_def_ahead(p))
 			{
 				bool is_constr = false;
-				const char* c_name = (ctx != NULL) ? ctx->current_parsing_class_name : current_parsing_class_name;
+				const char* c_name = parser_current_class_name(ctx);
 				if (c_name != NULL && strcmp(id, c_name) == 0)
 					is_constr = true;
 				else
@@ -1311,7 +1450,7 @@ void pre_parse_line_ctx(ParserContext* ctx, char* buff, const int line)
 		}
 	}
 
-	parse_line(line_to_parse, n, line);
+	parse_line_ctx(ctx, line_to_parse, n, line);
 
 	if (allocated_buff != NULL)
 		free(allocated_buff);
@@ -1326,14 +1465,29 @@ void pre_parse_line(char* buff, const int line)
 #define strcpy_s(x,y,z) strcpy(x,z)
 #endif
 
+static ParserContext interactive_ctx;
+static bool interactive_ctx_inited = false;
+
+void parser_interactive_cleanup(void)
+{
+	if (interactive_ctx_inited)
+	{
+		parser_context_cleanup(&interactive_ctx);
+		interactive_ctx_inited = false;
+	}
+}
+
 void start_parse_lines_ctx(ParserContext* ctx, char* buffe, bool active)
 {
 	if (buffe == NULL || *buffe == '\0')
 		return;
+	if (ctx == NULL)
+		ctx = current_parser_ctx;
 	if (ctx != NULL)
+	{
 		ctx->current_parsing_class_name = NULL;
-	else
-		current_parsing_class_name = NULL;
+		ctx->scope_top = 0;
+	}
 
 	size_t size1 = strlen(buffe) + 1;
 	char* buff = (char*)malloc(size1);
@@ -1385,6 +1539,18 @@ void start_parse_lines(char* buffe, bool active)
 {
 	if (buffe == NULL || *buffe == '\0')
 		return;
+
+	if (active)
+	{
+		if (!interactive_ctx_inited)
+		{
+			parser_context_init(&interactive_ctx, true);
+			interactive_ctx_inited = true;
+		}
+		current_parser_ctx = &interactive_ctx;
+		start_parse_lines_ctx(&interactive_ctx, buffe, true);
+		return;
+	}
 
 	ParserContext ctx;
 	parser_context_init(&ctx, active);
