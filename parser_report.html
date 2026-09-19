@@ -910,11 +910,21 @@
 
         <div class="roadmap-item" style="border-left-color: var(--accent-indigo);">
           <div class="roadmap-header">
-            <div class="roadmap-title">Phase 3: Pratt Expression Engine for Math & Logic</div>
-            <span class="status-tag tag-warning">Syntax Enhancement</span>
+            <div class="roadmap-title">Phase 3: Pratt / Operator Precedence Expression Engine (Completed)</div>
+            <span class="status-tag tag-success">Completed &bull; 38/38 Tests Pass</span>
           </div>
           <p style="color: var(--text-muted); font-size: 0.9rem;">
-            When encountering expression tokens (<code>=</code>, <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, <code>==</code>), invoke <code>parse_expression()</code> to assemble an orderly binary tree AST instead of a flat left-to-right chain.
+            Implemented Shunting-Yard operator precedence engine in <code>calc.c</code> with full operator precedence (multiplicative &gt; additive &gt; shift &gt; relational &gt; equality &gt; bitwise &gt; logical), unary minus/plus, unary boolean not (<code>!</code>), and left-associativity. Verified with comprehensive <code>tests/test_operator_precedence.xb</code> and all real-life applications.
+          </p>
+        </div>
+
+        <div class="roadmap-item" style="border-left-color: var(--accent-purple);">
+          <div class="roadmap-header">
+            <div class="roadmap-title">Phase 4: Structured AST & Bytecode / IR Generation</div>
+            <span class="status-tag tag-warning">Future Enhancement</span>
+          </div>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">
+            Optional future evolution: Transition from node-based interpreted walking to a clean two-pass compiler producing linear stack bytecode or an SSA-form intermediate representation for higher performance and JIT compilation.
           </p>
         </div>
       </div>

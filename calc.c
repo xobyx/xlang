@@ -460,33 +460,64 @@ static void apply_operator(type_def* type, void* memory, int count, char* op, va
 			fprintf(stderr, "ERROR: division by zero\n");
 			return;
 		}
+		else if (*op == '^')
+		{
+			*mx = *mx ^ to;
+		}
 		MATH_OPERATORS
 	}
 	else if (type == T_FLOAT)
 	{
-		apply_float_operator((float*)memory + last, *operand->value_float, op);
+		float to = 0.0f;
+		if (operand->type_define == T_FLOAT && operand->value_float != NULL)
+			to = *operand->value_float;
+		else if (operand->type_define == T_INT && operand->value_int != NULL)
+			to = (float)*operand->value_int;
+		else if (operand->type_define == T_LONG && operand->value_long != NULL)
+			to = (float)*operand->value_long;
+		else if (operand->value_float != NULL)
+			to = *operand->value_float;
+		apply_float_operator((float*)memory + last, to, op);
 	}
 	else if (type == T_LONG)
 	{
 		long* mx = (long*)memory + last;
-		long to = *operand->value_long;
+		long to = 0;
+		if (operand->type_define == T_LONG && operand->value_long != NULL)
+			to = *operand->value_long;
+		else if (operand->type_define == T_INT && operand->value_int != NULL)
+			to = (long)*operand->value_int;
+		else if (operand->type_define == T_BOOL && operand->value_bool != NULL)
+			to = *operand->value_bool ? 1 : 0;
+		else if (operand->value_long != NULL)
+			to = *operand->value_long;
 		if ((*op == '/' || *op == '%') && to == 0)
 		{
 			fprintf(stderr, "ERROR: division by zero\n");
 			return;
+		}
+		else if (*op == '^')
+		{
+			*mx = *mx ^ to;
 		}
 		MATH_OPERATORS
 	}
 	else if (type == T_CHAR)
 	{
 		char* mx = (char*)memory + last;
-		char to = *operand->value_char_ptr;
+		char to = (operand->value_char_ptr != NULL) ? *operand->value_char_ptr : 0;
 		MATH_OPERATORS
 	}
 	else if (type == T_BOOL)
 	{
 		bool* mx = (bool*)memory + last;
-		bool to = *operand->value_bool;
+		bool to = false;
+		if (operand->type_define == T_BOOL && operand->value_bool != NULL)
+			to = *operand->value_bool;
+		else if (operand->type_define == T_INT && operand->value_int != NULL)
+			to = (*operand->value_int != 0);
+		else if (operand->value_bool != NULL)
+			to = *operand->value_bool;
 		BOOL_OPERATORS
 	}
 	else if (type == T_STRING)
@@ -554,6 +585,156 @@ static void apply_operator(type_def* type, void* memory, int count, char* op, va
 }
 
 /* ------------------------------------------------------------------------- */
+/* operator precedence & binary reduction                                    */
+/* ------------------------------------------------------------------------- */
+
+#define MAX_EXPR_DEPTH 128
+
+static int get_op_precedence(const char* op)
+{
+	if (op == NULL) return 0;
+	if (op[0] == '*' || op[0] == '/' || op[0] == '%')
+		return 10;
+	if (op[0] == '+' || op[0] == '-')
+		return 9;
+	if ((op[0] == '<' && op[1] == '<') || (op[0] == '>' && op[1] == '>'))
+		return 8;
+	if ((op[0] == '<' && op[1] == '=') || (op[0] == '>' && op[1] == '='))
+		return 7;
+	if ((op[0] == '<' || op[0] == '>') && op[1] == '\0')
+		return 7;
+	if ((op[0] == '=' && op[1] == '=') || (op[0] == '!' && op[1] == '='))
+		return 6;
+	if (op[0] == '&' && op[1] == '\0')
+		return 5;
+	if (op[0] == '^' && op[1] == '\0')
+		return 4;
+	if (op[0] == '|' && op[1] == '\0')
+		return 3;
+	if (op[0] == '&' && op[1] == '&')
+		return 2;
+	if (op[0] == '|' && op[1] == '|')
+		return 1;
+	return 0;
+}
+
+static bool is_comparison_op(const char* op)
+{
+	if (op == NULL) return false;
+	if (op[0] == '=' && op[1] == '=') return true;
+	if (op[0] == '!' && op[1] == '=') return true;
+	if (op[0] == '<' && op[1] != '<') return true;
+	if (op[0] == '>' && op[1] != '>') return true;
+	if (op[0] == '&' && op[1] == '&') return true;
+	if (op[0] == '|' && op[1] == '|') return true;
+	return false;
+}
+
+static var* eval_binary_op(var* left, const char* op, var* right)
+{
+	if (left == NULL) return right;
+	if (right == NULL) return left;
+
+	const bool is_cmp = is_comparison_op(op);
+
+	/* If right is a string and op is '+', but left is not a string, convert left to string */
+	if (*op == '+' && left->type_define != T_STRING && right->type_define == T_STRING)
+	{
+		char lbuf[64];
+		const char* lstr = "";
+		if (left->type_define == T_INT && left->value_int != NULL)
+		{
+			snprintf(lbuf, sizeof(lbuf), "%d", *left->value_int);
+			lstr = lbuf;
+		}
+		else if (left->type_define == T_FLOAT && left->value_float != NULL)
+		{
+			snprintf(lbuf, sizeof(lbuf), "%g", *left->value_float);
+			lstr = lbuf;
+		}
+		else if (left->type_define == T_LONG && left->value_long != NULL)
+		{
+			snprintf(lbuf, sizeof(lbuf), "%ld", *left->value_long);
+			lstr = lbuf;
+		}
+		else if (left->type_define == T_BOOL && left->value_bool != NULL)
+		{
+			lstr = *left->value_bool ? "true" : "false";
+		}
+		else if (left->type_define == T_CHAR && left->value_char_ptr != NULL)
+		{
+			lbuf[0] = *left->value_char_ptr;
+			lbuf[1] = '\0';
+			lstr = lbuf;
+		}
+		var* sleft = new_temp_var(T_STRING);
+		sleft->size = 1;
+		sleft->values = install_memory_with_type(T_STRING, 1);
+		const size_t llen = strlen(lstr);
+		char* scopy = (char*)gc_malloc(llen + 1, GC_KIND_STRING);
+		if (scopy != NULL)
+		{
+			memcpy(scopy, lstr, llen + 1);
+			((char**)sleft->values)[0] = scopy;
+		}
+		left = sleft;
+	}
+
+	/* Float comparison handling */
+	if (is_cmp && (left->type_define == T_FLOAT || right->type_define == T_FLOAT))
+	{
+		float lval = (left->type_define == T_FLOAT && left->value_float != NULL) ? *left->value_float : (float)(left->value_int != NULL ? *left->value_int : 0);
+		float rval = (right->type_define == T_FLOAT && right->value_float != NULL) ? *right->value_float : (float)(right->value_int != NULL ? *right->value_int : 0);
+		bool match = false;
+		if (op[0] == '=' && op[1] == '=') match = (lval == rval);
+		else if (op[0] == '!' && op[1] == '=') match = (lval != rval);
+		else if (op[0] == '<' && op[1] == '=') match = (lval <= rval);
+		else if (op[0] == '>' && op[1] == '=') match = (lval >= rval);
+		else if (op[0] == '<') match = (lval < rval);
+		else if (op[0] == '>') match = (lval > rval);
+
+		var* res = new_temp_var(T_BOOL);
+		res->size = 1;
+		res->values = install_memory_with_type(T_BOOL, 1);
+		if (res->values != NULL)
+			*(bool*)res->values = match;
+		return res;
+	}
+
+	type_def* res_type = left->type_define;
+	if (res_type == NULL)
+		res_type = right->type_define != NULL ? right->type_define : T_INT;
+
+	var* res = new_temp_var(res_type);
+	res->size = 1;
+	res->values = install_memory_with_type(res_type, 1);
+	int count = 0;
+	move(res, res->values, &count, left);
+
+	char op_copy[4] = {0};
+	snprintf(op_copy, sizeof(op_copy), "%s", op);
+	apply_operator(res->type_define, res->values, 1, op_copy, right);
+
+	if (is_cmp)
+		res->type_define = T_BOOL;
+
+	return res;
+}
+
+static void reduce_one_op(var** val_stack, int* val_top, char op_stack[][4], int* op_top)
+{
+	if (*op_top <= 0 || *val_top < 2)
+		return;
+
+	char* op = op_stack[--(*op_top)];
+	var* right = val_stack[--(*val_top)];
+	var* left = val_stack[--(*val_top)];
+
+	var* res = eval_binary_op(left, op, right);
+	val_stack[(*val_top)++] = res;
+}
+
+/* ------------------------------------------------------------------------- */
 /* expression evaluation                                                     */
 /* ------------------------------------------------------------------------- */
 
@@ -561,10 +742,16 @@ node* calc(node* cnode, fcall* calling_function, var* calling_object, node_type 
            var* calc_result)
 {
 	node* mnode = cnode;
-	void* memory = NULL;   /* buffer the result is written into */
-	int count = 0;         /* elements written to `memory` so far */
-	char* op = NULL;       /* pending operator waiting for its right operand */
-	char op_buf[3] = {0};  /* storage for two-character operators such as "==" */
+
+	var* val_stack[MAX_EXPR_DEPTH];
+	int val_top = 0;
+	char op_stack[MAX_EXPR_DEPTH][4];
+	int op_top = 0;
+
+	bool expect_operand = true;
+	bool unary_minus = false;
+	bool unary_not = false;
+	bool is_by_ref = false;
 
 	if (calc_result == NULL)
 		calc_result = new_temp_var(NULL); /* evaluate for side effects only */
@@ -576,9 +763,30 @@ node* calc(node* cnode, fcall* calling_function, var* calling_object, node_type 
 		if (stop_here(stop_in_type, stop_in_node, mnode))
 			break;
 
+		if (expect_operand && !is_double_oprater(mnode) && (mnode->type_ == operators_n || is_double_equle(mnode)))
+		{
+			if (mnode->value_char_ptr != NULL && *mnode->value_char_ptr == '-')
+			{
+				unary_minus = !unary_minus;
+				step(&mnode);
+				continue;
+			}
+			else if (mnode->value_char_ptr != NULL && *mnode->value_char_ptr == '!')
+			{
+				unary_not = !unary_not;
+				step(&mnode);
+				continue;
+			}
+			else if (mnode->value_char_ptr != NULL && *mnode->value_char_ptr == '+')
+			{
+				step(&mnode);
+				continue;
+			}
+		}
+
 		if (mnode->type_ & (var_name | value | parentheses4 | itype))
 		{
-			const bool by_ref = mnode->type_ == var_name && mnode->opt_name_type == var_call_ref;
+			const bool by_ref = (val_top == 0 && mnode->type_ == var_name && mnode->opt_name_type == var_call_ref);
 			node* before = mnode;
 			var* operand = name_exp(&mnode, calling_function, calling_object, stop_in_type, stop_in_node);
 
@@ -586,77 +794,91 @@ node* calc(node* cnode, fcall* calling_function, var* calling_object, node_type 
 			{
 				if (mnode == before) /* always make progress */
 					step(&mnode);
-				op = NULL;
 				continue;
 			}
 
-			if (op == NULL)
+			if (unary_minus)
 			{
-				setup_t2(calc_result, operand);
-
-				if (memory == NULL)
-				{
-					if (by_ref)
-						memory = operand->values;
-					else
-						memory = calc_result->values != NULL ? calc_result->values : install_memory(calc_result);
-				}
-
-				if (memory != NULL)
-					move(calc_result, memory, &count, operand);
+				var* neg = new_temp_var(operand->type_define);
+				neg->size = 1;
+				neg->values = install_memory_with_type(operand->type_define, 1);
+				int c = 0;
+				move(neg, neg->values, &c, operand);
+				if (neg->type_define == T_INT && neg->value_int != NULL)
+					*neg->value_int = -(*neg->value_int);
+				else if (neg->type_define == T_FLOAT && neg->value_float != NULL)
+					*neg->value_float = -(*neg->value_float);
+				else if (neg->type_define == T_LONG && neg->value_long != NULL)
+					*neg->value_long = -(*neg->value_long);
+				operand = neg;
+				unary_minus = false;
 			}
-			else if (count == 0 && *op == '-')
+
+			if (unary_not)
 			{
-				setup_t2(calc_result, operand);
+				bool bval = false;
+				if (operand->type_define == T_BOOL && operand->value_bool != NULL)
+					bval = *operand->value_bool;
+				else if (operand->type_define == T_INT && operand->value_int != NULL)
+					bval = (*operand->value_int != 0);
+				else if (operand->value_bool != NULL)
+					bval = *operand->value_bool;
 
-				if (memory == NULL)
-				{
-					if (by_ref)
-						memory = operand->values;
-					else
-						memory = calc_result->values != NULL ? calc_result->values : install_memory(calc_result);
-				}
-
-				if (operand->type_define == T_INT && operand->value_int != NULL)
-					*operand->value_int = -(*operand->value_int);
-				else if (operand->type_define == T_FLOAT && operand->value_float != NULL)
-					*operand->value_float = -(*operand->value_float);
-				else if (operand->type_define == T_LONG && operand->value_long != NULL)
-					*operand->value_long = -(*operand->value_long);
-
-				if (memory != NULL)
-					move(calc_result, memory, &count, operand);
-				op = NULL;
+				var* not_var = new_temp_var(T_BOOL);
+				not_var->size = 1;
+				not_var->values = install_memory_with_type(T_BOOL, 1);
+				if (not_var->values != NULL)
+					*(bool*)not_var->values = !bval;
+				operand = not_var;
+				unary_not = false;
 			}
-			else
-			{
-				bool is_eq = (op != NULL && ((op[0] == '=' && op[1] == '=') || (op[0] == '!' && op[1] == '=')));
-				apply_operator(calc_result->type_define, memory, count, op, operand);
-				if (is_eq && saved_return_type == NULL)
-					calc_result->type_define = T_BOOL;
-				op = NULL;
-			}
+
+			if (by_ref)
+				is_by_ref = true;
+
+			if (val_top < MAX_EXPR_DEPTH)
+				val_stack[val_top++] = operand;
+
+			expect_operand = false;
 		}
 		else if (mnode->type_ == operators_n || is_double_equle(mnode))
 		{
+			char curr_op[4] = {0};
 			if (is_double_oprater(mnode) && mnode->next != NULL && mnode->value_char_ptr != NULL && mnode->next->value_char_ptr != NULL)
 			{
-				op_buf[0] = *mnode->value_char_ptr;
-				op_buf[1] = *mnode->next->value_char_ptr;
-				op_buf[2] = '\0';
-				op = op_buf;
+				curr_op[0] = *mnode->value_char_ptr;
+				curr_op[1] = *mnode->next->value_char_ptr;
+				curr_op[2] = '\0';
 				step(&mnode);
 				step(&mnode);
 			}
 			else if (mnode->value_char_ptr != NULL)
 			{
-				op = mnode->value_char_ptr;
+				curr_op[0] = *mnode->value_char_ptr;
+				curr_op[1] = '\0';
 				step(&mnode);
 			}
 			else
 			{
 				step(&mnode);
+				continue;
 			}
+
+			int curr_prec = get_op_precedence(curr_op);
+			if (curr_prec == 0)
+				break;
+
+			while (op_top > 0 && get_op_precedence(op_stack[op_top - 1]) >= curr_prec)
+			{
+				reduce_one_op(val_stack, &val_top, op_stack, &op_top);
+			}
+
+			if (op_top < MAX_EXPR_DEPTH)
+			{
+				snprintf(op_stack[op_top++], sizeof(op_stack[0]), "%s", curr_op);
+			}
+
+			expect_operand = true;
 		}
 		else /* unexpected node - skip it */
 		{
@@ -664,11 +886,68 @@ node* calc(node* cnode, fcall* calling_function, var* calling_object, node_type 
 		}
 	}
 
+	while (op_top > 0 && val_top >= 2)
+	{
+		reduce_one_op(val_stack, &val_top, op_stack, &op_top);
+	}
+
+	var* final_val = (val_top > 0) ? val_stack[0] : NULL;
+
+	if (final_val != NULL)
+	{
+		if (is_by_ref)
+		{
+			calc_result->values = final_val->values;
+			calc_result->type_define = final_val->type_define;
+		}
+		else if (calc_result->values != NULL)
+		{
+			int count = 0;
+			setup_t2(calc_result, final_val);
+			if (saved_return_type == T_BOOL)
+			{
+				bool bval = false;
+				if (final_val->type_define == T_BOOL && final_val->value_bool != NULL)
+					bval = *final_val->value_bool;
+				else if (final_val->type_define == T_INT && final_val->value_int != NULL)
+					bval = (*final_val->value_int != 0);
+				else if (final_val->value_bool != NULL)
+					bval = *final_val->value_bool;
+				((bool*)calc_result->values)[0] = bval;
+			}
+			else
+			{
+				move(calc_result, calc_result->values, &count, final_val);
+			}
+		}
+		else
+		{
+			if (saved_return_type == T_BOOL)
+			{
+				bool bval = false;
+				if (final_val->type_define == T_BOOL && final_val->value_bool != NULL)
+					bval = *final_val->value_bool;
+				else if (final_val->type_define == T_INT && final_val->value_int != NULL)
+					bval = (*final_val->value_int != 0);
+				else if (final_val->value_bool != NULL)
+					bval = *final_val->value_bool;
+				bool* bmem = (bool*)install_memory_with_type(T_BOOL, 1);
+				if (bmem != NULL)
+					*bmem = bval;
+				calc_result->values = bmem;
+				calc_result->type_define = T_BOOL;
+			}
+			else
+			{
+				calc_result->values = final_val->values;
+				calc_result->type_define = final_val->type_define;
+				calc_result->size = final_val->size;
+			}
+		}
+	}
+
 	if (saved_return_type != NULL)
 		calc_result->type_define = saved_return_type;
-
-	if (memory != NULL)
-		calc_result->values = memory;
 
 	return mnode;
 }

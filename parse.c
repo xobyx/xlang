@@ -1187,7 +1187,8 @@ void parse_line(char* buff, node* n_node, const int line)
 
 				if (n_node->parent != NULL && n_node->parent->type_ == operators_n)
 				{
-					if (*(char*)n_node->value_raw == *(char*)n_node->parent->value_raw)
+					if (*(char*)n_node->value_raw == *(char*)n_node->parent->value_raw ||
+					    *(char*)n_node->value_raw == '-' || *(char*)n_node->value_raw == '+')
 					{
 						next->type_ = var_name | value |parentheses4;
 						inherit_parent_flag(n_node, next);

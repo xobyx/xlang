@@ -1495,8 +1495,22 @@ bool is_double_equle(node* mnode)
 
 bool is_double_oprater(node* mnode)
 {
-	return (mnode->type_ == operators_n && (mnode->next->type_ == operators_n || mnode->next->type_ == equles))
-		|| (mnode->type_ == equles && mnode->next->type_ == equles);
+	if (mnode == NULL || mnode->next == NULL || mnode->value_char_ptr == NULL || mnode->next->value_char_ptr == NULL)
+		return false;
+
+	char c1 = *mnode->value_char_ptr;
+	char c2 = *mnode->next->value_char_ptr;
+
+	if (c1 == '=' && c2 == '=') return true; /* == */
+	if (c1 == '!' && c2 == '=') return true; /* != */
+	if (c1 == '<' && c2 == '=') return true; /* <= */
+	if (c1 == '>' && c2 == '=') return true; /* >= */
+	if (c1 == '<' && c2 == '<') return true; /* << */
+	if (c1 == '>' && c2 == '>') return true; /* >> */
+	if (c1 == '&' && c2 == '&') return true; /* && */
+	if (c1 == '|' && c2 == '|') return true; /* || */
+
+	return false;
 }
 
 
