@@ -1,5 +1,5 @@
 #include "parse.h"
-#include "pcre_fuction.h"
+#include "lexer.h"
 
 
 //[if[0],for[1],while[2],do[3],else[4],print[5],return[6]]
@@ -210,7 +210,7 @@ void parse_line(char* buff, node* n_node, const int line)
 	if (n_node->btype.node_type_bit.itype)
 	{
 		type_def* m_type = NULL;
-		find* mfind = match("^(\\b\\w+)", buff);
+		find* mfind = lex_match_word(buff);
 		if (mfind->isFind)
 			m_type = get_type_by_name(mfind->bn);
 
@@ -700,8 +700,8 @@ void parse_line(char* buff, node* n_node, const int line)
 			parse_line(buff + 2, next, line);
 			return;
 		}
-		find* mfind = match("^\"([^\"\\\\]*(?:\\\\.[^\"\\\\]*)*)\"", buff);
-		if (mfind->isFind && *(buff + 1) == *mfind->bn)
+		find* mfind = lex_match_string(buff);
+		if (mfind->isFind)
 
 		{
 			if (n_node->is_flagged)
@@ -726,8 +726,8 @@ void parse_line(char* buff, node* n_node, const int line)
 			
 			return;
 		}
-		mfind = match("^\'(.{1,2})\'",buff);
-		if(mfind->isFind && *(buff + 1) == *mfind->bn)
+		mfind = lex_match_char(buff);
+		if(mfind->isFind)
 		{
 			if (n_node->is_flagged)
 			{
@@ -751,8 +751,8 @@ void parse_line(char* buff, node* n_node, const int line)
 			parse_line(buff +len + 2, next, line);
 			return;
 		}
-		mfind = match("^(false|true)", buff);
-		if (mfind->isFind && *buff == *mfind->bn)
+		mfind = lex_match_bool(buff);
+		if (mfind->isFind)
 		{
 			if (n_node->is_flagged)
 			{
@@ -787,7 +787,7 @@ void parse_line(char* buff, node* n_node, const int line)
 		//}
 		if ((*buff >= 48 && *buff <= 57) || *buff == 46)
 		{
-			mfind = match("^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)", buff);
+			mfind = lex_match_number(buff);
 			if (mfind->isFind)
 			{
 				// parse   "\d+";
@@ -833,7 +833,7 @@ void parse_line(char* buff, node* n_node, const int line)
 	if (n_node->btype.node_type_bit.var_name)
 	{
 		//?([0-9|A-Z|a-z_]+[_0-9|A-Z|a-z]+)[ \n]
-		find* mfind = match("^(&?[a-zA-Z_]?[a-zA-Z_0-9]+)", buff);//var name
+		find* mfind = lex_match_var_name(buff);//var name
 
 		
 		if (mfind->isFind && *mfind->bn == *buff && strcmp(mfind->bn, "string") != 0)
