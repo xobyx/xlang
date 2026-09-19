@@ -13,6 +13,10 @@ __  __   ___   | |__    _   _  __  __
 #include<unistd.h>
 #endif
 #include <time.h>
+#include "xsys.h"
+#include "xcollection.h"
+#include "ximport.h"
+#include "xgc.h"
 clock_t t;
 //C:\Tests\t.xb
 bool load_saved_code = false;
@@ -28,9 +32,6 @@ bool save_code = false;
 int print_parse_log = 1;
 
 #define STR_VALUE(val) #val
-
-
-char* g = STR_VALUE("int") "ds";
 
 
 void start_compile(void);
@@ -56,16 +57,17 @@ int fopen_s(FILE **f, const char *name, const char *mode) {
 #endif
 int GetDir(const char* full_path, char* dir)
 {
+	if (full_path == NULL || dir == NULL) return 0;
 	char buff2[1024] = { 0 };
 	int buffCounter = 0;
 	int dirSymbolCounter = 0;
 
 	for (unsigned int i = 0; i < strlen(full_path); i++)
 	{
-		if (full_path[i] != L'\\')
+		if (full_path[i] != '\\' && full_path[i] != '/')
 		{
 			const int buff_size = 1024;
-			if (buffCounter < buff_size) buff2[buffCounter++] = full_path[i];
+			if (buffCounter < buff_size - 1) buff2[buffCounter++] = full_path[i];
 			else return -1;
 		}
 		else
@@ -80,46 +82,44 @@ int GetDir(const char* full_path, char* dir)
 			buffCounter = 0;
 		}
 	}
-
+	dir[dirSymbolCounter] = '\0';
 	return dirSymbolCounter;
 }
 
 extern var_stack var_start_stack;
+extern func_stack base_function;
+extern type_stack simple_type_stack;
+
 void int_xlang()
 {
 	nodes = (node_stack*)malloc(sizeof(node_stack));
 	varss = &var_start_stack;
-	funcs = (func_stack*)malloc(sizeof(func_stack));
-	types = (type_stack*)malloc(sizeof(type_stack));
+	funcs = &base_function;
+	types = &simple_type_stack;
 
 	t_varss = (var_stack*)malloc(sizeof(var_stack));
 	t_funcs = (func_stack*)malloc(sizeof(func_stack));
 	debuge = init_debug();
 	stack_init(nodes);
-	///var_stack_init(varss);
 	var_stack_init(t_varss);
-	func_stack_init(funcs);
 	func_stack_init(t_funcs);
-	type_stack_init(types);
-
 
 	install_default_types();
 	install_default_functions();
-	
-
+	x_collections_init();
+	x_import_init();
+	gc_init();
 }
-
-bool b;
 
 
 void change_dir(char** argv)
 {
-
 	char* dir = (char*)malloc(1024);
 	memset(dir, 0, 1024);
-	GetDir(argv[1], dir);
-	_chdir(dir);
-
+	if (GetDir(argv[1], dir) > 0)
+	{
+		_chdir(dir);
+	}
 	free(dir);
 }
 
@@ -141,12 +141,14 @@ void interupter(void)
 		if (unclosed)
 		{
 			printf("\n...");
-			gets_s(txt, 500);
+			if (fgets(txt, 500, stdin) == NULL)
+				break;
 		}
 		else
 		{
 			printf("\n>>>");
-			gets_s(txt, 500);
+			if (fgets(txt, 500, stdin) == NULL)
+				break;
 		}
 
 
@@ -162,16 +164,23 @@ int main(const int argc, char** argv)
 	if (argc == 1)
 	{
 		interupter();
+		clean_memory();
+		return 0;
 	}
-	if (argc == 3)  // xlang file
-		b = false;
-	
+
+	if (argc > 2)
+	{
+		g_script_argc = argc - 2;
+		g_script_argv = argv + 2;
+	}
+	else
+	{
+		g_script_argc = 0;
+		g_script_argv = NULL;
+	}
 
 	FILE* code_file = NULL;
 	FILE* saved_code_file = NULL;
-
-	change_dir(argv);
-
 
 	errno_t code_file_status = fopen_s(&code_file, argv[1], "r");
 	errno_t saved_code_file_status;
@@ -182,6 +191,8 @@ int main(const int argc, char** argv)
 	}
 	buff = get_file_buffer(code_file);
 	fclose(code_file);
+
+	change_dir(argv);
 
 
 
@@ -231,10 +242,10 @@ int main(const int argc, char** argv)
 
 
 	//getchar();
-	///getchar();
 	free(saved_code_file_path);
 	free(buff);
-	//	_CrtDumpMemoryLeaks();
+	clean_memory();
+	return 0;
 }
 
 
@@ -244,12 +255,22 @@ void clean_memory(void)
 {
 	clean_stack(nodes);
 	var_clean_stack(varss);
+	var_clean_stack(t_varss);
 	func_clean_stack(funcs);
+	func_clean_stack(t_funcs);
 	type_clean_stack(types);
 	free(nodes);
-	free(varss);
-	free(funcs);
-	free(types);
+	if (varss != &var_start_stack)
+		free(varss);
+	if (funcs != &base_function)
+		free(funcs);
+	if (types != &simple_type_stack)
+		free(types);
+	free(t_varss);
+	free(t_funcs);
+	x_collections_cleanup();
+	x_import_cleanup();
+	gc_cleanup();
 }
 
 void start_compile(void)

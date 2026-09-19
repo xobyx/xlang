@@ -1,0 +1,33 @@
+int x = 15
+if(x == 10){
+print(1)
+}
+eif(x == 15){
+print(2)
+}
+else{
+print(3)
+}
+bool b1 = x > 10
+bool b2 = x < 20
+if(b1){
+print(100)
+}
+if(b2){
+print(200)
+}
+
+int loop_i = 0
+int sum_even = 0
+int sum_odd = 0
+while (loop_i < 6) {
+    if (loop_i % 2 == 0) {
+        sum_even = sum_even + loop_i
+    }
+    else {
+        sum_odd = sum_odd + loop_i
+    }
+    loop_i = loop_i + 1
+}
+print(sum_even)
+print(sum_odd)

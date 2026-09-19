@@ -1,0 +1,235 @@
+import "map.xb"
+import "list.xb"
+import "file.xb"
+
+int str_to_int(string s) {
+    List _c
+    _c.add(s)
+    return _c.get_int(0)
+}
+
+string row_get(string row, string col) {
+    string target = col + "="
+    int pos = index_of(row, target)
+    if (pos < 0) {
+        return ""
+    }
+    int val_start = pos + target.len()
+    string rest = substr(row, val_start, row.len() - val_start)
+    int semi = index_of(rest, ";")
+    if (semi >= 0) {
+        return substr(rest, 0, semi)
+    }
+    return rest
+}
+
+class Table() {
+    string table_name
+    string pk_col
+    List rows
+    Map pk_index
+    string sec_col
+    Map sec_index
+
+    Table() {
+        table_name = "default"
+        pk_col = "id"
+        sec_col = ""
+    }
+
+    int init(string name_val, string pk_name) {
+        table_name = name_val
+        pk_col = pk_name
+        sec_col = ""
+        return 0
+    }
+
+    int create_index(string col_name) {
+        sec_col = col_name
+        return 0
+    }
+
+    int insert(string row_str) {
+        string pk_val = row_get(row_str, pk_col)
+        if (pk_val.len() == 0) {
+            return -1
+        }
+
+        # Constraint check: Unique primary key
+        if (pk_index.has(pk_val) != 0) {
+            return -2
+        }
+
+        int row_idx = rows.size()
+        rows.add(row_str)
+        pk_index.set_int(pk_val, row_idx)
+
+        # Update secondary index if configured
+        if (sec_col.len() > 0) {
+            string sec_val = row_get(row_str, sec_col)
+            if (sec_val.len() > 0) {
+                string s_idx = sec_col + ":" + sec_val
+                if (sec_index.has(s_idx) != 0) {
+                    string prev = sec_index.get(s_idx)
+                    sec_index.set(s_idx, prev + "," + row_idx)
+                }
+                else {
+                    sec_index.set(s_idx, "" + row_idx)
+                }
+            }
+        }
+        return 0
+    }
+
+    string find_by_pk(string pk_val) {
+        if (pk_index.has(pk_val) == 0) {
+            return ""
+        }
+        int idx = pk_index.get_int(pk_val)
+        return rows.get(idx)
+    }
+
+    List select_where_eq(string col_name, string target_val) {
+        List results
+        int sz = rows.size()
+
+        # Fast path: use secondary index if available
+        if (col_name == sec_col) {
+            string s_idx = sec_col + ":" + target_val
+            if (sec_index.has(s_idx) == 0) {
+                return results
+            }
+            string idx_str = sec_index.get(s_idx)
+            string rem = idx_str
+            int comma_pos = 0
+            string cur_idx_str = ""
+            int cur_row_idx = 0
+            while (rem.len() > 0) {
+                comma_pos = index_of(rem, ",")
+                if (comma_pos >= 0) {
+                    cur_idx_str = substr(rem, 0, comma_pos)
+                    rem = substr(rem, comma_pos + 1, rem.len() - comma_pos - 1)
+                }
+                else {
+                    cur_idx_str = rem
+                    rem = ""
+                }
+                cur_row_idx = str_to_int(cur_idx_str)
+                results.add(rows.get(cur_row_idx))
+            }
+            return results
+        }
+
+        # Fallback: full table scan
+        int i = 0
+        string r = ""
+        while (i < sz) {
+            r = rows.get(i)
+            if (row_get(r, col_name) == target_val) {
+                results.add(r)
+            }
+            i = i + 1
+        }
+        return results
+    }
+
+    List select_where_gt(string col_name, int threshold) {
+        List results
+        int sz = rows.size()
+        int i = 0
+        string r = ""
+        int val = 0
+        while (i < sz) {
+            r = rows.get(i)
+            val = str_to_int(row_get(r, col_name))
+            if (val > threshold) {
+                results.add(r)
+            }
+            i = i + 1
+        }
+        return results
+    }
+
+    int sum(string col_name) {
+        int total = 0
+        int sz = rows.size()
+        int i = 0
+        string r = ""
+        while (i < sz) {
+            r = rows.get(i)
+            total = total + str_to_int(row_get(r, col_name))
+            i = i + 1
+        }
+        return total
+    }
+
+    int avg(string col_name) {
+        int sz = rows.size()
+        if (sz == 0) {
+            return 0
+        }
+        return sum(col_name) / sz
+    }
+
+    int count() {
+        return rows.size()
+    }
+
+    string get_row(int index) {
+        if (index < 0) {
+            return ""
+        }
+        if (index >= rows.size()) {
+            return ""
+        }
+        return rows.get(index)
+    }
+
+    int export_csv(string file_path) {
+        string dump = ""
+        int sz = rows.size()
+        int i = 0
+        while (i < sz) {
+            dump = dump + rows.get(i) + "\n"
+            i = i + 1
+        }
+        file_write_all(file_path, dump)
+        return sz
+    }
+
+    int import_csv(string file_path) {
+        if (file_exists(file_path) == 0) {
+            return 0
+        }
+        string content = file_read_all(file_path)
+        string rem = content
+        int imported = 0
+        int nl = 0
+        string line = ""
+
+        while (rem.len() > 0) {
+            nl = index_of(rem, "\n")
+            if (nl >= 0) {
+                line = substr(rem, 0, nl)
+                rem = substr(rem, nl + 1, rem.len() - nl - 1)
+            }
+            else {
+                line = rem
+                rem = ""
+            }
+
+            if (line.len() > 0) {
+                insert(line)
+                imported = imported + 1
+            }
+        }
+        return imported
+    }
+
+    int clear() {
+        rows.clear()
+        pk_index.clear()
+        sec_index.clear()
+        return 0
+    }
+}

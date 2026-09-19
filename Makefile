@@ -16,7 +16,7 @@ CFLAGS = -Wall
 RESINC =
 #LIBDIR = -Lpcre/.libs
 LIB =
-LDFLAGS = -Wl,-Bstatic -lpcre -Wl,-Bdynamic
+LDFLAGS = -L. -Wl,-Bstatic -lpcre -Wl,-Bdynamic -lm
 
 INC_DEBUG = $(INC)
 CFLAGS_DEBUG = $(CFLAGS) -g
@@ -40,9 +40,9 @@ OBJDIR_RELEASE = obj/Release
 DEP_RELEASE =
 OUT_RELEASE = bin/Release/xlang
 
-OBJ_DEBUG = $(OBJDIR_DEBUG)/calc.o $(OBJDIR_DEBUG)/xlang.o $(OBJDIR_DEBUG)/var_stack.o $(OBJDIR_DEBUG)/type_stack.o $(OBJDIR_DEBUG)/stack.o $(OBJDIR_DEBUG)/save.o $(OBJDIR_DEBUG)/compile.o $(OBJDIR_DEBUG)/parse.o $(OBJDIR_DEBUG)/md5.o $(OBJDIR_DEBUG)/functions.o $(OBJDIR_DEBUG)/func_stack.o $(OBJDIR_DEBUG)/debuge.o $(OBJDIR_DEBUG)/echo.o #$(OBJDIR_DEBUG)/http.o
+OBJ_DEBUG = $(OBJDIR_DEBUG)/calc.o $(OBJDIR_DEBUG)/xlang.o $(OBJDIR_DEBUG)/var_stack.o $(OBJDIR_DEBUG)/type_stack.o $(OBJDIR_DEBUG)/stack.o $(OBJDIR_DEBUG)/save.o $(OBJDIR_DEBUG)/compile.o $(OBJDIR_DEBUG)/parse.o $(OBJDIR_DEBUG)/md5.o $(OBJDIR_DEBUG)/functions.o $(OBJDIR_DEBUG)/func_stack.o $(OBJDIR_DEBUG)/debuge.o $(OBJDIR_DEBUG)/echo.o $(OBJDIR_DEBUG)/xsocket.o $(OBJDIR_DEBUG)/xfile.o $(OBJDIR_DEBUG)/xsys.o $(OBJDIR_DEBUG)/xstring.o $(OBJDIR_DEBUG)/xmath.o $(OBJDIR_DEBUG)/xcollection.o $(OBJDIR_DEBUG)/ximport.o $(OBJDIR_DEBUG)/xgc.o #$(OBJDIR_DEBUG)/http.o
 
-OBJ_RELEASE = $(OBJDIR_RELEASE)/calc.o $(OBJDIR_RELEASE)/xlang.o $(OBJDIR_RELEASE)/var_stack.o $(OBJDIR_RELEASE)/type_stack.o $(OBJDIR_RELEASE)/stack.o $(OBJDIR_RELEASE)/save.o $(OBJDIR_RELEASE)/compile.o $(OBJDIR_RELEASE)/parse.o $(OBJDIR_RELEASE)/md5.o $(OBJDIR_RELEASE)/functions.o $(OBJDIR_RELEASE)/func_stack.o $(OBJDIR_RELEASE)/debuge.o $(OBJDIR_RELEASE)/echo.o #$(OBJDIR_RELEASE)/http.o
+OBJ_RELEASE = $(OBJDIR_RELEASE)/calc.o $(OBJDIR_RELEASE)/xlang.o $(OBJDIR_RELEASE)/var_stack.o $(OBJDIR_RELEASE)/type_stack.o $(OBJDIR_RELEASE)/stack.o $(OBJDIR_RELEASE)/save.o $(OBJDIR_RELEASE)/compile.o $(OBJDIR_RELEASE)/parse.o $(OBJDIR_RELEASE)/md5.o $(OBJDIR_RELEASE)/functions.o $(OBJDIR_RELEASE)/func_stack.o $(OBJDIR_RELEASE)/debuge.o $(OBJDIR_RELEASE)/echo.o $(OBJDIR_RELEASE)/xsocket.o $(OBJDIR_RELEASE)/xfile.o $(OBJDIR_RELEASE)/xsys.o $(OBJDIR_RELEASE)/xstring.o $(OBJDIR_RELEASE)/xmath.o $(OBJDIR_RELEASE)/xcollection.o $(OBJDIR_RELEASE)/ximport.o $(OBJDIR_RELEASE)/xgc.o #$(OBJDIR_RELEASE)/http.o
 
 all: debug release
 
@@ -91,7 +91,7 @@ $(OBJDIR_DEBUG)/functions.o: functions.c
 
 $(OBJDIR_DEBUG)/calc.o: calc.c
 	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c calc.c -o $(OBJDIR_DEBUG)/calc.o
-	
+
 $(OBJDIR_DEBUG)/func_stack.o: func_stack.c
 	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c func_stack.c -o $(OBJDIR_DEBUG)/func_stack.o
 
@@ -100,6 +100,30 @@ $(OBJDIR_DEBUG)/debuge.o: debuge.c
 
 $(OBJDIR_DEBUG)/echo.o: echo.c
 	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c echo.c -o $(OBJDIR_DEBUG)/echo.o
+
+$(OBJDIR_DEBUG)/xsocket.o: xsocket.c
+	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c xsocket.c -o $(OBJDIR_DEBUG)/xsocket.o
+
+$(OBJDIR_DEBUG)/xfile.o: xfile.c
+	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c xfile.c -o $(OBJDIR_DEBUG)/xfile.o
+
+$(OBJDIR_DEBUG)/xsys.o: xsys.c
+	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c xsys.c -o $(OBJDIR_DEBUG)/xsys.o
+
+$(OBJDIR_DEBUG)/xstring.o: xstring.c
+	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c xstring.c -o $(OBJDIR_DEBUG)/xstring.o
+
+$(OBJDIR_DEBUG)/xmath.o: xmath.c
+	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c xmath.c -o $(OBJDIR_DEBUG)/xmath.o
+
+$(OBJDIR_DEBUG)/xcollection.o: xcollection.c
+	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c xcollection.c -o $(OBJDIR_DEBUG)/xcollection.o
+
+$(OBJDIR_DEBUG)/ximport.o: ximport.c
+	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c ximport.c -o $(OBJDIR_DEBUG)/ximport.o
+
+$(OBJDIR_DEBUG)/xgc.o: xgc.c
+	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c xgc.c -o $(OBJDIR_DEBUG)/xgc.o
 
 clean_debug:
 	rm -f $(OBJ_DEBUG) $(OUT_DEBUG)
@@ -146,7 +170,7 @@ $(OBJDIR_RELEASE)/md5.o: md5.c
 
 $(OBJDIR_RELEASE)/functions.o: functions.c
 	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c functions.c -o $(OBJDIR_RELEASE)/functions.o
-	
+
 $(OBJDIR_RELEASE)/calc.o: calc.c
 	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c calc.c -o $(OBJDIR_RELEASE)/calc.o
 
@@ -158,10 +182,33 @@ $(OBJDIR_RELEASE)/debuge.o: debuge.c
 
 $(OBJDIR_RELEASE)/echo.o: echo.c
 	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c echo.c -o $(OBJDIR_RELEASE)/echo.o
+
+$(OBJDIR_RELEASE)/xsocket.o: xsocket.c
+	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c xsocket.c -o $(OBJDIR_RELEASE)/xsocket.o
+$(OBJDIR_RELEASE)/xfile.o: xfile.c
+	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c xfile.c -o $(OBJDIR_RELEASE)/xfile.o
+
+$(OBJDIR_RELEASE)/xsys.o: xsys.c
+	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c xsys.c -o $(OBJDIR_RELEASE)/xsys.o
+
+$(OBJDIR_RELEASE)/xstring.o: xstring.c
+	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c xstring.c -o $(OBJDIR_RELEASE)/xstring.o
+
+$(OBJDIR_RELEASE)/xmath.o: xmath.c
+	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c xmath.c -o $(OBJDIR_RELEASE)/xmath.o
+
+$(OBJDIR_RELEASE)/xcollection.o: xcollection.c
+	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c xcollection.c -o $(OBJDIR_RELEASE)/xcollection.o
+
+$(OBJDIR_RELEASE)/ximport.o: ximport.c
+	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c ximport.c -o $(OBJDIR_RELEASE)/ximport.o
+
+$(OBJDIR_RELEASE)/xgc.o: xgc.c
+	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c xgc.c -o $(OBJDIR_RELEASE)/xgc.o
+
 clean_release:
 	rm -f $(OBJ_RELEASE) $(OUT_RELEASE)
 	rm -rf bin/Release
 	rm -rf $(OBJDIR_RELEASE)
 
 .PHONY: before_debug after_debug clean_debug before_release after_release clean_release
-

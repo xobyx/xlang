@@ -1,0 +1,39 @@
+import "list.xb"
+
+List get_fibonacci_sequence(int n) {
+    List sequence
+    if (n <= 0) {
+        return sequence
+    }
+    if (n == 1) {
+        sequence.add_int(0)
+        return sequence
+    }
+
+    # Initialize the sequence with the first two numbers
+    sequence.add_int(0)
+    sequence.add_int(1)
+
+    # Loop to calculate subsequent numbers
+    while (sequence.size() < n) {
+        int sz = sequence.size()
+        int last = sequence.get_int(sz - 1)
+        int prev = sequence.get_int(sz - 2)
+        int next_val = last + prev
+        sequence.add_int(next_val)
+    }
+
+    return sequence
+}
+
+List fib0 = get_fibonacci_sequence(0)
+print(fib0.to_str())
+
+List fib1 = get_fibonacci_sequence(1)
+print(fib1.to_str())
+
+List fib2 = get_fibonacci_sequence(2)
+print(fib2.to_str())
+
+List fib10 = get_fibonacci_sequence(10)
+print(fib10.to_str())

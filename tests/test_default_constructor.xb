@@ -1,0 +1,11 @@
+class Point(){
+int x
+int y
+Point(){
+x = 100
+y = 200
+}
+}
+Point p
+print(p.x)
+print(p.y)

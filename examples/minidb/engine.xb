@@ -1,0 +1,101 @@
+import "table.xb"
+import "map.xb"
+import "list.xb"
+
+class MiniDB() {
+    MiniDB() {
+    }
+
+    List hash_join(Table left_tbl, string left_col, Table right_tbl, string right_col) {
+        List joined_results
+        Map hash_map
+
+        # Phase 1: Build Phase on left table
+        int left_sz = left_tbl.count()
+        int i = 0
+        string l_row = ""
+        string l_key = ""
+        while (i < left_sz) {
+            l_row = left_tbl.get_row(i)
+            l_key = row_get(l_row, left_col)
+            if (l_key.len() > 0) {
+                # Support 1-to-many: accumulate matching rows separated by pipe '|'
+                if (hash_map.has(l_key) != 0) {
+                    string prev_rows = hash_map.get(l_key)
+                    hash_map.set(l_key, prev_rows + "|" + l_row)
+                }
+                else {
+                    hash_map.set(l_key, l_row)
+                }
+            }
+            i = i + 1
+        }
+
+        # Phase 2: Probe Phase on right table
+        int right_sz = right_tbl.count()
+        i = 0
+        string r_row = ""
+        string r_key = ""
+        string matched_lefts = ""
+        string rem = ""
+        int pipe_pos = 0
+        string single_left = ""
+
+        while (i < right_sz) {
+            r_row = right_tbl.get_row(i)
+            r_key = row_get(r_row, right_col)
+
+            if (hash_map.has(r_key) != 0) {
+                matched_lefts = hash_map.get(r_key)
+                rem = matched_lefts
+                while (rem.len() > 0) {
+                    pipe_pos = index_of(rem, "|")
+                    if (pipe_pos >= 0) {
+                        single_left = substr(rem, 0, pipe_pos)
+                        rem = substr(rem, pipe_pos + 1, rem.len() - pipe_pos - 1)
+                    }
+                    else {
+                        single_left = rem
+                        rem = ""
+                    }
+                    # Emit combined record
+                    joined_results.add(single_left + ";" + r_row)
+                }
+            }
+            i = i + 1
+        }
+
+        return joined_results
+    }
+
+    Map group_by_sum(Table tbl, string group_col, string sum_col, List out_groups) {
+        Map group_sums
+        Map group_counts
+        int sz = tbl.count()
+        int i = 0
+        string r = ""
+        string g_val = ""
+        int n_val = 0
+
+        while (i < sz) {
+            r = tbl.get_row(i)
+            g_val = row_get(r, group_col)
+            n_val = str_to_int(row_get(r, sum_col))
+
+            if (g_val.len() > 0) {
+                if (group_sums.has(g_val) != 0) {
+                    group_sums.set_int(g_val, group_sums.get_int(g_val) + n_val)
+                    group_counts.set_int(g_val, group_counts.get_int(g_val) + 1)
+                }
+                else {
+                    group_sums.set_int(g_val, n_val)
+                    group_counts.set_int(g_val, 1)
+                    out_groups.add(g_val)
+                }
+            }
+            i = i + 1
+        }
+
+        return group_sums
+    }
+}

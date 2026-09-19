@@ -1,0 +1,60 @@
+class Socket() {
+    int fd
+
+    Socket() {
+        fd = socket_create("tcp")
+    }
+
+    int connect(string host, int port) {
+        return socket_connect(fd, host, port)
+    }
+
+    int bind(string host, int port) {
+        return socket_bind(fd, host, port)
+    }
+
+    int listen(int backlog) {
+        return socket_listen(fd, backlog)
+    }
+
+    int accept() {
+        return socket_accept(fd)
+    }
+
+    int send(string data) {
+        return socket_send(fd, data)
+    }
+
+    string recv(int max_bytes) {
+        return socket_recv(fd, max_bytes)
+    }
+
+    int close() {
+        return socket_close(fd)
+    }
+
+    int set_timeout(int sec) {
+        return socket_set_timeout(fd, sec)
+    }
+
+    int set_reuseaddr(int enable) {
+        return socket_set_reuseaddr(fd, enable)
+    }
+}
+
+Socket server
+server.set_reuseaddr(1)
+server.bind("127.0.0.1", 19878)
+server.listen(5)
+
+Socket client
+client.connect("127.0.0.1", 19878)
+
+int peer_fd = server.accept()
+client.send("OOP Socket works!")
+string msg = socket_recv(peer_fd, 1024)
+print("OOP Server received: %s", msg)
+
+client.close()
+socket_close(peer_fd)
+server.close()

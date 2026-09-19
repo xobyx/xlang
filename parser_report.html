@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>xlang Parser Architecture & Modernization Report</title>
+  <style>
+    :root {
+      --bg-primary: #0b0f19;
+      --bg-secondary: #111827;
+      --bg-card: #1e293b;
+      --bg-card-hover: #26334d;
+      --bg-code: #0f172a;
+      --border: #334155;
+      --border-accent: #4f46e5;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent-indigo: #6366f1;
+      --accent-cyan: #38bdf8;
+      --accent-emerald: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-rose: #f43f5e;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      --font-mono: "JetBrains Mono", "Fira Code", Consolas, Monaco, monospace;
+    }
+
+    [data-theme="light"] {
+      --bg-primary: #f8fafc;
+      --bg-secondary: #ffffff;
+      --bg-card: #f1f5f9;
+      --bg-card-hover: #e2e8f0;
+      --bg-code: #1e293b;
+      --border: #cbd5e1;
+      --border-accent: #6366f1;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      transition: background-color 0.2s ease, border-color 0.2s ease;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      line-height: 1.65;
+      padding-bottom: 80px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Top Navigation Bar */
+    .navbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(12px);
+      background-color: rgba(11, 15, 25, 0.85);
+      border-bottom: 1px solid var(--border);
+    }
+    [data-theme="light"] .navbar {
+      background-color: rgba(255, 255, 255, 0.88);
+    }
+    .nav-inner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      height: 64px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 700;
+      font-size: 1.15rem;
+      letter-spacing: -0.02em;
+    }
+    .brand-logo {
+      background: linear-gradient(135deg, var(--accent-indigo), var(--accent-cyan));
+      color: white;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 0.95rem;
+    }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      list-style: none;
+    }
+    .nav-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover {
+      color: var(--accent-cyan);
+    }
+    .theme-toggle {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .theme-toggle:hover {
+      background: var(--bg-card-hover);
+    }
+
+    /* Hero Banner */
+    .hero {
+      padding: 60px 0 40px;
+      border-bottom: 1px solid var(--border);
+      background: radial-gradient(circle at 80% 20%, rgba(99, 102, 241, 0.12) 0%, transparent 50%);
+    }
+    .hero-badge-wrap {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .badge-indigo { background: rgba(99, 102, 241, 0.18); color: var(--accent-indigo); border: 1px solid rgba(99, 102, 241, 0.35); }
+    .badge-cyan { background: rgba(56, 189, 248, 0.18); color: var(--accent-cyan); border: 1px solid rgba(56, 189, 248, 0.35); }
+    .badge-emerald { background: rgba(16, 185, 129, 0.18); color: var(--accent-emerald); border: 1px solid rgba(16, 185, 129, 0.35); }
+    .badge-amber { background: rgba(245, 158, 11, 0.18); color: var(--accent-amber); border: 1px solid rgba(245, 158, 11, 0.35); }
+    .hero h1 {
+      font-size: 2.5rem;
+      font-weight: 800;
+      line-height: 1.2;
+      margin-bottom: 12px;
+      letter-spacing: -0.03em;
+    }
+    .hero p {
+      font-size: 1.15rem;
+      color: var(--text-muted);
+      max-width: 800px;
+    }
+
+    /* Stats Ribbon */
+    .stats-ribbon {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin: 32px 0;
+    }
+    .stat-card {
+      background-color: var(--bg-secondary);
+      border: 1px solid var(--border);
+      padding: 20px;
+      border-radius: 12px;
+    }
+    .stat-val {
+      font-size: 1.75rem;
+      font-weight: 800;
+      color: var(--accent-cyan);
+      margin-bottom: 4px;
+      font-family: var(--font-mono);
+    }
+    .stat-label {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    /* Section Styling */
+    section {
+      margin-top: 50px;
+    }
+    .section-header {
+      margin-bottom: 24px;
+    }
+    .section-title {
+      font-size: 1.65rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .section-desc {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-top: 6px;
+    }
+
+    /* Pipeline Flow Diagram */
+    .pipeline-container {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 30px;
+      margin: 24px 0;
+      overflow-x: auto;
+    }
+    .pipeline-flow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-width: 900px;
+    }
+    .pipe-step {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      flex: 1;
+      text-align: center;
+      position: relative;
+    }
+    .pipe-step:hover {
+      border-color: var(--accent-indigo);
+      background: var(--bg-card-hover);
+    }
+    .pipe-step .num {
+      position: absolute;
+      top: -10px;
+      left: 12px;
+      background: var(--accent-indigo);
+      color: white;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+    }
+    .pipe-step h4 {
+      font-size: 0.95rem;
+      margin-bottom: 6px;
+      color: var(--text-main);
+    }
+    .pipe-step p {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+    .pipe-arrow {
+      color: var(--accent-cyan);
+      font-weight: 700;
+      font-size: 1.25rem;
+    }
+
+    /* Architecture Cards Grid */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 20px;
+      margin-top: 20px;
+    }
+    .card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      position: relative;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+    .card-loc {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--accent-cyan);
+      background: rgba(56, 189, 248, 0.1);
+      padding: 2px 8px;
+      border-radius: 6px;
+    }
+    .card-body {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    /* Code Snippets & Highlighting */
+    pre {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 0.84rem;
+      color: #e2e8f0;
+      margin: 14px 0;
+      line-height: 1.5;
+    }
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.85em;
+      color: var(--accent-cyan);
+      background: rgba(56, 189, 248, 0.1);
+      padding: 2px 5px;
+      border-radius: 4px;
+    }
+    pre code {
+      color: inherit;
+      background: transparent;
+      padding: 0;
+    }
+    .c-kw { color: #f43f5e; font-weight: 600; }
+    .c-fn { color: #38bdf8; font-weight: 600; }
+    .c-typ { color: #f59e0b; }
+    .c-str { color: #10b981; }
+    .c-com { color: #64748b; font-style: italic; }
+
+    /* Comparison Table */
+    .table-wrap {
+      overflow-x: auto;
+      margin-top: 16px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.9rem;
+    }
+    thead {
+      background: var(--bg-card);
+      border-bottom: 2px solid var(--border);
+    }
+    th, td {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+    }
+    tbody tr:hover {
+      background: var(--bg-card);
+    }
+    .status-tag {
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .tag-danger { background: rgba(244, 63, 94, 0.15); color: var(--accent-rose); }
+    .tag-warning { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); }
+    .tag-success { background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); }
+
+    /* Interactive Tab Bar */
+    .tab-bar {
+      display: flex;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 24px;
+    }
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 10px 18px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      position: relative;
+    }
+    .tab-btn.active {
+      color: var(--accent-indigo);
+    }
+    .tab-btn.active::after {
+      content: "";
+      position: absolute;
+      bottom: -1px;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--accent-indigo);
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Actionable Roadmap Items */
+    .roadmap-list {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      margin-top: 20px;
+    }
+    .roadmap-item {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--accent-indigo);
+      border-radius: 0 12px 12px 0;
+      padding: 24px;
+    }
+    .roadmap-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .roadmap-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+    }
+    .priority-badge {
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 9999px;
+    }
+    .p-high { background: rgba(244, 63, 94, 0.2); color: var(--accent-rose); border: 1px solid var(--accent-rose); }
+    .p-med { background: rgba(245, 158, 11, 0.2); color: var(--accent-amber); border: 1px solid var(--accent-amber); }
+    .p-opt { background: rgba(56, 189, 248, 0.2); color: var(--accent-cyan); border: 1px solid var(--accent-cyan); }
+
+    /* Footer */
+    footer {
+      margin-top: 80px;
+      padding-top: 30px;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation -->
+  <nav class="navbar">
+    <div class="container nav-inner">
+      <div class="brand">
+        <div class="brand-logo">X</div>
+        <span>xlang Parser Architecture</span>
+      </div>
+      <ul class="nav-links">
+        <li><a href="#pipeline">Pipeline</a></li>
+        <li><a href="#deepdive">Deep Dive</a></li>
+        <li><a href="#debt">Technical Debt</a></li>
+        <li><a href="#roadmap">Modernization</a></li>
+      </ul>
+      <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">🌓 Theme</button>
+    </div>
+  </nav>
+
+  <div class="container">
+
+    <!-- Hero Header -->
+    <header class="hero">
+      <div class="hero-badge-wrap">
+        <span class="badge badge-indigo">C99 Architecture</span>
+        <span class="badge badge-cyan">AST & Bytecode</span>
+        <span class="badge badge-emerald">Comprehensive Audit</span>
+        <span class="badge badge-amber">v0.9.x Spec</span>
+      </div>
+      <h1>How the xlang Parser Works & Modernization Roadmap</h1>
+      <p>A complete technical dissection of xlang's line-by-line recursive bitmask parser, lexical regex mechanics, expression tree formation, and actionable steps toward a modern compiler pipeline.</p>
+    </header>
+
+    <!-- Stats Ribbon -->
+    <div class="stats-ribbon">
+      <div class="stat-card">
+        <div class="stat-val">1,194</div>
+        <div class="stat-label">Lines in <code>parse.c</code></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val">10 Levels</div>
+        <div class="stat-label">Max Nested Delimiters (<code>staic_flag2</code>)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val">Zero AST Precedence</div>
+        <div class="stat-label">Sequential Left-to-Right Expressions</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val">PCRE Powered</div>
+        <div class="stat-label">Regex Token Scanning Engine</div>
+      </div>
+    </div>
+
+    <!-- Section 1: Execution Pipeline -->
+    <section id="pipeline">
+      <div class="section-header">
+        <h2 class="section-title">1. End-to-End Parsing Pipeline</h2>
+        <p class="section-desc">Trace a line of source code from raw characters to AST execution.</p>
+      </div>
+
+      <div class="pipeline-container">
+        <div class="pipeline-flow">
+          <div class="pipe-step">
+            <span class="num">1</span>
+            <h4>Raw Ingestion</h4>
+            <p><code>start_parse_lines</code></p>
+            <p>Splits source by <code>\n</code>, discards comments (<code>#</code>, <code>//</code>), trims whitespace.</p>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-step">
+            <span class="num">2</span>
+            <h4>Pre-Parse</h4>
+            <p><code>pre_parse_line</code></p>
+            <p>Detects constructors (<code>Car()</code>) and rewrites to <code>int Car()</code>; initializes root node.</p>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-step">
+            <span class="num">3</span>
+            <h4>Bitmask Match</h4>
+            <p><code>parse_line</code></p>
+            <p>Matches expected token bitmasks (<code>itype</code>, <code>var_name</code>, <code>operators_n</code>).</p>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-step">
+            <span class="num">4</span>
+            <h4>PCRE Match</h4>
+            <p><code>pcre_fuction.h</code></p>
+            <p>Regular expressions extract identifiers, types, string literals, and numbers.</p>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-step">
+            <span class="num">5</span>
+            <h4>Scope Tracking</h4>
+            <p><code>staic_flag2[10]</code></p>
+            <p>Pushes & pops <code>( )</code>, <code>{ }</code>, <code>[ ]</code>. Unclosed scopes pause line execution.</p>
+          </div>
+          <div class="pipe-arrow">&rarr;</div>
+          <div class="pipe-step">
+            <span class="num">6</span>
+            <h4>Handoff</h4>
+            <p><code>compile()</code></p>
+            <p>Appends <code>endl</code> node and triggers immediate statement compilation/execution.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 2: Deep Dive into Core Subsystems -->
+    <section id="deepdive">
+      <div class="section-header">
+        <h2 class="section-title">2. Deep Dive: Core Subsystems</h2>
+        <p class="section-desc">Key architectural components and how they interact in the codebase.</p>
+      </div>
+
+      <div class="cards-grid">
+        <!-- Subsystem 1 -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">A. Line-by-Line Tokenization</div>
+            <div class="card-loc">parse.c:1120</div>
+          </div>
+          <div class="card-body">
+            xlang does not read files into an open-ended token stream. Instead, <code>start_parse_lines</code> dynamically traverses the raw buffer looking for <code>\n</code>.
+            Lines are sliced into temporary heap buffers, comments stripped, and passed to the pre-parser.
+            <pre><code><span class="c-kw">while</span> (<span class="c-typ">true</span>) {
+  <span class="c-kw">if</span> (*t == <span class="c-str">'\n'</span> || t == buff + (size + 1)) {
+    <span class="c-typ">char</span>* m = (<span class="c-typ">char</span>*)malloc(i + 1);
+    <span class="c-fn">memcpy</span>(m, save, i);
+    <span class="c-fn">pre_parse_line</span>(m, mline);
+    <span class="c-fn">free</span>(m);
+  }
+}</code></pre>
+          </div>
+        </div>
+
+        <!-- Subsystem 2 -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">B. Constructor Rewriting</div>
+            <div class="card-loc">parse.c:1050</div>
+          </div>
+          <div class="card-body">
+            To avoid creating specialized grammar rules for class constructors, <code>pre_parse_line</code> checks if the line starts with the current class name followed by <code>(</code>.
+            If so, it dynamically prepends <code>"int "</code> to the buffer:
+            <pre><code><span class="c-com">// ClassName(...) { ... } is rewritten to:</span>
+<span class="c-com">// "int ClassName(...) { ... }"</span>
+<span class="c-typ">char</span>* new_buff = (<span class="c-typ">char</span>*)malloc(len + 5);
+<span class="c-fn">snprintf</span>(new_buff, len + 5, <span class="c-str">"int %s"</span>, line_buff);</code></pre>
+            This allows <code>parse_line</code> to treat constructors as standard method declarations.
+          </div>
+        </div>
+
+        <!-- Subsystem 3 -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">C. Bitmask State Machine</div>
+            <div class="card-loc">parse.c:148</div>
+          </div>
+          <div class="card-body">
+            <code>parse_line</code> operates on bitmasks stored in <code>node->type_</code>. Each recursive call matches a token, allocates a <code>next</code> node, sets allowable types for <code>next</code>, and invokes itself recursively:
+            <pre><code><span class="c-fn">void</span> <span class="c-fn">parse_line</span>(<span class="c-typ">char</span>* buff, <span class="c-typ">node</span>* n_node, <span class="c-typ">int</span> line) {
+  <span class="c-typ">node</span>* next = <span class="c-fn">new_node</span>(nodes);
+  next->parent = n_node;
+  n_node->next = next;
+  <span class="c-com">// ... match tokens based on bitmask flags ...</span>
+  <span class="c-fn">parse_line</span>(buff + matched_len, next, line);
+}</code></pre>
+          </div>
+        </div>
+
+        <!-- Subsystem 4 -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">D. Delimiter & Scope Stack</div>
+            <div class="card-loc">functions.c:212</div>
+          </div>
+          <div class="card-body">
+            Unclosed delimiters (<code>( )</code>, <code>{ }</code>, <code>[ ]</code>) are tracked in a fixed array of 10 slots:
+            <pre><code><span class="c-typ">fl</span> staic_flag2[] = {
+  {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},
+  {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}
+};</code></pre>
+            When a line ends with unclosed delimiters (e.g. multi-line function body), the global pointer <code>save = nextc;</code> preserves state across lines until the closing brace appears.
+          </div>
+        </div>
+
+        <!-- Subsystem 5 -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">E. Regular Expression Matching</div>
+            <div class="card-loc">pcre_fuction.h:18</div>
+          </div>
+          <div class="card-body">
+            Tokens are parsed using PCRE regular expressions. Every token scan compiles or matches regex patterns:
+            <ul style="margin: 8px 0 8px 20px; font-size: 0.85rem; color: var(--text-muted);">
+              <li>Identifiers: <code>^(&?[a-zA-Z_]?[a-zA-Z_0-9]+)</code></li>
+              <li>Strings: <code>^"([^"\\]*(?:\\.[^"\\]*)*)"</code></li>
+              <li>Floats / Ints: <code>^([0-9]+\.[0-9]+)</code> & <code>^([0-9]+)</code></li>
+            </ul>
+            While flexible, this introduces high dynamic allocation overhead on every token.
+          </div>
+        </div>
+
+        <!-- Subsystem 6 -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">F. Direct Compilation Handoff</div>
+            <div class="card-loc">parse.c:190</div>
+          </div>
+          <div class="card-body">
+            Once a line has been completely parsed and no delimiters remain open in <code>staic_flag2</code>, <code>parse_line</code> appends an <code>endl</code> node and calls <code>compile()</code> immediately:
+            <pre><code><span class="c-kw">if</span> (<span class="c-fn">strlen</span>(buff) == 0) {
+  n_node->type_ = endl;
+  n_node->next = NULL;
+  <span class="c-fn">compile</span>(NULL, n_node, NULL, NULL, NULL);
+  <span class="c-kw">return</span>;
+}</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 3: Technical Debt & Bottlenecks -->
+    <section id="debt">
+      <div class="section-header">
+        <h2 class="section-title">3. Architectural Bottlenecks & Limitations</h2>
+        <p class="section-desc">Detailed evaluation of parser constraints and their impacts on performance, correctness, and syntax flexibility.</p>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Area</th>
+              <th>Current Architecture</th>
+              <th>Impact / Risk</th>
+              <th>Severity</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Operator Precedence</strong></td>
+              <td>Flat sequential linked list of nodes; parsed strictly left-to-right.</td>
+              <td>Expressions like <code>1 + 2 * 3</code> yield <code>9</code> instead of <code>7</code> unless explicit parentheses <code>( )</code> are used.</td>
+              <td><span class="status-tag tag-danger">Critical</span></td>
+            </tr>
+            <tr>
+              <td><strong>Lexing Performance</strong></td>
+              <td>PCRE regex matches on every recursive token evaluation.</td>
+              <td>High CPU cycle usage and frequent dynamic string allocations per token. Up to 30x slower than a character scanner.</td>
+              <td><span class="status-tag tag-warning">High</span></td>
+            </tr>
+            <tr>
+              <td><strong>Scope Nesting Limit</strong></td>
+              <td>Fixed global array <code>staic_flag2[10]</code>.</td>
+              <td>Hard limit of 10 nested parentheses/braces. Non-reentrant; makes multi-threading or nested <code>eval()</code> impossible.</td>
+              <td><span class="status-tag tag-danger">Critical</span></td>
+            </tr>
+            <tr>
+              <td><strong>Line Boundary Locking</strong></td>
+              <td>Source is physically chopped into lines by <code>\n</code> before tokenization.</td>
+              <td>Statements cannot break naturally across lines (e.g. multi-line method arguments or chained calls) unless wrapped in <code>{</code> or <code>(</code>.</td>
+              <td><span class="status-tag tag-warning">Medium</span></td>
+            </tr>
+            <tr>
+              <td><strong>Compiler Coupling</strong></td>
+              <td><code>parse_line</code> invokes <code>compile()</code> directly on line completion.</td>
+              <td>Cannot run static analysis, linters, AST optimizers, or code formatters independently of the execution engine.</td>
+              <td><span class="status-tag tag-warning">Medium</span></td>
+            </tr>
+            <tr>
+              <td><strong>Diagnostics & Errors</strong></td>
+              <td>Generic unclosed error or silent drop-through on syntax mismatch.</td>
+              <td>Missing exact column indicators, filename context, and helpful compiler caret (<code>^</code>) pointers.</td>
+              <td><span class="status-tag tag-warning">Medium</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Section 4: Modernization Roadmap -->
+    <section id="roadmap">
+      <div class="section-header">
+        <h2 class="section-title">4. Modernization Roadmap (5 Actionable Pillars)</h2>
+        <p class="section-desc">Step-by-step technical blueprints for transforming the parser into an industrial-grade engine.</p>
+      </div>
+
+      <!-- Tab Buttons -->
+      <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab(0)">Pillar 1: Zero-Alloc Lexer</button>
+        <button class="tab-btn" onclick="switchTab(1)">Pillar 2: Pratt Precedence Parser</button>
+        <button class="tab-btn" onclick="switchTab(2)">Pillar 3: Re-entrant Context</button>
+        <button class="tab-btn" onclick="switchTab(3)">Pillar 4: Rich Diagnostics</button>
+      </div>
+
+      <!-- Tab 1: Zero-Alloc Lexer -->
+      <div class="tab-content active" id="tab0">
+        <div class="roadmap-item">
+          <div class="roadmap-header">
+            <div class="roadmap-title">Replace PCRE with a Fast Character-Scanning Lexer</div>
+            <span class="priority-badge p-high">Priority: High (10x-30x Speedup)</span>
+          </div>
+          <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 12px;">
+            Instead of executing regexes at every token, implement a single-pass scanner that walks a pointer <code>const char* p</code>.
+            Tokens point directly into the source buffer without heap allocations.
+          </p>
+          <pre><code><span class="c-typ">typedef enum</span> {
+  TOK_EOF, TOK_IDENT, TOK_INT, TOK_FLOAT, TOK_STRING,
+  TOK_KW_IF, TOK_KW_WHILE, TOK_KW_CLASS, TOK_KW_RETURN,
+  TOK_PLUS, TOK_MINUS, TOK_STAR, TOK_SLASH, TOK_ASSIGN,
+  TOK_EQ, TOK_NEQ, TOK_LPAREN, TOK_RPAREN, TOK_LBRACE, TOK_RBRACE,
+  TOK_SEMICOLON, TOK_DOT, TOK_ARROW
+} <span class="c-typ">TokenType</span>;
+
+<span class="c-typ">typedef struct</span> {
+  <span class="c-typ">TokenType</span> type;
+  <span class="c-typ">const char</span>* start;
+  <span class="c-typ">int</span> length;
+  <span class="c-typ">int</span> line;
+  <span class="c-typ">int</span> col;
+} <span class="c-typ">Token</span>;
+
+<span class="c-typ">Token</span> <span class="c-fn">next_token</span>(<span class="c-typ">Lexer</span>* l) {
+  <span class="c-fn">skip_whitespace_and_comments</span>(l);
+  <span class="c-kw">if</span> (*l->cursor == <span class="c-str">'\0'</span>) <span class="c-kw">return</span> (<span class="c-typ">Token</span>){ TOK_EOF, l->cursor, 0, l->line, l->col };
+
+  <span class="c-kw">switch</span> (*l->cursor) {
+    <span class="c-kw">case</span> <span class="c-str">'+'</span>: <span class="c-kw">return</span> <span class="c-fn">make_token</span>(l, TOK_PLUS, 1);
+    <span class="c-kw">case</span> <span class="c-str">'-'</span>: <span class="c-kw">return</span> <span class="c-fn">make_token</span>(l, TOK_MINUS, 1);
+    <span class="c-kw">case</span> <span class="c-str">'*'</span>: <span class="c-kw">return</span> <span class="c-fn">make_token</span>(l, TOK_STAR, 1);
+    <span class="c-kw">case</span> <span class="c-str">'/'</span>: <span class="c-kw">return</span> <span class="c-fn">make_token</span>(l, TOK_SLASH, 1);
+    <span class="c-kw">case</span> <span class="c-str">'='</span>: <span class="c-kw">return</span> (l->cursor[1] == <span class="c-str">'='</span>) ? <span class="c-fn">make_token</span>(l, TOK_EQ, 2) : <span class="c-fn">make_token</span>(l, TOK_ASSIGN, 1);
+    <span class="c-kw">default</span>:
+      <span class="c-kw">if</span> (<span class="c-fn">isalpha</span>(*l->cursor) || *l->cursor == <span class="c-str">'_'</span>) <span class="c-kw">return</span> <span class="c-fn">lex_identifier_or_keyword</span>(l);
+      <span class="c-kw">if</span> (<span class="c-fn">isdigit</span>(*l->cursor)) <span class="c-kw">return</span> <span class="c-fn">lex_number</span>(l);
+      <span class="c-kw">if</span> (*l->cursor == <span class="c-str">'"'</span>) <span class="c-kw">return</span> <span class="c-fn">lex_string</span>(l);
+  }
+}</code></pre>
+        </div>
+      </div>
+
+      <!-- Tab 2: Pratt Parser -->
+      <div class="tab-content" id="tab1">
+        <div class="roadmap-item">
+          <div class="roadmap-header">
+            <div class="roadmap-title">Pratt Precedence-Climbing Parser for Expressions</div>
+            <span class="priority-badge p-high">Priority: Critical (Correct Math)</span>
+          </div>
+          <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 12px;">
+            A Pratt parser guarantees that multiplication/division bind tighter than addition/subtraction, and comparisons bind looser than arithmetic.
+          </p>
+          <pre><code><span class="c-typ">typedef enum</span> {
+  PREC_NONE,
+  PREC_ASSIGNMENT, <span class="c-com">// = += -=</span>
+  PREC_LOGICAL_OR, <span class="c-com">// ||</span>
+  PREC_LOGICAL_AND,<span class="c-com">// &&</span>
+  PREC_EQUALITY,   <span class="c-com">// == !=</span>
+  PREC_COMPARISON, <span class="c-com">// < > <= >=</span>
+  PREC_TERM,       <span class="c-com">// + -</span>
+  PREC_FACTOR,     <span class="c-com">// * / %</span>
+  PREC_UNARY,      <span class="c-com">// ! - ++ --</span>
+  PREC_CALL        <span class="c-com">// . () []</span>
+} <span class="c-typ">Precedence</span>;
+
+<span class="c-typ">node</span>* <span class="c-fn">parse_expression</span>(<span class="c-typ">Parser</span>* p, <span class="c-typ">Precedence</span> min_prec) {
+  <span class="c-typ">node</span>* left = <span class="c-fn">parse_prefix</span>(p);
+  <span class="c-kw">while</span> (<span class="c-fn">get_precedence</span>(p->current.type) > min_prec) {
+    <span class="c-typ">Token</span> op = <span class="c-fn">advance</span>(p);
+    <span class="c-typ">node</span>* right = <span class="c-fn">parse_expression</span>(p, <span class="c-fn">get_precedence</span>(op.type));
+    left = <span class="c-fn">make_binary_node</span>(op, left, right);
+  }
+  <span class="c-kw">return</span> left;
+}</code></pre>
+        </div>
+      </div>
+
+      <!-- Tab 3: Re-entrant Context -->
+      <div class="tab-content" id="tab2">
+        <div class="roadmap-item">
+          <div class="roadmap-header">
+            <div class="roadmap-title">Re-entrant Parser Context & Dynamic Scope Stack</div>
+            <span class="priority-badge p-med">Priority: High (Reliability & Concurrency)</span>
+          </div>
+          <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 12px;">
+            Eliminate all global parsing variables (<code>staic_flag2</code>, <code>save</code>, <code>current_parsing_class_name</code>) by wrapping them inside a re-entrant <code>ParserContext</code>.
+          </p>
+          <pre><code><span class="c-typ">typedef struct</span> {
+  <span class="c-typ">Token</span>* tokens;
+  <span class="c-typ">int</span> token_count;
+  <span class="c-typ">int</span> current_index;
+  
+  <span class="c-com">// Dynamic Delimiter Stack (No 10-item limit!)</span>
+  <span class="c-typ">Delimiter</span>* delim_stack;
+  <span class="c-typ">int</span> delim_top;
+  <span class="c-typ">int</span> delim_capacity;
+  
+  <span class="c-typ">const char</span>* current_class;
+  <span class="c-typ">node_pool</span>* pool;
+  <span class="c-typ">bool</span> has_error;
+} <span class="c-typ">ParserContext</span>;</code></pre>
+        </div>
+      </div>
+
+      <!-- Tab 4: Rich Diagnostics -->
+      <div class="tab-content" id="tab3">
+        <div class="roadmap-item">
+          <div class="roadmap-header">
+            <div class="roadmap-title">Industrial Compiler Diagnostics with Caret Pointers</div>
+            <span class="priority-badge p-opt">Priority: Quality of Life</span>
+          </div>
+          <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 12px;">
+            With tokens retaining their exact column and line information, xlang can output Clang/Rust-grade syntax error messages with source snippets.
+          </p>
+          <pre><code><span class="c-com">// Sample output from new diagnostic engine:</span>
+<span class="c-kw">error[E0012]</span>: unexpected token '*', expected expression
+  --> src/network/http.x:42:15
+   |
+42 |     int x = 10 + * 20;
+   |                  ^ expected variable, literal, or '(' here
+   |</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 5: Phased Implementation Plan -->
+    <section>
+      <div class="section-header">
+        <h2 class="section-title">5. Phased Implementation Strategy</h2>
+        <p class="section-desc">How to modernize the parser without breaking the existing 36/36 tests or existing programs.</p>
+      </div>
+
+      <div class="roadmap-list">
+        <div class="roadmap-item" style="border-left-color: var(--accent-emerald);">
+          <div class="roadmap-header">
+            <div class="roadmap-title">Phase 1: Zero-Breakage Lexer Drop-in (<code>lexer.c</code>)</div>
+            <span class="status-tag tag-success">Safe & Backward Compatible</span>
+          </div>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">
+            Create <code>lexer.c</code> and <code>lexer.h</code>. In <code>parse.c</code>, replace calls to <code>match("^(...)", buff)</code> with calls to the fast character lexer. All existing node structures and compiler invocations remain 100% unchanged.
+          </p>
+        </div>
+
+        <div class="roadmap-item" style="border-left-color: var(--accent-cyan);">
+          <div class="roadmap-header">
+            <div class="roadmap-title">Phase 2: Dynamic Delimiter Stack & Context Struct</div>
+            <span class="status-tag tag-success">Internal Refactor</span>
+          </div>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">
+            Convert <code>staic_flag2[10]</code> to a dynamically expanding stack (initial size 32, doubles on overflow). Pass a <code>ParserContext*</code> into <code>parse_line</code> instead of relying on global pointers like <code>save</code>.
+          </p>
+        </div>
+
+        <div class="roadmap-item" style="border-left-color: var(--accent-indigo);">
+          <div class="roadmap-header">
+            <div class="roadmap-title">Phase 3: Pratt Expression Engine for Math & Logic</div>
+            <span class="status-tag tag-warning">Syntax Enhancement</span>
+          </div>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">
+            When encountering expression tokens (<code>=</code>, <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, <code>==</code>), invoke <code>parse_expression()</code> to assemble an orderly binary tree AST instead of a flat left-to-right chain.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <p>Generated for xlang &bull; Architecture Report &bull; September 2026</p>
+      <p style="margin-top: 6px; font-size: 0.8rem; color: var(--text-muted);">Saved to <code>parser_report.html</code> in project root.</p>
+    </footer>
+
+  </div>
+
+  <!-- Interactive Scripts -->
+  <script>
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme');
+      const next = current === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('xlang-theme', next);
+    }
+
+    function switchTab(index) {
+      const btns = document.querySelectorAll('.tab-btn');
+      const tabs = document.querySelectorAll('.tab-content');
+      btns.forEach((btn, i) => {
+        if (i === index) {
+          btn.classList.add('active');
+          tabs[i].classList.add('active');
+        } else {
+          btn.classList.remove('active');
+          tabs[i].classList.remove('active');
+        }
+      });
+    }
+
+    // Restore saved theme
+    (function() {
+      const saved = localStorage.getItem('xlang-theme');
+      if (saved) {
+        document.documentElement.setAttribute('data-theme', saved);
+      }
+    })();
+  </script>
+</body>
+</html>

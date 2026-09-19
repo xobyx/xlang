@@ -1,0 +1,21 @@
+int server = socket_create("tcp")
+int rb = socket_set_reuseaddr(server, 1)
+int b = socket_bind(server, "127.0.0.1", 19876)
+int l = socket_listen(server, 5)
+
+int client = socket_create("tcp")
+int c = socket_connect(client, "127.0.0.1", 19876)
+
+int peer = socket_accept(server)
+
+int s1 = socket_send(client, "Hello TCP Server")
+string msg = socket_recv(peer, 1024)
+print("Server received: %s", msg)
+
+int s2 = socket_send(peer, "Hello TCP Client")
+string reply = socket_recv(client, 1024)
+print("Client received: %s", reply)
+
+socket_close(client)
+socket_close(peer)
+socket_close(server)

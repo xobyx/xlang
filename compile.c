@@ -1,7 +1,12 @@
 #include "compile.h"
+#include "ximport.h"
+#include "xgc.h"
+#include <execinfo.h>
 extern int get_index_value2(node** nod, fcall* calling_function, var* calling_object);
 extern node* calc(node* cnode, fcall* calling_function, var* calling_object, node_type stop_in_type, node* stop_in_node,
                   var* calc_result);
+
+static bool g_loop_broken = false;
 
 void define_new_class_prop(char* name, type_def* contern_class, type_def* new_var_type, var** out_var)
 {
@@ -29,11 +34,10 @@ void define_new_class_prop(char* name, type_def* contern_class, type_def* new_va
 void define_new_var_on_function(char* name, fcall* mfun, type_def* new_var_type, var** out_var)
 {
 	var* svar = fget_var_by_name_fc(name, mfun);
-	if (svar != NULL) //&& svar->type_define != NULL && new_var_type != NULL && new_var_type == svar->type_define)
+	if (svar != NULL)
 	{
-		printf("\ndefine_new_var_onfunction: multi definiton var [ %s ] on line %d\n", name, mfun->deftion->ref->line);
-		exit(-1);
-		//*out_var = svar;
+		*out_var = svar;
+		return;
 	}
 	//add to function stack
 	int count = mfun->parm_count_c;
@@ -57,30 +61,21 @@ node* add_new_func_code(node* c, type_def* return_type, type_def* container_clas
 {
 	//TODO: check if already found
 
-	const bool cons = return_type == T_ANY;
-	func_deftion* m = container_class == NULL || cons
-		                  ? new_func()
-		                  : container_class->d_functions + (container_class->d_function_size++);
+	const bool cons = (container_class != NULL) &&
+		(c->value_char_ptr != NULL && container_class->type_name != NULL && strcmp(c->value_char_ptr, container_class->type_name) == 0);
+
+	func_deftion* m = container_class != NULL
+		                  ? container_class->d_functions + (container_class->d_function_size++)
+		                  : new_func();
 
 	memset(m, 0, sizeof(func_deftion));
 	m->return_type = cons ? container_class : return_type;
-	m->function_type = cons ? constr : f_main;
+	m->function_type = cons ? constr : (container_class != NULL ? class_function : f_main);
+	m->func_name = c->value_char_ptr;
 
-	if (cons)
+	if (container_class == NULL)
 	{
-		const size_t size = sizeof(char) * (strlen(c->value_char_ptr) + 2);
-		char* y = (char*)malloc(size);
-		memset(y, 0, size);
-		//strcat_s(y, ":");
-		*y = ':';
-
-		strcat(y, c->value_char_ptr);
-		m->func_name = y;
-	}
-	else
-	{
-		m->func_name = c->value_char_ptr;
-		var* funcvr = new_var(m->func_name,T_FUNC);
+		var* funcvr = new_var(m->func_name, T_FUNC);
 		funcvr->value_func = m;
 	}
 
@@ -145,21 +140,23 @@ node* setup_function_parms(node** nod, fcall* function, var* context, fcall* in_
 	int i = 0;
 	step_forwrod(nod);
 
-	while (*nod != close && (*nod)->type_ != endl) //&& i<m)
+	while (*nod != close && (*nod)->type_ != endl && i < 100)
 	{
-		//var* pv = new_temp_var(NULL);
-		// allow to get parameters form current function old_call
-
-
 		var* n = function->func_parmeters + (i++);
+		function->parm_count_c = i;
 		n->values = NULL;
 		n->type_define = NULL;
+		n->size = 1;
 
-
+		node* before_calc = *nod;
 		*nod = calc(*nod, in_function, context, comma, close, n);
 		if (*nod == NULL)
 			return close;
-
+		if (*nod == before_calc)
+		{
+			*nod = (*nod)->next;
+			if (*nod == NULL) break;
+		}
 
 		if ((*nod)->type_ == comma)
 		{
@@ -173,15 +170,20 @@ node* setup_function_parms(node** nod, fcall* function, var* context, fcall* in_
 
 bool call_function(fcall* mfunc, var** context)
 {
-	if (mfunc->deftion->function_type == constr)
+	if (mfunc->deftion->function_type == constr && (*context == NULL || (*context)->values == NULL))
 	{
 		mfunc->_return.values = install_memory_with_type(mfunc->_return.type_define, 1);
 		*context = &mfunc->_return;
 	}
+	if (*context != NULL && (*context)->value_type_instsance == NULL && (*context)->values != NULL && !is_base_type((*context)->type_define))
+	{
+		(*context)->value_type_instsance = (type_instance*)(*context)->values;
+	}
 	mfunc->context = *context;
+	mfunc->has_returned = false;
 
 	mfunc->deftion->func_code(mfunc);
-
+	gc_pop_frame();
 
 	return false;
 }
@@ -279,6 +281,7 @@ void if_eif_function(node** cx, fcall* cfunction, var* calling_obj)
 			var* bool_result = new_temp_var(T_BOOL);
 			calc((*cx)->next, cfunction, calling_obj, none, (*cx)->ref_node, bool_result);
 			skip = ! *bool_result->value_bool;
+			free_temp_var(bool_result);
 		}
 		*cx =(*cx)->ref_node;
 	}
@@ -304,10 +307,9 @@ void if_eif_function2(node** cx, fcall* cfunction, var* calling_obj)
 {
 	node* close = NULL;
 	node* ifeif = *cx; ///{if-eif}
-	//if_block* heif = (if_block*)malloc(sizeof(if_block));
 	node* lcond = ifeif->ref_node;
 
-	if ((*cx)->value_keyword == _if_ || lcond != NULL && lcond->taked == false)
+	if ((*cx)->value_keyword == _if_ || (lcond != NULL && lcond->taked == false))
 	{
 		if ((*cx)->value_keyword != _else_)
 		{
@@ -315,23 +317,17 @@ void if_eif_function2(node** cx, fcall* cfunction, var* calling_obj)
 
 			eat(cx, parentheses4,true);
 			node* el = get_close_part(*cx);
-			*cx = calc((*cx)->next, cfunction, NULL, none, el, bool_result);
-
+			*cx = calc((*cx)->next, cfunction, calling_obj, none, el, bool_result);
 
 			*cx = get_first_type(*cx, parentheses1);
 			close = get_close_part((*cx));
 			*cx = (*cx)->next;
-			if (bool_result->value_bool) /// true
+			bool cond_val = (bool_result->value_bool != NULL) ? *bool_result->value_bool : false;
+			free_temp_var(bool_result);
+			if (cond_val) /// true
 			{
 				ifeif->taked = true;
 				compile(calling_obj, *cx, cfunction, close, NULL);
-				//  [{|(]    [}|)]
-				//*cx = ifeif->next_jump != NULL ? 
-				//	get_first_type(gelastjump(ifeif), parentheses1)->ref_node
-				//: close;
-
-
-				//*cx=close;
 			}
 			else
 			{
@@ -357,27 +353,93 @@ void if_eif_function2(node** cx, fcall* cfunction, var* calling_obj)
 void while_function(node** c, fcall* temp, var* calling_obj)
 {
 	var* m = new_temp_var(T_BOOL);
+	gc_add_root(m);
 
 	node* el = get_close_part((*c)->next);
 	node* cond = (*c)->next->next;
-	*c = calc(cond, temp, NULL, none, el, m);
-
+	*c = calc(cond, temp, calling_obj, none, el, m);
 
 	*c = get_first_type(*c, parentheses1);
 	node* close = get_close_part(*c);
 	*c = (*c)->next;
 
-
-	while (*m->value_int)
+	while (*m->value_bool)
 	{
-		//node* last=calculate(new_var(),cond,parse_obj::parentheses4c,temp);
-		//as.print_line_debuge(c,1);
-		compile(NULL, *c, temp, close, NULL);
-		//check the condition again
-		calc(cond, temp, NULL, (node_type)0, el, m);
+		compile(calling_obj, *c, temp, close, NULL);
+		if (g_loop_broken)
+		{
+			g_loop_broken = false;
+			break;
+		}
+		if (temp != NULL && temp->has_returned)
+			break;
+		calc(cond, temp, calling_obj, (node_type)0, el, m);
+		gc_check_auto();
 	}
 
-	*c = close; //getFirstType(c, parse_obj::parentheses1c);
+	gc_remove_root(m);
+	free_temp_var(m);
+	*c = close;
+}
+
+void do_while_function(node** c, fcall* temp, var* calling_obj)
+{
+	var* m = new_temp_var(T_BOOL);
+	gc_add_root(m);
+
+	node* body_open = get_first_type(*c, parentheses1);
+	if (body_open == NULL)
+	{
+		gc_remove_root(m);
+		free_temp_var(m);
+		return;
+	}
+	node* body_close = get_close_part(body_open);
+	if (body_close == NULL)
+	{
+		gc_remove_root(m);
+		free_temp_var(m);
+		return;
+	}
+	node* body_first = body_open->next;
+
+	node* while_node = get_first_type_with_value(body_close, keyword, (void*)(intptr_t)_while_);
+	if (while_node == NULL)
+	{
+		gc_remove_root(m);
+		free_temp_var(m);
+		*c = body_close;
+		return;
+	}
+
+	node* cond_open = get_first_type(while_node, parentheses4);
+	if (cond_open == NULL)
+	{
+		gc_remove_root(m);
+		free_temp_var(m);
+		*c = body_close;
+		return;
+	}
+	node* cond_close = get_close_part(cond_open);
+	node* cond = cond_open->next;
+
+	do
+	{
+		compile(calling_obj, body_first, temp, body_close, NULL);
+		if (g_loop_broken)
+		{
+			g_loop_broken = false;
+			break;
+		}
+		if (temp != NULL && temp->has_returned)
+			break;
+		calc(cond, temp, calling_obj, (node_type)0, cond_close, m);
+		gc_check_auto();
+	} while (*m->value_bool);
+
+	gc_remove_root(m);
+	free_temp_var(m);
+	*c = cond_close;
 }
 
 //for VAR_NAME ((start)EXP,(end)EXP[cond])
@@ -397,37 +459,32 @@ void for_function(node** c, fcall* funcall, var* calling_object)
 
 	node* cond = *c; //cond_exp
 	var* bool_var = new_temp_var(T_BOOL);
+	gc_add_root(bool_var);
 
-	//func_deftion* y = new_func();
-
-	//*c = calculate(*c, funcall,calling_object, comma,*c, bool_var);
 	*c = calc(cond, funcall, calling_object, (node_type)0, el, bool_var);
-
 
 	*c = get_first_type(*c, parentheses1);
 	node* for_close = get_close_part(*c);
 	*c = (*c)->next;
-	//var_stack* a = (var_stack*)malloc(sizeof(var_stack));
-	//memcpy(a, &funcall-.start_func_parmeters, sizeof(var_stack));
-	//var_stack(temp->fun_p);
-	//if (funcall != NULL)
-	//{
 
-	//	y-.start_func_parmeters[0] = *a;
-	//}
-	//for for_v(start_exp,step_exp,cond)
-	while (*bool_var->value_int)
+	while (*bool_var->value_bool)
 	{
-		//node* last=calculate(new_var(),cond,parse_obj::parentheses4c,temp);
-		//as.print_line_debuge(c,1);
 		compile(calling_object, *c, funcall, for_close, NULL);
-		//check the condition again
+		if (g_loop_broken)
+		{
+			g_loop_broken = false;
+			break;
+		}
+		if (funcall != NULL && funcall->has_returned)
+			break;
 		calc(step_exp, funcall, calling_object, comma, NULL, for_v);
-
 		calc(cond, funcall, calling_object, (node_type)0, el, bool_var);
+		gc_check_auto();
 	}
 
-	*c = for_close; //getFirstType(c, parse_obj::parentheses1c);
+	gc_remove_root(bool_var);
+	free_temp_var(bool_var);
+	*c = for_close;
 }
 
 
@@ -436,11 +493,11 @@ void compile_type(node* out, fcall* function_call, node* stop, type_def* b);
 
 void install_class(node** n)
 {
-	type_def* mtype = new_type();
 	eat(n, var_name,true); //class->
 	char* cname = (*n)->value_char_ptr;
-
-
+	type_def* mtype = get_type_by_name(cname);
+	if (mtype == NULL)
+		mtype = new_type();
 	mtype->type_name = cname;
 
 	if (eat(n, parentheses4,false))
@@ -466,10 +523,15 @@ var* name_exp_assign(node** nod, fcall* calling_function, var* calling_object)
 {
 	var* mvar = NULL;
 	bool isdot = false;
-	while ((*nod)->type_ & (var_name | dot | s_index))
+	type_def* static_class = NULL;
+	while (*nod != NULL && ((*nod)->type_ & (var_name | dot | s_index | itype)))
 	{
 		switch ((*nod)->type_)
 		{
+		case itype:
+			static_class = (*nod)->value_type;
+			step(nod);
+			break;
 		case var_name:
 			if ((*nod)->opt_name_type == var_call)
 			{
@@ -480,24 +542,78 @@ var* name_exp_assign(node** nod, fcall* calling_function, var* calling_object)
 					else
 					{
 						isdot = false;
-						mvar = get_var_by_name_on_stack((*nod)->value_char_ptr, &mvar->value_type_instsance->propertys);
+						if (mvar->value_type_instsance != NULL)
+							mvar = get_var_by_name_on_stack((*nod)->value_char_ptr, &mvar->value_type_instsance->propertys);
+						else
+							mvar = NULL;
+					}
+				}
+				else if (static_class != NULL)
+				{
+					if (!isdot)
+						printf("ERROR on line %d - %s:%s:%d", (*nod)->line, __FILE__, __FUNCTION__, __LINE__);
+					else
+					{
+						isdot = false;
+						mvar = get_class_property(static_class, (*nod)->value_char_ptr);
+						static_class = NULL;
 					}
 				}
 				else
 				{
-					if (calling_function != NULL)
-						mvar = fget_var_by_name_fc((*nod)->value_char_ptr, calling_function);
-					if (!mvar && calling_object != NULL)
-						mvar = get_var_by_name_on_stack((*nod)->value_char_ptr,
-						                                &calling_object->value_type_instsance->propertys);
-					if (mvar == NULL)
-						mvar = get_globle_var_by_name((*nod)->value_char_ptr);
+					type_def* td = get_type_by_name((*nod)->value_char_ptr);
+					if (td != NULL && (*nod)->next != NULL && (*nod)->next->type_ == dot)
+					{
+						static_class = td;
+					}
+					else
+					{
+						if (calling_function != NULL)
+							mvar = fget_var_by_name_fc((*nod)->value_char_ptr, calling_function);
+						if (!mvar && calling_object != NULL)
+						{
+							type_instance* inst = calling_object->value_type_instsance;
+							if (inst == NULL && calling_object->values != NULL && !is_base_type(calling_object->type_define))
+								inst = (type_instance*)calling_object->values;
+							if (inst != NULL)
+								mvar = get_var_by_name_on_stack((*nod)->value_char_ptr, &inst->propertys);
+						}
+						if (mvar == NULL)
+							mvar = get_globle_var_by_name((*nod)->value_char_ptr);
+						if (mvar == NULL || mvar->type_define == T_FUNC)
+						{
+							if (td != NULL)
+							{
+								static_class = td;
+								mvar = NULL;
+							}
+						}
+					}
 				}
 				step(nod);
 			}
 			else if ((*nod)->opt_name_type == function_call)
 			{
-				if (mvar != NULL)
+				if (static_class != NULL)
+				{
+					isdot = false;
+					func_deftion* name_function = get_class_function(static_class, (*nod)->value_char_ptr);
+					if (name_function == NULL)
+					{
+						printf("ERROR on line %d: static method '%s' not found in class '%s'\n",
+							(*nod)->line, (*nod)->value_char_ptr, static_class->type_name);
+						step(nod);
+						break;
+					}
+					fcall* fc = create_fcall(name_function);
+					setup_function_parms(nod, fc, calling_object, calling_function);
+					var* self = NULL;
+					call_function(fc, &self);
+					mvar = &fc->_return;
+					static_class = NULL;
+					step(nod);
+				}
+				else if (mvar != NULL)
 				{
 					if (!isdot)
 						printf("ERROR on line %d - %s:%s:%d", (*nod)->line, __FILE__, __FUNCTION__, __LINE__);
@@ -506,30 +622,66 @@ var* name_exp_assign(node** nod, fcall* calling_function, var* calling_object)
 						///find var on mvar functions
 						isdot = false;
 						func_deftion* name_function = get_obj_function(mvar, (*nod)->value_char_ptr);
+						if (name_function == NULL)
+						{
+							printf("ERROR on line %d: method '%s' not found\n", (*nod)->line, (*nod)->value_char_ptr);
+							step(nod);
+							break;
+						}
 						fcall* fcall = create_fcall(name_function);
-						//compile_var_name_start(k, funct);
-						//compile(mvar, k, funct, y);
 						setup_function_parms(nod, fcall, calling_object, calling_function);
-						call_function(fcall, calling_object == NULL ? &mvar : &calling_object);
+						call_function(fcall, &mvar);
 						mvar = &fcall->_return;
 						step(nod);
 					}
 				}
 				else
 				{
-					func_deftion* name_function;
+					func_deftion* name_function = NULL;
 					if (calling_object != NULL)
 					{
 						name_function = get_obj_function(calling_object, (*nod)->value_char_ptr);
 					}
-					else
+					if (name_function == NULL)
 					{
 						name_function = get_func_by_name((*nod)->value_char_ptr);
 					}
+					if (name_function == NULL)
+					{
+						type_def* td = get_type_by_name((*nod)->value_char_ptr);
+						if (td != NULL)
+						{
+							for (int i = 0; i < td->d_function_size; i++)
+							{
+								if (td->d_functions[i].func_name != NULL &&
+									(strcmp(td->d_functions[i].func_name, td->type_name) == 0 ||
+									 td->d_functions[i].function_type == constr))
+								{
+									name_function = &td->d_functions[i];
+									break;
+								}
+							}
+						}
+					}
+					if (name_function == NULL && calling_function != NULL && calling_function->deftion != NULL)
+					{
+						type_def* enc = get_class_of_function(calling_function->deftion);
+						if (enc != NULL)
+							name_function = get_class_function(enc, (*nod)->value_char_ptr);
+					}
 
+					if (name_function == NULL)
+					{
+						printf("ERROR on line %d: function '%s' not found\n", (*nod)->line, (*nod)->value_char_ptr);
+						step(nod);
+						break;
+					}
+
+					var* self = (calling_object != NULL && get_obj_function(calling_object, (*nod)->value_char_ptr) != NULL)
+						? calling_object : NULL;
 					fcall* fcall = create_fcall(name_function);
 					setup_function_parms(nod, fcall, calling_object, calling_function);
-					call_function(fcall, &calling_object);
+					call_function(fcall, &self);
 					mvar = &fcall->_return;
 					step(nod);
 				}
@@ -561,7 +713,6 @@ var* name_exp_assign(node** nod, fcall* calling_function, var* calling_object)
 			}
 		case parentheses4:
 			{
-				node* pak = (*nod)->ref_node;
 				mvar = new_temp_var(NULL);
 				//change mvar->value
 				*nod = calc(*nod, calling_function, calling_object, 0, (*nod)->ref_node, mvar);
@@ -569,8 +720,8 @@ var* name_exp_assign(node** nod, fcall* calling_function, var* calling_object)
 				break;
 			}
 
-
 		default:
+			step(nod);
 			break;
 		}
 	}
@@ -608,6 +759,7 @@ node* compile(var* parent, node* out, fcall* c_function, node* stop, type_def* n
 	node* in;
 	node* c;
 	node* ret = NULL;
+	bool is_static_decl = false;
 	if (stop == NULL)
 		in = get_root(out);
 	else
@@ -620,19 +772,48 @@ node* compile(var* parent, node* out, fcall* c_function, node* stop, type_def* n
 		{
 			break;
 		}
+		if (c_function != NULL && c_function->has_returned)
+		{
+			break;
+		}
+		if (g_loop_broken)
+		{
+			break;
+		}
 		switch (c->type_)
 		{
 		case var_name:
 			{
+				is_static_decl = false;
 				var* x = name_exp_assign(&c, c_function, parent);
-				if (c->type_ == equles)
+				if (c != NULL && c->type_ == equles)
 				{
 					c = calc(c->next, c_function, parent, none,NULL, x);
+				}
+				else
+				{
+					while (c != NULL && c->type_ != endl)
+						c = c->next;
 				}
 			}
 			break;
 		case itype:
 			{
+				if (c->next != NULL && c->next->type_ == dot)
+				{
+					is_static_decl = false;
+					var* x = name_exp_assign(&c, c_function, parent);
+					if (c != NULL && c->type_ == equles)
+					{
+						c = calc(c->next, c_function, parent, none, NULL, x);
+					}
+					else
+					{
+						while (c != NULL && c->type_ != endl)
+							c = c->next;
+					}
+					break;
+				}
 				type_def* var_type = c->value_type;
 				int asize = 1;
 				if (eat(&c, s_index,false))
@@ -648,18 +829,109 @@ node* compile(var* parent, node* out, fcall* c_function, node* stop, type_def* n
 					if (c->opt_name_type == function_def)
 					{
 						c = add_new_func_code(c, var_type, ncalss);
+						if (is_static_decl && ncalss != NULL && ncalss->d_function_size > 0)
+						{
+							ncalss->d_functions[ncalss->d_function_size - 1].access = STATIC;
+						}
+						is_static_decl = false;
 					}
 					else if (c->opt_name_type == var_def)
 					{
 						var* n_var = add_var_to(&c, c_function, parent, ncalss, var_type, asize);
+						if (is_static_decl && n_var != NULL)
+						{
+							n_var->access = STATIC;
+						}
+						is_static_decl = false;
 
 						if (eat(&c, equles,false))
 						{
 							c = calc(c->next, c_function, parent, none,NULL, n_var);
 						}
+						else if (c->next != NULL && c->next->type_ == parentheses4)
+						{
+							n_var->values = install_memory_with_type(n_var->type_define, n_var->size);
+							if (!is_base_type(n_var->type_define))
+								n_var->value_type_instsance = (type_instance*)n_var->values;
+
+							node* p4 = c->next;
+							node* pclose = get_close_part(p4);
+							int arg_count = 0;
+							if (p4->next != pclose)
+							{
+								int commas = 0;
+								for (node* a = p4->next; a != NULL && a != pclose; a = a->next)
+								{
+									if (a->type_ == comma)
+										commas++;
+								}
+								arg_count = commas + 1;
+							}
+
+							func_deftion* constr_fn = NULL;
+							for (type_def* curr = var_type; curr != NULL; curr = curr->base)
+							{
+								for (int i = 0; i < curr->d_function_size; i++)
+								{
+									if (curr->d_functions[i].func_name != NULL &&
+										(strcmp(curr->d_functions[i].func_name, var_type->type_name) == 0 ||
+										 curr->d_functions[i].function_type == constr))
+									{
+										if (curr->d_functions[i].start_parm_count == arg_count)
+										{
+											constr_fn = &curr->d_functions[i];
+											break;
+										}
+										if (constr_fn == NULL)
+											constr_fn = &curr->d_functions[i];
+									}
+								}
+								if (constr_fn != NULL && constr_fn->start_parm_count == arg_count) break;
+							}
+
+							if (constr_fn != NULL)
+							{
+								fcall* fc = create_fcall(constr_fn);
+								node* close = setup_function_parms(&p4, fc, parent, c_function);
+								call_function(fc, &n_var);
+								gc_free_any(fc);
+								c = close;
+							}
+							else
+							{
+								printf("ERROR on line %d: constructor for '%s' with %d parameters not found\n",
+								       c->line, var_type->type_name, arg_count);
+							}
+						}
 						else //endl
 						{
 							n_var->values = install_memory_with_type(n_var->type_define, n_var->size);
+							if (!is_base_type(n_var->type_define))
+								n_var->value_type_instsance = (type_instance*)n_var->values;
+							func_deftion* constr_fn = NULL;
+							for (type_def* curr = var_type; curr != NULL; curr = curr->base)
+							{
+								for (int i = 0; i < curr->d_function_size; i++)
+								{
+									if (curr->d_functions[i].func_name != NULL &&
+										(strcmp(curr->d_functions[i].func_name, var_type->type_name) == 0 ||
+										 curr->d_functions[i].function_type == constr))
+									{
+										if (curr->d_functions[i].start_parm_count == 0)
+										{
+											constr_fn = &curr->d_functions[i];
+											break;
+										}
+									}
+								}
+								if (constr_fn != NULL) break;
+							}
+							if (constr_fn != NULL)
+							{
+								fcall* fc = create_fcall(constr_fn);
+								call_function(fc, &n_var);
+								gc_free_any(fc);
+							}
 						}
 					}
 				}
@@ -683,6 +955,7 @@ node* compile(var* parent, node* out, fcall* c_function, node* stop, type_def* n
 					while_function(&c, c_function, parent);
 					break;
 				case _do_:
+					do_while_function(&c, c_function, parent);
 					break;
 
 				case _return_:
@@ -691,19 +964,51 @@ node* compile(var* parent, node* out, fcall* c_function, node* stop, type_def* n
 						var* re = &c_function->_return;
 
 						calc(c->next, c_function, parent, 0, NULL, re);
-						c = stop;
-						return c;
+						c_function->has_returned = true;
 					}
-					break;
+					c = stop;
+					return c;
 				case _break_:
+					g_loop_broken = true;
 					c = stop;
 					return c;
 
 				case _class_:
+					is_static_decl = false;
 					install_class(&c);
 					break;
 				case _static_:
+					is_static_decl = true;
 					break;
+				case _import_:
+					{
+						const char* mod_name = NULL;
+						node* p = c->next;
+						if (p != NULL && p->type_ == parentheses4)
+						{
+							p = p->next;
+						}
+						if (p != NULL)
+						{
+							if (p->type_ == value && p->opt_type_ptr == T_STRING)
+							{
+								mod_name = (char*)p->value_raw;
+							}
+							else if (p->type_ == var_name && p->value_char_ptr != NULL)
+							{
+								mod_name = p->value_char_ptr;
+							}
+						}
+						if (mod_name != NULL)
+						{
+							x_import_module(mod_name);
+						}
+						while (c != NULL && c->type_ != endl && c != stop)
+						{
+							c = c->next;
+						}
+						break;
+					}
 				}
 			}
 
@@ -711,8 +1016,13 @@ node* compile(var* parent, node* out, fcall* c_function, node* stop, type_def* n
 			{
 			}
 		}
+		if (c_function != NULL && c_function->has_returned)
+		{
+			c = stop;
+			break;
+		}
 		//return from function code
-
+		gc_check_auto();
 
 		if (c == NULL)
 			break;

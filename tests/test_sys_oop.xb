@@ -1,0 +1,9 @@
+import("sys.xb")
+
+System sys
+print("Argc: %d", sys.argc())
+sys.setenv("XLANG_OOP_SYS", "works")
+print("Getenv: %s", sys.getenv("XLANG_OOP_SYS"))
+int rc = sys.exec("echo oop_exec > oop_exec_temp.txt")
+print("Exec rc: %d", rc)
+file_remove("oop_exec_temp.txt")

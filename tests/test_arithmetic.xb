@@ -1,0 +1,16 @@
+int a = 10
+int b = 3
+int add = a + b
+int sub = a - b
+int mul = a * b
+int div = a / b
+int mod = a % b
+print(add)
+print(sub)
+print(mul)
+print(div)
+print(mod)
+float f1 = 5.5
+float f2 = 2.0
+float f3 = f1 + f2
+print(f3)

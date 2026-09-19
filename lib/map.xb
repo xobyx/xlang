@@ -1,0 +1,85 @@
+class Map() {
+    int id
+
+    Map() {
+        id = map_new()
+    }
+
+    int put(string key, string val) {
+        return map_put(id, key, val)
+    }
+
+    int put_int(string key, int val) {
+        return map_put_int(id, key, val)
+    }
+
+    int put_float(string key, float val) {
+        return map_put_float(id, key, val)
+    }
+
+    int set(string key, string val) {
+        return map_put(id, key, val)
+    }
+
+    int set_int(string key, int val) {
+        return map_put_int(id, key, val)
+    }
+
+    string get(string key) {
+        return map_get(id, key)
+    }
+
+    int get_int(string key) {
+        return map_get_int(id, key)
+    }
+
+    float get_float(string key) {
+        return map_get_float(id, key)
+    }
+
+    int has(string key) {
+        return map_has(id, key)
+    }
+
+    int contains(string key) {
+        return map_has(id, key)
+    }
+
+    int remove(string key) {
+        return map_remove(id, key)
+    }
+
+    int size() {
+        return map_size(id)
+    }
+
+    int length() {
+        return map_size(id)
+    }
+
+    int clear() {
+        return map_clear(id)
+    }
+
+    string keys() {
+        return map_keys(id)
+    }
+
+    string values() {
+        return map_values(id)
+    }
+
+    string to_str() {
+        return map_to_string(id)
+    }
+
+    int free() {
+        return map_free(id)
+    }
+}
+
+class HashMap(Map) {
+    HashMap() {
+        id = map_new()
+    }
+}

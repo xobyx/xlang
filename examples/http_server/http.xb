@@ -1,0 +1,253 @@
+import "map.xb"
+import "list.xb"
+
+class HttpRequest() {
+    string method
+    string path
+    string query
+    string version
+    string body
+    Map headers
+    Map params
+
+    HttpRequest() {
+        method = "GET"
+        path = "/"
+        query = ""
+        version = "HTTP/1.1"
+        body = ""
+        headers.id = map_new()
+        params.id = map_new()
+    }
+
+    int reset() {
+        method = "GET"
+        path = "/"
+        query = ""
+        version = "HTTP/1.1"
+        body = ""
+        headers.clear()
+        params.clear()
+        return 0
+    }
+
+    int parse(string raw) {
+        reset()
+        if (raw.len() == 0) {
+            return -1
+        }
+
+        # Step 1: Separate Header Section from Body
+        int body_sep = index_of(raw, "\r\n\r\n")
+        int sep_len = 4
+        if (body_sep < 0) {
+            body_sep = index_of(raw, "\n\n")
+            sep_len = 2
+        }
+
+        string header_section = ""
+        if (body_sep >= 0) {
+            header_section = substr(raw, 0, body_sep)
+            int body_start = body_sep + sep_len
+            if (raw.len() > body_start) {
+                body = substr(raw, body_start, raw.len() - body_start)
+            }
+        }
+        else {
+            header_section = raw
+            body = ""
+        }
+
+        # Step 2: Parse Request Line (first line)
+        int eol = index_of(header_section, "\n")
+        string req_line = ""
+        string rest_headers = ""
+        if (eol >= 0) {
+            req_line = substr(header_section, 0, eol)
+            rest_headers = substr(header_section, eol + 1, header_section.len() - eol - 1)
+        }
+        else {
+            req_line = header_section
+            rest_headers = ""
+        }
+
+        req_line = req_line.trim()
+        int sp1 = index_of(req_line, " ")
+        if (sp1 > 0) {
+            method = substr(req_line, 0, sp1)
+            string after_sp1 = substr(req_line, sp1 + 1, req_line.len() - sp1 - 1)
+            int sp2 = index_of(after_sp1, " ")
+            string full_target = ""
+            if (sp2 > 0) {
+                full_target = substr(after_sp1, 0, sp2)
+                version = substr(after_sp1, sp2 + 1, after_sp1.len() - sp2 - 1)
+            }
+            else {
+                full_target = after_sp1
+                version = "HTTP/1.1"
+            }
+
+            # Extract path and query string from target
+            int q_pos = index_of(full_target, "?")
+            if (q_pos >= 0) {
+                path = substr(full_target, 0, q_pos)
+                query = substr(full_target, q_pos + 1, full_target.len() - q_pos - 1)
+            }
+            else {
+                path = full_target
+                query = ""
+            }
+        }
+
+        # Step 3: Parse Query Parameters if query exists
+        if (query.len() > 0) {
+            string q_rem = query
+            int amp_pos = 0
+            string pair = ""
+            int eq_pos = 0
+            string pk = ""
+            string pv = ""
+            while (q_rem.len() > 0) {
+                amp_pos = index_of(q_rem, "&")
+                if (amp_pos >= 0) {
+                    pair = substr(q_rem, 0, amp_pos)
+                    q_rem = substr(q_rem, amp_pos + 1, q_rem.len() - amp_pos - 1)
+                }
+                else {
+                    pair = q_rem
+                    q_rem = ""
+                }
+                eq_pos = index_of(pair, "=")
+                if (eq_pos >= 0) {
+                    pk = substr(pair, 0, eq_pos)
+                    pv = substr(pair, eq_pos + 1, pair.len() - eq_pos - 1)
+                    params.put(pk, pv)
+                }
+                else {
+                    if (pair.len() > 0) {
+                        params.put(pair, "")
+                    }
+                }
+            }
+        }
+
+        # Step 4: Parse Header Lines
+        string h_rem = rest_headers
+        int h_eol = 0
+        string h_line = ""
+        int colon_pos = 0
+        string hk = ""
+        string hv = ""
+        while (h_rem.len() > 0) {
+            h_eol = index_of(h_rem, "\n")
+            if (h_eol >= 0) {
+                h_line = substr(h_rem, 0, h_eol)
+                h_rem = substr(h_rem, h_eol + 1, h_rem.len() - h_eol - 1)
+            }
+            else {
+                h_line = h_rem
+                h_rem = ""
+            }
+            h_line = h_line.trim()
+            if (h_line.len() > 0) {
+                colon_pos = index_of(h_line, ":")
+                if (colon_pos > 0) {
+                    hk = substr(h_line, 0, colon_pos)
+                    hk = hk.trim()
+                    hk = hk.lower()
+                    hv = substr(h_line, colon_pos + 1, h_line.len() - colon_pos - 1)
+                    hv = hv.trim()
+                    headers.put(hk, hv)
+                }
+            }
+        }
+        return 0
+    }
+
+    string get_header(string name) {
+        string k = name.lower()
+        if (headers.has(k) != 0) {
+            return headers.get(k)
+        }
+        return ""
+    }
+
+    string get_param(string name) {
+        if (params.has(name) != 0) {
+            return params.get(name)
+        }
+        return ""
+    }
+}
+
+class HttpResponse() {
+    int status_code
+    string status_text
+    string content_type
+    string body
+    Map custom_headers
+
+    HttpResponse() {
+        status_code = 200
+        status_text = "OK"
+        content_type = "text/html"
+        body = ""
+        custom_headers.id = map_new()
+    }
+
+    int reset() {
+        status_code = 200
+        status_text = "OK"
+        content_type = "text/html"
+        body = ""
+        custom_headers.clear()
+        return 0
+    }
+
+    int set_status(int code, string text) {
+        status_code = code
+        status_text = text
+        return 0
+    }
+
+    int set_header(string key, string val) {
+        custom_headers.put(key, val)
+        return 0
+    }
+
+    int set_body(string content, string ctype) {
+        body = content
+        content_type = ctype
+        return 0
+    }
+
+    int html(string content) {
+        body = content
+        content_type = "text/html; charset=utf-8"
+        return 0
+    }
+
+    int json(string content) {
+        body = content
+        content_type = "application/json; charset=utf-8"
+        return 0
+    }
+
+    int text(string content) {
+        body = content
+        content_type = "text/plain; charset=utf-8"
+        return 0
+    }
+
+    string to_string() {
+        string resp = ""
+        resp = resp + "HTTP/1.1 " + status_code + " " + status_text + "\r\n"
+        resp = resp + "Content-Type: " + content_type + "\r\n"
+        resp = resp + "Content-Length: " + body.len() + "\r\n"
+        resp = resp + "Server: xlang-http/1.0\r\n"
+        resp = resp + "Connection: close\r\n"
+        resp = resp + "\r\n"
+        resp = resp + body
+        return resp
+    }
+}

@@ -1,0 +1,32 @@
+class System() {
+    System() {
+    }
+
+    int argc() {
+        return get_argc()
+    }
+
+    string arg(int index) {
+        return get_arg(index)
+    }
+
+    int exec(string cmd) {
+        return system_exec(cmd)
+    }
+
+    string getenv(string name) {
+        return system_getenv(name)
+    }
+
+    int setenv(string name, string val) {
+        return system_setenv(name, val)
+    }
+
+    static int clock_ms() {
+        return clock_ms()
+    }
+
+    int now_ms() {
+        return clock_ms()
+    }
+}

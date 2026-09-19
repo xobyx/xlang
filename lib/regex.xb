@@ -1,0 +1,26 @@
+class Regex() {
+    string pattern
+
+    Regex() {
+    }
+
+    Regex(string p) {
+        pattern = p
+    }
+
+    int match(string text) {
+        return regex_match(text, pattern)
+    }
+
+    int test(string text) {
+        return regex_match(text, pattern)
+    }
+
+    string find(string text) {
+        return regex_find(text, pattern)
+    }
+
+    string replace(string text, string repl) {
+        return regex_replace(text, pattern, repl)
+    }
+}

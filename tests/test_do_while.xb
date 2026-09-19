@@ -1,0 +1,47 @@
+# Test 1: Basic do-while
+int k = 0
+do {
+    print(k)
+    k = k + 1
+} while (k < 3)
+
+# Test 2: Condition initially false (body runs at least once)
+int once = 999
+do {
+    print(once)
+} while (once < 10)
+
+# Test 3: while on the next line
+int n = 0
+do {
+    print(n)
+    n = n + 1
+}
+while (n < 2)
+
+# Test 4: do-while with break
+int b = 0
+do {
+    if (b == 2) {
+        break
+    }
+    print(b)
+    b = b + 1
+} while (b < 5)
+
+# Test 5: do-while inside function with early return
+int find_target(int target) {
+    int val = 10
+    do {
+        if (val == target) {
+            return val * 2
+        }
+        val = val + 10
+    } while (val <= 50)
+    return 0
+}
+
+int res = find_target(30)
+print(res)
+
+print("DO_WHILE_PASS")

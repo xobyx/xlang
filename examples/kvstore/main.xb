@@ -1,0 +1,131 @@
+import "kvstore.xb"
+import "sys.xb"
+import "gc.xb"
+
+print("==================================================")
+print("     xlang Production Demo: Key-Value Store       ")
+print("==================================================")
+
+# Step 1: Initialize Database
+string wal_path = "app_data.wal"
+string snap_path = "app_data.snapshot"
+
+# Clean up any stale files from previous runs
+if (file_exists(wal_path)) {
+    file_remove(wal_path)
+}
+if (file_exists(snap_path)) {
+    file_remove(snap_path)
+}
+
+KVStore db
+db.open(wal_path)
+print("[1] Database initialized. WAL file: %s", wal_path)
+
+# Step 2: Store real-world application entities
+print("\n[2] Populating initial domain entities...")
+db.set("user:101", "name=Alice,role=admin,status=active")
+db.set("user:102", "name=Bob,role=engineer,status=active")
+db.set("user:103", "name=Charlie,role=viewer,status=pending")
+db.set("sess:tk_alpha1", "user_id=101,expires=3600")
+db.set("sess:tk_beta2", "user_id=102,expires=1800")
+db.set("cfg:max_connections", "5000")
+db.set("cfg:timeout_ms", "250")
+db.set("cfg:cluster_mode", "raft")
+
+print("    Total records inserted: %d", db.size())
+print("    Dump JSON: %s", db.dump_json())
+
+# Step 3: Query & Update records
+print("\n[3] Querying and updating records...")
+print("    user:101 -> %s", db.get("user:101"))
+print("    cfg:max_connections -> %s", db.get("cfg:max_connections"))
+
+# Update user:103 from pending to active
+print("    Updating user:103 status to active...")
+db.set("user:103", "name=Charlie,role=viewer,status=active")
+print("    user:103 updated -> %s", db.get("user:103"))
+
+# Delete expired session
+print("    Expiring session sess:tk_alpha1...")
+db.remove("sess:tk_alpha1")
+print("    sess:tk_alpha1 exists? %d", db.has("sess:tk_alpha1"))
+print("    Current live keys in store: %d", db.size())
+
+# Step 4: Crash & Recovery Simulation
+print("\n[4] Simulating application crash / restart...")
+print("    Closing current in-memory store...")
+
+# Create fresh instance to simulate clean reboot
+KVStore db_recovery
+db_recovery.open(wal_path)
+
+print("    New store instance initial size: %d", db_recovery.size())
+print("    Replaying Write-Ahead Log from disk (%s)...", wal_path)
+
+int replayed = db_recovery.replay_wal()
+print("    Replayed %d WAL entries successfully!", replayed)
+print("    Restored active records count: %d", db_recovery.size())
+print("    Verifying restored user:103: %s", db_recovery.get("user:103"))
+print("    Verifying deleted sess:tk_alpha1 is absent: %d", db_recovery.has("sess:tk_alpha1"))
+print("    Verifying active sess:tk_beta2 is present: %s", db_recovery.get("sess:tk_beta2"))
+
+# Step 5: Compaction / Snapshotting
+print("\n[5] Compacting Write-Ahead Log into snapshot...")
+int snap_count = db_recovery.compact(snap_path)
+print("    Snapshot created at: %s with %d records", snap_path, snap_count)
+print("    Snapshot file size: %d bytes", file_size(snap_path))
+
+# Step 6: Micro-Benchmark (Throughput & Latency)
+print("\n[6] Running performance benchmark (500 sequential writes & reads)...")
+
+int bench_count = 500
+int t0 = clock_ms()
+
+int i = 0
+string bkey = ""
+string bval = ""
+while (i < bench_count) {
+    bkey = "bench:item:" + i
+    bval = "payload_data_value_" + i
+    db_recovery.set(bkey, bval)
+    i = i + 1
+}
+int t1 = clock_ms()
+int write_time = t1 - t0
+if (write_time <= 0) {
+    write_time = 1
+}
+int writes_per_sec = (bench_count * 1000) / write_time
+print("    Write throughput: %d ops in %d ms (~%d writes/sec)", bench_count, write_time, writes_per_sec)
+
+int t2 = clock_ms()
+i = 0
+string qval = ""
+while (i < bench_count) {
+    bkey = "bench:item:" + i
+    qval = db_recovery.get(bkey)
+    i = i + 1
+}
+int t3 = clock_ms()
+int read_time = t3 - t2
+if (read_time <= 0) {
+    read_time = 1
+}
+int reads_per_sec = (bench_count * 1000) / read_time
+print("    Read throughput:  %d ops in %d ms (~%d reads/sec)", bench_count, read_time, reads_per_sec)
+
+# Step 7: System & GC Diagnostics
+print("\n[7] Diagnostic Metrics:")
+print("    Store total items: %d", db_recovery.size())
+print("    WAL file size on disk: %d bytes", file_size(wal_path))
+print("    GC allocated bytes: %d bytes", gc_allocated_bytes())
+print("    GC total objects: %d", gc_total_objects())
+
+# Step 8: Clean up
+db_recovery.clear()
+if (file_exists(snap_path)) {
+    file_remove(snap_path)
+}
+print("\n[8] Cleanup complete. KVStore test finished successfully!")
+print("==================================================")

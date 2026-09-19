@@ -1,0 +1,21 @@
+int written = file_write_all("temp_test.txt", "Hello xlang File I/O!")
+print("Bytes written: %d", written)
+
+int exists = file_exists("temp_test.txt")
+print("File exists: %d", exists)
+
+string content = file_read_all("temp_test.txt")
+print("File Content: %s", content)
+
+int appended = file_append("temp_test.txt", " Appended text.")
+int sz = file_size("temp_test.txt")
+print("File Size: %d", sz)
+
+int fd = file_open("temp_test.txt", "r")
+string partial = file_read(fd, 5)
+print("Partial read: %s", partial)
+file_close(fd)
+
+int del_rc = file_remove("temp_test.txt")
+int exists_after = file_exists("temp_test.txt")
+print("Exists after delete: %d", exists_after)

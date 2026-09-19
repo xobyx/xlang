@@ -1,0 +1,193 @@
+import "http.xb"
+import "socket.xb"
+import "list.xb"
+import "map.xb"
+import "sys.xb"
+import "gc.xb"
+
+class HttpServer() {
+    int server_fd
+    string host
+    int port
+    int is_running
+    int request_count
+    List items_list
+    HttpRequest req
+    HttpResponse resp
+
+    HttpServer() {
+        server_fd = -1
+        host = "127.0.0.1"
+        port = 8080
+        is_running = 0
+        request_count = 0
+        items_list.id = list_new()
+    }
+
+    int init(string host_ip, int listen_port) {
+        host = host_ip
+        port = listen_port
+        server_fd = socket_create("tcp")
+        if (server_fd < 0) {
+            print("ERROR: Failed to create server socket")
+            return -1
+        }
+        socket_set_reuseaddr(server_fd, 1)
+        int b = socket_bind(server_fd, host, port)
+        if (b < 0) {
+            print("ERROR: Failed to bind server to %s:%d", host, port)
+            return -2
+        }
+        int l = socket_listen(server_fd, 32)
+        if (l < 0) {
+            print("ERROR: Failed to listen on server socket")
+            return -3
+        }
+        is_running = 1
+        return 0
+    }
+
+    string route_req() {
+        resp.reset()
+
+        # Endpoint 1: Root / Landing Page (HTML)
+        if (req.path == "/") {
+            string html_doc = ""
+            html_doc = html_doc + "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\">\n"
+            html_doc = html_doc + "<title>xlang Web Server</title>\n"
+            html_doc = html_doc + "<style>body{font-family:sans-serif;margin:40px;background:#f5f5f7;color:#333}h1{color:#0066cc}code{background:#e8e8e8;padding:2px 6px;border-radius:4px}</style>\n"
+            html_doc = html_doc + "</head><body>\n"
+            html_doc = html_doc + "<h1>Welcome to xlang HTTP Web Server!</h1>\n"
+            html_doc = html_doc + "<p>High-performance native networking written in <strong>xlang</strong>.</p>\n"
+            html_doc = html_doc + "<h3>Available Endpoints:</h3><ul>\n"
+            html_doc = html_doc + "<li><code>GET /</code> - This HTML Dashboard</li>\n"
+            html_doc = html_doc + "<li><code>GET /health</code> - Server Health & Uptime (JSON)</li>\n"
+            html_doc = html_doc + "<li><code>GET /api/info</code> - Runtime Diagnostics & GC Heap Stats (JSON)</li>\n"
+            html_doc = html_doc + "<li><code>GET /api/items</code> - List In-Memory Catalog Items (JSON)</li>\n"
+            html_doc = html_doc + "<li><code>POST /api/items</code> - Add Catalog Item (JSON)</li>\n"
+            html_doc = html_doc + "<li><code>GET /api/echo</code> - Echo Request Headers & Query Params (JSON)</li>\n"
+            html_doc = html_doc + "</ul></body></html>\n"
+            resp.html(html_doc)
+            return resp.to_string()
+        }
+
+        # Endpoint 2: Health Check (JSON)
+        if (req.path == "/health") {
+            int now_ms = clock_ms()
+            string h_json = ""
+            h_json = h_json + "{\"status\":\"UP\",\"requests_served\":" + request_count
+            h_json = h_json + ",\"timestamp\":" + now_ms + "}"
+            resp.json(h_json)
+            return resp.to_string()
+        }
+
+        # Endpoint 3: Runtime & Heap Diagnostics (JSON)
+        if (req.path == "/api/info") {
+            int gc_objs = gc_total_objects()
+            int gc_bytes = gc_allocated_bytes()
+            string info_json = ""
+            info_json = info_json + "{\"server\":\"xlang-http/1.0\""
+            info_json = info_json + ",\"language\":\"xlang\""
+            info_json = info_json + ",\"os\":\"linux\""
+            info_json = info_json + ",\"heap_active_objects\":" + gc_objs
+            info_json = info_json + ",\"heap_allocated_bytes\":" + gc_bytes
+            info_json = info_json + "}"
+            resp.json(info_json)
+            return resp.to_string()
+        }
+
+        # Endpoint 4 & 5: /api/items (REST API CRUD)
+        if (req.path == "/api/items") {
+            if (req.method == "GET") {
+                string items_json = ""
+                int sz = items_list.size()
+                items_json = items_json + "{\"count\":" + sz + ",\"items\":["
+                int i = 0
+                while (i < sz) {
+                    string item_str = items_list.get(i)
+                    if (i > 0) {
+                        items_json = items_json + ","
+                    }
+                    items_json = items_json + item_str
+                    i = i + 1
+                }
+                items_json = items_json + "]}"
+                resp.json(items_json)
+                return resp.to_string()
+            }
+            if (req.method == "POST") {
+                string new_item = req.body.trim()
+                int cur_sz = items_list.size()
+                if (new_item.len() == 0) {
+                    int next_id = cur_sz + 1
+                    new_item = "{\"id\":" + next_id + ",\"name\":\"Default Item\"}"
+                }
+                items_list.add(new_item)
+                resp.set_status(201, "Created")
+                string created_json = ""
+                created_json = created_json + "{\"status\":\"created\",\"index\":" + cur_sz + ",\"item\":" + new_item + "}"
+                resp.json(created_json)
+                return resp.to_string()
+            }
+        }
+
+        # Endpoint 6: GET /api/echo (Echo query params & headers)
+        if (req.path == "/api/echo") {
+            string u_agent = req.get_header("user-agent")
+            string h_host = req.get_header("host")
+            string echo_json = ""
+            echo_json = echo_json + "{\"method\":\"" + req.method + "\""
+            echo_json = echo_json + ",\"path\":\"" + req.path + "\""
+            echo_json = echo_json + ",\"query\":\"" + req.query + "\""
+            echo_json = echo_json + ",\"user_agent\":\"" + u_agent + "\""
+            echo_json = echo_json + ",\"host\":\"" + h_host + "\""
+            echo_json = echo_json + "}"
+            resp.json(echo_json)
+            return resp.to_string()
+        }
+
+        # Default: 404 Not Found
+        resp.set_status(404, "Not Found")
+        string not_found_json = "{\"error\":\"Not Found\",\"path\":\"" + req.path + "\"}"
+        resp.json(not_found_json)
+        return resp.to_string()
+    }
+
+    int handle_connection(int client_fd) {
+        if (client_fd < 0) {
+            return -1
+        }
+        socket_set_timeout(client_fd, 5)
+        string raw_req = socket_recv(client_fd, 4096)
+        if (raw_req.len() == 0) {
+            socket_close(client_fd)
+            return 0
+        }
+
+        req.parse(raw_req)
+
+        string response_data = route_req()
+        socket_send(client_fd, response_data)
+        socket_close(client_fd)
+        request_count = request_count + 1
+        return 0
+    }
+
+    int accept_and_serve() {
+        int client_fd = socket_accept(server_fd)
+        if (client_fd < 0) {
+            return -1
+        }
+        handle_connection(client_fd)
+        return 0
+    }
+
+    int close() {
+        if (server_fd >= 0) {
+            socket_close(server_fd)
+            server_fd = -1
+        }
+        is_running = 0
+        return 0
+    }
+}

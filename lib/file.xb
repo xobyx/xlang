@@ -1,0 +1,56 @@
+class File() {
+    string path
+    int fd
+
+    File() {
+        fd = 0 - 1
+    }
+
+    File(string p) {
+        path = p
+        fd = 0 - 1
+    }
+
+    string read_all() {
+        return file_read_all(path)
+    }
+
+    int write_all(string content) {
+        return file_write_all(path, content)
+    }
+
+    int append(string content) {
+        return file_append(path, content)
+    }
+
+    int exists() {
+        return file_exists(path)
+    }
+
+    int size() {
+        return file_size(path)
+    }
+
+    int remove() {
+        return file_remove(path)
+    }
+
+    int open(string mode) {
+        fd = file_open(path, mode)
+        return fd
+    }
+
+    string read(int bytes) {
+        return file_read(fd, bytes)
+    }
+
+    int write(string data) {
+        return file_write(fd, data)
+    }
+
+    int close() {
+        int rc = file_close(fd)
+        fd = 0 - 1
+        return rc
+    }
+}

@@ -10,5 +10,6 @@
 /New Text Document.txt
 /packages.config
 *.txt
+*.log
 /obj
 *.lnk

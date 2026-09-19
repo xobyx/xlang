@@ -1,0 +1,5 @@
+import "tests/mod_cycle_b.xb"
+
+int get_val_a() {
+    return 100
+}

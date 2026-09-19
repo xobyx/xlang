@@ -1,0 +1,85 @@
+class MathHelper() {
+    static int add(int a, int b) {
+        return a + b
+    }
+
+    static int multiply(int a, int b) {
+        return a * b
+    }
+
+    static int double_val(int x) {
+        return MathHelper.add(x, x)
+    }
+
+    static int greet(string name) {
+        print("Hello, %s!\n", name)
+        return 0
+    }
+}
+
+class Counter() {
+    static int global_count
+
+    static int set_count(int val) {
+        Counter.global_count = val
+        return 0
+    }
+
+    static int get_count() {
+        return Counter.global_count
+    }
+}
+
+class Box() {
+    int width
+    int height
+
+    Box(int w, int h) {
+        this.width = w
+        this.height = h
+    }
+
+    static Box createSquare(int size) {
+        Box b(size, size)
+        return b
+    }
+
+    int area() {
+        return this.width * this.height
+    }
+}
+
+print("=== Testing Static Methods ===\n")
+
+// Test 1: Static method invocation in assignment
+int sum = MathHelper.add(15, 25)
+print("MathHelper.add(15, 25) = %d\n", sum)
+
+// Test 2: Static method invocation in expression
+int prod = MathHelper.multiply(6, 7)
+print("MathHelper.multiply(6, 7) = %d\n", prod)
+
+// Test 3: Static method inside compound expression
+int combo = MathHelper.add(10, 20) + MathHelper.multiply(2, 3)
+print("Combo expression = %d\n", combo)
+
+// Test 4: Static method calling another static method
+int dbl = MathHelper.double_val(21)
+print("MathHelper.double_val(21) = %d\n", dbl)
+
+// Test 5: Standalone static method statement
+MathHelper.greet("World")
+
+// Test 6: Static properties access and mutation
+Counter.global_count = 100
+print("Counter.global_count = %d\n", Counter.global_count)
+Counter.set_count(250)
+print("Counter.get_count() = %d\n", Counter.get_count())
+
+Box sq = Box.createSquare(8)
+print("Square area: %d\n", sq.area())
+
+int sq_area = Box.createSquare(5).area()
+print("Chained square area: %d\n", sq_area)
+
+print("=== All Static Method Tests Completed ===\n")

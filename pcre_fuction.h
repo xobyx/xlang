@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "xlang_main.h"
 
 typedef struct find
@@ -7,7 +7,7 @@ typedef struct find
 	char* bn;
 	int size;
 }find;
-find c={0,0,0};
+
 #define OVECCOUNT 30
 
 inline char** get_lines_array(char* subject)
@@ -42,9 +42,8 @@ inline char** get_lines_array(char* subject)
 
 
 	int options = 0; /* Normally no options */
-	int start_offset = ovector[1] = 0;
-	char** r = (char**)malloc(sizeof(char**)*5000);
-	memset(r, 0, 5000 - 1);
+	ovector[1] = 0;
+	char** r = (char**)calloc(5000, sizeof(char*));
 	/* Loop for second and subsequent matches */
 	int ti = 0;
 	for (;;)
@@ -132,24 +131,11 @@ find* isMatchF(char* pattern, char* subject, int flags)
 
 //	unsigned char* name_table;
 	int erroffset;
-	int find_all;
 //	int namecount;
 //	int name_entry_size;
 	int ovector[OVECCOUNT];
 	int subject_length;
 	int rc, i;
-
-
-	/**************************************************************************
-	* First, sort out the command line. There is only one possible option at  *
-	* the moment, "-g" to request repeated matching to find all occurrences,  *
-	* like Perl's /g option. We set the variable find_all to a non-zero value *
-	* if the -g option is present. Apart from that, there must be exactly two *
-	* arguments.                                                              *
-	**************************************************************************/
-
-	find_all = 1;
-
 
 	subject_length = (int)strlen(subject);
 
@@ -175,8 +161,8 @@ find* isMatchF(char* pattern, char* subject, int flags)
 		find* x = (find*)malloc(sizeof(find));
 		x->isFind=false;
 		x->bn=rb;
-		//	new find {false,rb};
-		//return x;
+		x->size = 0;
+		return x;
 	}
 
 

@@ -1,0 +1,17 @@
+import("str.xb")
+
+Str st("  Hello OOP Str 789  ")
+print("Length: %d", st.len())
+
+string tr = st.trim()
+print("Trim: '%s'", tr)
+
+Str st2(tr)
+print("Lower: %s", st2.to_lower())
+print("Upper: %s", st2.to_upper())
+print("Substr: %s", st2.substr(0, 5))
+print("IndexOf: %d", st2.index_of("OOP"))
+print("Starts/Ends: %d %d", st2.starts_with("Hello"), st2.ends_with("789"))
+print("Regex match: %d", st2.regex_match("\d+"))
+print("Regex find: %s", st2.regex_find("\d+"))
+print("Regex replace: %s", st2.regex_replace("\d+", "000"))

@@ -1,0 +1,20 @@
+import("file.xb")
+
+File f("oop_test.txt")
+f.write_all("OOP File I/O works!")
+print("Exists: %d", f.exists())
+print("Size: %d", f.size())
+
+string content = f.read_all()
+print("Read all: %s", content)
+
+f.append(" Plus more.")
+print("New size: %d", f.size())
+
+f.open("r")
+string partial = f.read(8)
+print("Read 8 bytes: %s", partial)
+f.close()
+
+f.remove()
+print("Exists after remove: %d", f.exists())

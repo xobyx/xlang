@@ -1,0 +1,132 @@
+import "gc.xb"
+
+print("=========================================================")
+print("     XLANG FIBONACCI PERFORMANCE & RECURSION BENCHMARK  ")
+print("=========================================================")
+
+# 1. Recursive Fibonacci Function
+int fib_rec(int n) {
+    if (n <= 1) {
+        return n
+    }
+    int a = fib_rec(n - 1)
+    int b = fib_rec(n - 2)
+    return a + b
+}
+
+# 2. Iterative Fibonacci Function
+int fib_iter(int n) {
+    if (n <= 1) {
+        return n
+    }
+    int a = 0
+    int b = 1
+    int c = 0
+    int i = 2
+    while (i <= n) {
+        c = a + b
+        a = b
+        b = c
+        i = i + 1
+    }
+    return b
+}
+
+# 3. Object-Oriented Fibonacci Class
+class Fibonacci() {
+    Fibonacci() {
+    }
+
+    static int compute_rec(int n) {
+        if (n <= 1) {
+            return n
+        }
+        int a = fib_rec(n - 1)
+        int b = fib_rec(n - 2)
+        return a + b
+    }
+
+    static int compute_iter(int n) {
+        return fib_iter(n)
+    }
+}
+
+print("\n--- Part 1: Correctness Verification ---")
+int r0 = fib_rec(0)
+int r1 = fib_rec(1)
+int r5 = fib_rec(5)
+int r10 = fib_rec(10)
+int r20 = fib_rec(20)
+
+int i0 = fib_iter(0)
+int i1 = fib_iter(1)
+int i5 = fib_iter(5)
+int i10 = fib_iter(10)
+int i20 = fib_iter(20)
+int i45 = fib_iter(45)
+
+print("fib_rec(0)  = %d (expected 0)", r0)
+print("fib_rec(1)  = %d (expected 1)", r1)
+print("fib_rec(5)  = %d (expected 5)", r5)
+print("fib_rec(10) = %d (expected 55)", r10)
+print("fib_rec(20) = %d (expected 6765)", r20)
+print("fib_iter(45) = %d (expected 1134903170)", i45)
+
+int oop_val = Fibonacci.compute_iter(20)
+print("Fibonacci.compute_iter(20) = %d", oop_val)
+
+if (r20 == 6765) {
+    print("PASS: Recursive Fibonacci matches mathematical sequence")
+} else {
+    print("FAIL: Recursive Fibonacci mismatch")
+}
+
+if (i45 == 1134903170) {
+    print("PASS: Iterative Fibonacci matches mathematical sequence")
+} else {
+    print("FAIL: Iterative Fibonacci mismatch")
+}
+
+print("\n--- Part 2: Recursive Benchmark (O(2^n) Call Frame Scaling) ---")
+
+int t0 = clock_ms()
+int v15 = fib_rec(15)
+int t1 = clock_ms()
+int e15 = t1 - t0
+print("fib_rec(15) = %d  | Recursive calls: 1,973       | Elapsed: %d ms", v15, e15)
+
+t0 = clock_ms()
+int v20 = fib_rec(20)
+t1 = clock_ms()
+int e20 = t1 - t0
+print("fib_rec(20) = %d  | Recursive calls: 21,891      | Elapsed: %d ms", v20, e20)
+
+t0 = clock_ms()
+int v25 = fib_rec(25)
+t1 = clock_ms()
+int e25 = t1 - t0
+print("fib_rec(25) = %d | Recursive calls: 242,785     | Elapsed: %d ms", v25, e25)
+
+t0 = clock_ms()
+int v28 = fib_rec(28)
+t1 = clock_ms()
+int e28 = t1 - t0
+print("fib_rec(28) = %d | Recursive calls: 1,023,341   | Elapsed: %d ms", v28, e28)
+
+print("\n--- Part 3: Iterative Benchmark (Throughput & Safe-Points) ---")
+t0 = clock_ms()
+int runs = 5000
+int k = 0
+int cur = 0
+while (k < runs) {
+    cur = fib_iter(40)
+    k = k + 1
+}
+t1 = clock_ms()
+int e_iter = t1 - t0
+print("5,000 runs of fib_iter(40) = %d | Elapsed: %d ms", cur, e_iter)
+
+print("\n--- Part 4: Garbage Collector Statistics ---")
+GC.dump()
+
+print("\nPerformance testing completed successfully!")

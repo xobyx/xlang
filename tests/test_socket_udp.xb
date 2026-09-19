@@ -1,0 +1,11 @@
+int s_recv = socket_create("udp")
+int b = socket_bind(s_recv, "127.0.0.1", 19877)
+
+int s_send = socket_create("udp")
+int sent = socket_sendto(s_send, "Hello UDP Server", "127.0.0.1", 19877)
+
+string msg = socket_recvfrom(s_recv, 1024)
+print("UDP received: %s", msg)
+
+socket_close(s_recv)
+socket_close(s_send)

@@ -1,0 +1,29 @@
+int m1 = regex_match("hello123world", "\d+")
+int m2 = regex_match("helloworld", "\d+")
+print("Match digits: %d %d", m1, m2)
+
+string found = regex_find("user: admin, id: 99", "\d+")
+print("Found: %s", found)
+
+string replaced = regex_replace("apple banana apple", "apple", "orange")
+print("Replaced: %s", replaced)
+
+string sub = substr("0123456789", 2, 4)
+print("Substr: %s", sub)
+
+int idx1 = index_of("abcdef", "cd")
+int idx2 = index_of("abcdef", "zz")
+print("Index: %d %d", idx1, idx2)
+
+string tr = trim("   padded text   ")
+print("Trim: '%s'", tr)
+
+string low = to_lower("HeLLo WoRLd")
+print("Lower: %s", low)
+
+string up = to_upper("HeLLo WoRLd")
+print("Upper: %s", up)
+
+int sw = starts_with("foobar", "foo")
+int ew = ends_with("foobar", "bar")
+print("Starts/Ends: %d %d", sw, ew)

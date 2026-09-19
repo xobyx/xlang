@@ -1,0 +1,52 @@
+class Math() {
+    Math() {
+    }
+
+    float sqrt(float x) {
+        return math_sqrt(x)
+    }
+
+    float pow(float base, float exp) {
+        return math_pow(base, exp)
+    }
+
+    int abs(int x) {
+        return math_abs(x)
+    }
+
+    int min(int a, int b) {
+        return math_min(a, b)
+    }
+
+    int max(int a, int b) {
+        return math_max(a, b)
+    }
+
+    float floor(float x) {
+        return math_floor(x)
+    }
+
+    float ceil(float x) {
+        return math_ceil(x)
+    }
+
+    float round(float x) {
+        return math_round(x)
+    }
+
+    float sin(float x) {
+        return math_sin(x)
+    }
+
+    float cos(float x) {
+        return math_cos(x)
+    }
+
+    float tan(float x) {
+        return math_tan(x)
+    }
+
+    float log(float x) {
+        return math_log(x)
+    }
+}

@@ -33,6 +33,7 @@ extern int fi;
 #define T_ANY  (SIMPLE_TYPE+8)
 #define T_FUNC  (SIMPLE_TYPE+9)
 #define T_TYPE_INFO (SIMPLE_TYPE+10)
+#define SIMPLE_FUNC_COUNT 138
 extern func_stack base_function;
 
 /*XLANG*/ var* get_type_inc_obj_var(node** nop, var* context, func_deftion ** outp);
@@ -55,9 +56,13 @@ void set_value(var* context, fcall* temp, node** cx);
 
 var* new_var(char* name, type_def* vtype);
 var* new_temp_var(type_def* typ);
+int* new_int(int count, int value);
 func_deftion* new_func();
 type_def* new_type();
 func_deftion * get_obj_function(var * a,char* name);
+func_deftion* get_class_function(type_def* t, const char* name);
+var* get_class_property(type_def* t, const char* name);
+type_def* get_class_of_function(func_deftion* fd);
 func_deftion* get_func_by_name(char* name);
 ///XLANGC type* get_type_by_name(char* name);
 void install_default_functions();

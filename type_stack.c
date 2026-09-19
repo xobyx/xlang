@@ -44,20 +44,23 @@ type_def * new_type_stack(type_stack* n)
 	
 }
 
- void type_clean_stack(type_stack* s)
- {
-	type_def*x=NULL;
-	for (type_def * bi = s->root;bi!=NULL;bi=x)
-	{
-		x=bi->stack_next;		
-		//if(bi->value!=0)free(bi->value);
-		//if(bi->opt!=0)free(bi->opt);
-	  //  var_clean_stack(&bi->propertys);
-	//	func_clean_stack(&bi->functions);
-		
-		free(bi);
-		s->size--;
-		
-	}
+extern type_def SIMPLE_TYPE[];
 
- }
+void type_clean_stack(type_stack* s)
+{
+	if (s == NULL) return;
+	type_def* x = NULL;
+	for (type_def* bi = s->root; bi != NULL; bi = x)
+	{
+		x = bi->stack_next;
+		bool is_static = (bi >= SIMPLE_TYPE && bi < SIMPLE_TYPE + 11);
+		if (!is_static)
+		{
+			free(bi);
+		}
+		s->size--;
+	}
+	s->root = NULL;
+	s->top = NULL;
+	s->size = 0;
+}

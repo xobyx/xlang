@@ -1,0 +1,89 @@
+import "list.xb"
+import "map.xb"
+
+print("=== Testing Dynamic Collections (List & Map) ===\n")
+
+// Test 1: List creation and adding elements
+List numbers
+numbers.add_int(10)
+numbers.add_int(20)
+numbers.add_int(30)
+
+print("List size: %d\n", numbers.size())
+print("Element 0: %d\n", numbers.get_int(0))
+print("Element 1: %d\n", numbers.get_int(1))
+print("Element 2: %d\n", numbers.get_int(2))
+
+// Test 2: List set and remove
+numbers.set_int(1, 99)
+print("Updated element 1: %d\n", numbers.get_int(1))
+
+numbers.remove_at(0)
+print("Size after remove: %d\n", numbers.size())
+print("New element 0: %d\n", numbers.get_int(0))
+
+// Test 3: List contains and index_of
+int has_99 = numbers.contains_int(99)
+int idx_99 = numbers.index_of_int(99)
+print("Contains 99: %d, Index: %d\n", has_99, idx_99)
+
+// Test 4: String List and join
+List fruits
+fruits.add("apple")
+fruits.add("banana")
+fruits.add("cherry")
+
+print("Fruits size: %d\n", fruits.size())
+print("Joined fruits: %s\n", fruits.join(", "))
+print("Fruits to_str: %s\n", fruits.to_str())
+
+// Test 5: List pop
+string popped = fruits.pop()
+print("Popped fruit: %s\n", popped)
+print("Size after pop: %d\n", fruits.size())
+
+// Test 6: List Subscript Indexing
+List arr
+arr.add_int(100)
+arr.add_int(200)
+arr.add_int(300)
+
+int item0 = arr[0]
+int item1 = arr[1]
+print("arr[0] = %d, arr[1] = %d\n", item0, item1)
+
+arr[1] = 555
+int updated_item1 = arr[1]
+print("Updated arr[1] = %d\n", updated_item1)
+
+// Test 7: Hash Map creation, put, and get
+Map config
+config.put("host", "localhost")
+config.put_int("port", 8080)
+config.put("env", "production")
+
+print("Map size: %d\n", config.size())
+print("config['host'] = %s\n", config.get("host"))
+print("config['port'] = %d\n", config.get_int("port"))
+print("config['env'] = %s\n", config.get("env"))
+
+// Test 8: Map has and remove
+int has_port = config.has("port")
+print("Has port: %d\n", has_port)
+
+config.remove("env")
+print("Size after remove env: %d\n", config.size())
+int has_env = config.has("env")
+print("Has env after remove: %d\n", has_env)
+
+// Test 9: Map keys and to_string
+print("Map keys: %s\n", config.keys())
+print("Map to_str: %s\n", config.to_str())
+
+// Test 10: HashMap subclass test
+HashMap hm
+hm.put("name", "Antigravity")
+hm.put("lang", "xlang")
+print("HashMap name: %s, lang: %s\n", hm.get("name"), hm.get("lang"))
+
+print("=== Dynamic Collections Tests Completed ===\n")

@@ -1,0 +1,16 @@
+int c = get_argc()
+print("Argc: %d", c)
+
+string a0 = get_arg(0)
+print("Arg0: %s", a0)
+
+setenv("XLANG_TEST_VAR", "hello_env")
+string v = getenv("XLANG_TEST_VAR")
+print("Env var: %s", v)
+
+int ret = exec("echo test_exec > temp_exec.txt")
+print("Exec status: %d", ret)
+
+int exists = file_exists("temp_exec.txt")
+print("Temp file exists: %d", exists)
+file_remove("temp_exec.txt")

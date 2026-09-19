@@ -1,4 +1,4 @@
-﻿#include "debuge.h"
+#include "debuge.h"
 
 #include <stdarg.h>
 
@@ -13,9 +13,12 @@ void(*checknode)(Debug x, node* y);
 
 
 */
- const char* fuk[] = { "function_def","function_call","fucnction_parm","var_def","var_call","class_def","class_base_def" };
+const char* fuk[] = {
+	"function_def", "function_call", "fucnction_parm", "var_def", "var_call",
+	"class_def", "class_base_def", "psize", "pindex", "var_call_ref"
+};
 
- const char* parse_obj_str(node* nod)
+const char* parse_obj_str(node* nod)
 {
 	switch (nod->btype.name)
 	{
@@ -23,8 +26,10 @@ void(*checknode)(Debug x, node* y);
 	case keyword: return "keyword";
 	case var_name:
 	{
-
-		return fuk[nod->opt_name_type - 10];
+		int idx = nod->opt_name_type - 10;
+		if (idx >= 0 && idx < (int)(sizeof(fuk) / sizeof(fuk[0])))
+			return fuk[idx];
+		return "var_name";
 	}
 	case value: return "value";
 	case operators_n: return "operators_n";
@@ -46,7 +51,7 @@ void(*checknode)(Debug x, node* y);
 	case none: break;
 		/* etc... */
 	default:
-		exit(0);
+		return "unknown";
 	}
 	return NULL;
 }
@@ -94,7 +99,7 @@ void _do_work(Debug* x, node* temp)
 			x->cprintf(x, 0x02, "\x1B[32m\x1B[40m%s", temp->value_raw != NULL ? (char*)temp->value_raw : "NONE");
 		printf(" ]");
 	}
-	x->cprintf(x, 0x04, temp->type_ == endl ? "\n" : "\x1B[34m --> ","");
+	x->cprintf(x, 0x04, "%s", temp->type_ == endl ? "\n" : "\x1B[34m --> ");
 
 
 	if (temp->next == NULL) printf("\n\n");
@@ -191,7 +196,7 @@ struct Debug _debuge_ = {
 	{"parentheses4" ,0x1000} , {"parentheses4c",0x2000}, {"dot",0x4000} ,{"twodot",0x8000}
 
 	},
-	.stack = {0}
+	.stack = {{{0}}}
 };
 
 Debug * init_debug()

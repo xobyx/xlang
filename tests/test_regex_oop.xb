@@ -1,0 +1,6 @@
+import("regex.xb")
+
+Regex r("\d+")
+print("Match: %d", r.match("user_42"))
+print("Find: %s", r.find("user_42"))
+print("Replace: %s", r.replace("order 10 and 20", "NUM"))

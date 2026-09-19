@@ -1,0 +1,55 @@
+class Socket() {
+    int fd
+
+    Socket() {
+        fd = socket_create("tcp")
+    }
+
+    Socket(string sock_type) {
+        fd = socket_create(sock_type)
+    }
+
+    int connect(string host, int port) {
+        return socket_connect(fd, host, port)
+    }
+
+    int bind(string host, int port) {
+        return socket_bind(fd, host, port)
+    }
+
+    int listen(int backlog) {
+        return socket_listen(fd, backlog)
+    }
+
+    int accept() {
+        return socket_accept(fd)
+    }
+
+    int send(string data) {
+        return socket_send(fd, data)
+    }
+
+    string recv(int max_bytes) {
+        return socket_recv(fd, max_bytes)
+    }
+
+    int close() {
+        return socket_close(fd)
+    }
+
+    int set_timeout(int sec) {
+        return socket_set_timeout(fd, sec)
+    }
+
+    int set_reuseaddr(int enable) {
+        return socket_set_reuseaddr(fd, enable)
+    }
+
+    int sendto(string data, string host, int port) {
+        return socket_sendto(fd, data, host, port)
+    }
+
+    string recvfrom(int max_bytes) {
+        return socket_recvfrom(fd, max_bytes)
+    }
+}

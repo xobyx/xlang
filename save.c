@@ -110,7 +110,6 @@ void save_file(char* file, node_stack* a, unsigned int MD5_hash[4])
 
 		}
 
-		int r_size = 0;
 		//opt
 			//r_size = strlen((char*)top->opt_raw);
 		fwrite(&top->opt_type, 4, 1, f); // op_type
@@ -259,6 +258,7 @@ void read_file_parse(FILE* f, node_stack* nodes)
 		}
 		read=ftell(f);
 	}
+	(void)read;
 
 
 
@@ -274,13 +274,12 @@ void s_compile_(node_stack* stack)
 //debuge->print_line_debuge(debuge,stack->root, 0);
 //compile(0,stack->root,0,0);
 //return;
-	node* m;
 	for (node* i = stack->root; i != NULL; i = i->stack_next)
 	{
-		//i = x;
+		node* m = i;
 		while (i->next != NULL)
 		{
-			m=i;
+			m = i;
 			i = i->next;
 		}
 

@@ -67,25 +67,25 @@ return s->nlist[index];
 
  void clean_stack(node_stack* s)
  {
-	
-   free(s->nlist);
-	for (node * bi = s->root;bi!=NULL;bi=bi->stack_next)
+	if (s == NULL) return;
+	if (s->nlist != NULL)
 	{
-		
-		//if(bi->value!=0)free(bi->value);
-		//if(bi->opt!=0)free(bi->opt);
+		free(s->nlist);
+		s->nlist = NULL;
+	}
+	node* bi = s->root;
+	while (bi != NULL)
+	{
+		node* next = bi->stack_next;
 		if ((bi->btype.value & a) != 0)
 		{
 			free(bi->value_raw);
 		}
-
-
-		//free(bi->opt);
-
 		free(bi);
-		s->size--;
-
+		bi = next;
 	}
-	free(s);
-
+	s->root = NULL;
+	s->top = NULL;
+	s->size = 0;
+	s->max_a = 0;
  }

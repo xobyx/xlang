@@ -1,0 +1,213 @@
+import "server.xb"
+import "http.xb"
+import "socket.xb"
+import "sys.xb"
+import "gc.xb"
+
+print("==================================================")
+print("     xlang Production Demo: HTTP Web Server       ")
+print("  Native Micro-Framework, REST API & Benchmarks   ")
+print("==================================================")
+
+# Step 1: Initialize HTTP Web Server
+HttpServer server
+int port = 18080
+int rc = server.init("127.0.0.1", port)
+if (rc < 0) {
+    print("FATAL: Failed to bind HTTP server to port %d (rc: %d)", port, rc)
+    exit(1)
+}
+
+print("[1] HTTP Server successfully bound to http://127.0.0.1:%d", port)
+print("    Listening on TCP backlog 32 with SO_REUSEADDR enabled.")
+
+# Helper to send an HTTP request and get server response via loopback TCP
+string do_request(string req_text) {
+    int client = socket_create("tcp")
+    socket_connect(client, "127.0.0.1", 18080)
+    socket_send(client, req_text)
+    server.accept_and_serve()
+    string resp = socket_recv(client, 4096)
+    socket_close(client)
+    return resp
+}
+
+# Step 2: Automated Route Verification
+print("\n[2] Executing Automated HTTP Test Suite...")
+
+# Test 2.1: GET / (HTML Dashboard)
+print("    --> Testing GET / (HTML Landing Page)...")
+string req1 = "GET / HTTP/1.1\r\nHost: 127.0.0.1:18080\r\nUser-Agent: xlang-client\r\n\r\n"
+string resp1 = do_request(req1)
+int ok1 = index_of(resp1, "200 OK")
+int html1 = index_of(resp1, "Welcome to xlang HTTP Web Server!")
+if (ok1 >= 0) {
+    if (html1 >= 0) {
+        print("        [PASS] Status: 200 OK | HTML Dashboard correctly rendered")
+    }
+    else {
+        print("        [FAIL] Missing HTML body content")
+    }
+}
+else {
+    print("        [FAIL] Expected 200 OK")
+}
+
+# Test 2.2: GET /health (JSON Health Probe)
+print("    --> Testing GET /health (JSON Health Check)...")
+string req2 = "GET /health HTTP/1.1\r\nHost: 127.0.0.1:18080\r\n\r\n"
+string resp2 = do_request(req2)
+int ok2 = index_of(resp2, "200 OK")
+int json2 = index_of(resp2, "\"status\":\"UP\"")
+if (ok2 >= 0) {
+    if (json2 >= 0) {
+        print("        [PASS] Status: 200 OK | Health payload: status=UP")
+    }
+    else {
+        print("        [FAIL] Missing UP status in health check")
+    }
+}
+else {
+    print("        [FAIL] Expected 200 OK")
+}
+
+# Test 2.3: GET /api/info (Diagnostics & Runtime Info)
+print("    --> Testing GET /api/info (System Diagnostics)...")
+string req3 = "GET /api/info HTTP/1.1\r\nHost: 127.0.0.1:18080\r\n\r\n"
+string resp3 = do_request(req3)
+int ok3 = index_of(resp3, "200 OK")
+int info3 = index_of(resp3, "\"language\":\"xlang\"")
+if (ok3 >= 0) {
+    if (info3 >= 0) {
+        print("        [PASS] Status: 200 OK | Runtime diagnostics reported")
+    }
+    else {
+        print("        [FAIL] Missing runtime metadata")
+    }
+}
+else {
+    print("        [FAIL] Expected 200 OK")
+}
+
+# Test 2.4: POST /api/items (REST API - Create Resources)
+print("    --> Testing POST /api/items (Create Catalog Items)...")
+string item1 = "{\"name\":\"Mechanical Keyboard\",\"price\":129,\"qty\":5}"
+int len1 = item1.len()
+string req4 = "POST /api/items HTTP/1.1\r\nHost: 127.0.0.1:18080\r\nContent-Length: " + len1 + "\r\n\r\n" + item1
+string resp4 = do_request(req4)
+int ok4 = index_of(resp4, "201 Created")
+
+string item2 = "{\"name\":\"4K Ultra-Wide Monitor\",\"price\":699,\"qty\":2}"
+int len2 = item2.len()
+string req5 = "POST /api/items HTTP/1.1\r\nHost: 127.0.0.1:18080\r\nContent-Length: " + len2 + "\r\n\r\n" + item2
+string resp5 = do_request(req5)
+int ok5 = index_of(resp5, "201 Created")
+
+string item3 = "{\"name\":\"Ergonomic Mouse\",\"price\":79,\"qty\":10}"
+int len3 = item3.len()
+string req6 = "POST /api/items HTTP/1.1\r\nHost: 127.0.0.1:18080\r\nContent-Length: " + len3 + "\r\n\r\n" + item3
+string resp6 = do_request(req6)
+int ok6 = index_of(resp6, "201 Created")
+
+if (ok4 >= 0) {
+    if (ok5 >= 0) {
+        if (ok6 >= 0) {
+            print("        [PASS] Status: 201 Created | Successfully created 3 catalog items")
+        }
+        else {
+            print("        [FAIL] Failed creating item 3")
+        }
+    }
+    else {
+        print("        [FAIL] Failed creating item 2")
+    }
+}
+else {
+    print("        [FAIL] Failed creating item 1")
+}
+
+# Test 2.5: GET /api/items (REST API - List Resources)
+print("    --> Testing GET /api/items (List Catalog Items)...")
+string req7 = "GET /api/items HTTP/1.1\r\nHost: 127.0.0.1:18080\r\n\r\n"
+string resp7 = do_request(req7)
+int ok7 = index_of(resp7, "200 OK")
+int cnt7 = index_of(resp7, "\"count\":3")
+if (ok7 >= 0) {
+    if (cnt7 >= 0) {
+        print("        [PASS] Status: 200 OK | Returned 3 items in JSON array")
+    }
+    else {
+        print("        [FAIL] Expected count:3 in items catalog")
+    }
+}
+else {
+    print("        [FAIL] Expected 200 OK")
+}
+
+# Test 2.6: GET /api/echo (Query Parameter & Header Parsing)
+print("    --> Testing GET /api/echo?agent=antigravity&version=2.0 (Echo)...")
+string req8 = "GET /api/echo?agent=antigravity&version=2.0 HTTP/1.1\r\nHost: 127.0.0.1:18080\r\nUser-Agent: curl/7.81.0\r\n\r\n"
+string resp8 = do_request(req8)
+int ok8 = index_of(resp8, "200 OK")
+int echo8 = index_of(resp8, "agent=antigravity")
+if (ok8 >= 0) {
+    if (echo8 >= 0) {
+        print("        [PASS] Status: 200 OK | Successfully extracted query params and headers")
+    }
+    else {
+        print("        [FAIL] Missing query params in echo response")
+    }
+}
+else {
+    print("        [FAIL] Expected 200 OK")
+}
+
+# Test 2.7: GET /non_existent_route (404 Handling)
+print("    --> Testing GET /non_existent_route (404 Fallback)...")
+string req9 = "GET /non_existent_route HTTP/1.1\r\nHost: 127.0.0.1:18080\r\n\r\n"
+string resp9 = do_request(req9)
+int ok9 = index_of(resp9, "404 Not Found")
+if (ok9 >= 0) {
+    print("        [PASS] Status: 404 Not Found | Correctly rejected unknown endpoint")
+}
+else {
+    print("        [FAIL] Expected 404 Not Found")
+}
+
+# Step 3: High-Throughput HTTP Micro-Benchmark
+print("\n[3] High-Throughput HTTP Micro-Benchmark (100 sequential requests)...")
+
+int bench_runs = 100
+int t0 = clock_ms()
+
+int bi = 0
+string b_req = "GET /health HTTP/1.1\r\nHost: 127.0.0.1:18080\r\n\r\n"
+while (bi < bench_runs) {
+    do_request(b_req)
+    bi = bi + 1
+}
+
+int t1 = clock_ms()
+int elapsed = t1 - t0
+if (elapsed <= 0) {
+    elapsed = 1
+}
+int qps = (bench_runs * 1000) / elapsed
+
+print("    Processed %d full HTTP Request/Response cycles in %d ms (~%d req/sec)", bench_runs, elapsed, qps)
+
+# Step 4: Server Diagnostics & GC Metrics
+print("\n[4] Server Diagnostics & Heap Health:")
+int total_reqs = server.request_count
+int total_items = server.items_list.size()
+int total_gc_objs = gc_total_objects()
+int total_gc_bytes = gc_allocated_bytes()
+print("    Total requests served:    %d", total_reqs)
+print("    Catalog items stored:     %d", total_items)
+print("    GC Active Heap Objects:   %d objects", total_gc_objs)
+print("    GC Allocated Heap Memory: %d bytes", total_gc_bytes)
+
+# Step 5: Clean Shutdown
+server.close()
+print("\n[5] Server socket closed. HTTP demonstration finished successfully!")
+print("==================================================")

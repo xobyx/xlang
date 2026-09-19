@@ -1,0 +1,2 @@
+string resp = http_get("http://127.0.0.1:19879/test")
+print("Response: %s", resp)

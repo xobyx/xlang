@@ -1,0 +1,31 @@
+print("=== Testing Compile-Time Multi-File Modular Imports ===\n")
+
+// Test 1: Import with string path
+import "tests/mod_math.xb"
+
+// Test 2: Redundant import of the same module (must be ignored without duplicate definition error)
+import "tests/mod_math.xb"
+
+int area = GeometryHelper.rect_area(12, 5)
+int peri = GeometryHelper.rect_perimeter(12, 5)
+int cube = calc_cube(4)
+
+print("GeometryHelper.rect_area(12, 5) = %d\n", area)
+print("GeometryHelper.rect_perimeter(12, 5) = %d\n", peri)
+print("calc_cube(4) = %d\n", cube)
+
+// Test 3: Circular modular import handling (mod_cycle_a imports mod_cycle_b, mod_cycle_b imports mod_cycle_a)
+import "tests/mod_cycle_a.xb"
+
+int val_a = get_val_a()
+int val_b = get_val_b()
+print("Cycle values: val_a = %d, val_b = %d\n", val_a, val_b)
+
+// Test 4: Modular import of collections without quotes
+import collections
+
+List test_list
+test_list.add("modular_import_success")
+print("Collections imported bare: %s\n", test_list.get(0))
+
+print("=== Modular Imports Tests Completed Successfully ===\n")

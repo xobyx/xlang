@@ -1,0 +1,95 @@
+class List() {
+    int id
+
+    List() {
+        id = list_new()
+    }
+
+    int add(string val) {
+        return list_add(id, val)
+    }
+
+    int add_int(int val) {
+        return list_add_int(id, val)
+    }
+
+    int add_float(float val) {
+        return list_add_float(id, val)
+    }
+
+    string get(int index) {
+        return list_get(id, index)
+    }
+
+    int get_int(int index) {
+        return list_get_int(id, index)
+    }
+
+    float get_float(int index) {
+        return list_get_float(id, index)
+    }
+
+    int set(int index, string val) {
+        return list_set(id, index, val)
+    }
+
+    int set_int(int index, int val) {
+        return list_set_int(id, index, val)
+    }
+
+    int remove_at(int index) {
+        return list_remove_at(id, index)
+    }
+
+    int remove(int index) {
+        return list_remove_at(id, index)
+    }
+
+    int size() {
+        return list_size(id)
+    }
+
+    int length() {
+        return list_size(id)
+    }
+
+    int clear() {
+        return list_clear(id)
+    }
+
+    int contains(string val) {
+        return list_contains(id, val)
+    }
+
+    int contains_int(int val) {
+        return list_contains_int(id, val)
+    }
+
+    int index_of(string val) {
+        return list_index_of(id, val)
+    }
+
+    int index_of_int(int val) {
+        return list_index_of_int(id, val)
+    }
+
+    string pop() {
+        return list_pop(id)
+    }
+
+    int pop_int() {
+        return list_pop_int(id)
+    }
+
+    string join(string sep) {
+        return list_join(id, sep)
+    }
+
+    string to_str() {
+        return list_to_string(id)
+    }
+
+    int free() {
+        return list_free(id)
+    }
+}

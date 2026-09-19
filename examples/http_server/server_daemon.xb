@@ -1,0 +1,30 @@
+import "server.xb"
+import "sys.xb"
+
+print("==================================================")
+print("       xlang HTTP Web Server is Running!          ")
+print("==================================================")
+print("Server listening on http://127.0.0.1:8080")
+print("Press Ctrl+C to terminate.")
+print("")
+print("Try running in another terminal:")
+print("  curl -i http://127.0.0.1:8080/")
+print("  curl -i http://127.0.0.1:8080/health")
+print("  curl -i http://127.0.0.1:8080/api/info")
+print("  curl -i http://127.0.0.1:8080/api/items")
+print("  curl -i -X POST -d '{\"name\":\"USB-C Hub\",\"price\":45}' http://127.0.0.1:8080/api/items")
+print("  curl -i 'http://127.0.0.1:8080/api/echo?agent=antigravity&version=2.0'")
+print("==================================================")
+
+HttpServer server
+int rc = server.init("127.0.0.1", 8080)
+if (rc < 0) {
+    print("FATAL: Failed to bind server: %d", rc)
+    exit(1)
+}
+
+while (server.is_running != 0) {
+    server.accept_and_serve()
+}
+
+server.close()

@@ -1,5 +1,8 @@
 #include "func_stack.h"
+#include "functions.h"
 
+#include <stdlib.h>
+#include <string.h>
 
 
  void func_stack_init(func_stack * S) {
@@ -43,19 +46,23 @@ func_deftion * new_func_on_stack(func_stack* n)
 	
 }
 
- void func_clean_stack(func_stack* s)
- {
-	func_deftion*x=NULL;
-	for (func_deftion * bi = s->root;bi!=NULL;bi=x)
-	{
-		x=bi->stack_next;		
-		//if(bi->value!=0)free(bi->value);
-		//if(bi->opt!=0)free(bi->opt);
-	   // var_clean_stack(&bi->fun_p);
-		//free(bi->func_return.value);
-		free(bi);
-		s->size--;
-		
-	}
+extern func_deftion simple_function_array[];
 
- }
+void func_clean_stack(func_stack* s)
+{
+	if (s == NULL) return;
+	func_deftion* x = NULL;
+	for (func_deftion* bi = s->root; bi != NULL; bi = x)
+	{
+		x = bi->stack_next;
+		bool is_static = (bi >= simple_function_array && bi < simple_function_array + SIMPLE_FUNC_COUNT);
+		if (!is_static)
+		{
+			free(bi);
+		}
+		s->size--;
+	}
+	s->root = NULL;
+	s->top = NULL;
+	s->size = 0;
+}

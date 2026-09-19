@@ -15,58 +15,54 @@ void _echo(fcall* v)
 }
 void echo_var(var v, int le)
 {
+	l(le)p("name:%s\n", v.name ? v.name : "(null)");
+	l(le)p("size:%d\n", v.size);
 
-	l(le)p("name:%s\n", v.name);
-	l(le)p("name:%d\n", v.size);
-
-
-	switch (v.type_define->type_id)
+	if (v.type_define != NULL && v.values != NULL)
 	{
-	case 0:///long
-		l(le)p("value long : %ld", *v.value_long);
-		break;
-	case 1://string
-		l(le)p("value string : %s", *v.value_str_ptr);
-		break;
-	case 2://char
-		l(le)p("value char : %c", *v.value_char_ptr);
-		break;
-	case 3://int
-		l(le)p("value_int : %d", *v.value_int);
-		break;
-	case 4://bool
-		l(le)p("value_bool : %s", *v.value_bool ? "true" : "false");
-		break;
-	case 5://float
-		l(le)p("value float : %f", *v.value_float);
-		break;
-	case 9: //T_FUNC
+		switch (v.type_define->type_id)
+		{
+		case 0:///long
+			l(le)p("value long : %ld", *v.value_long);
+			break;
+		case 1://string
+			l(le)p("value string : %s", *v.value_str_ptr ? *v.value_str_ptr : "(null)");
+			break;
+		case 2://char
+			l(le)p("value char : %c", *v.value_char_ptr);
+			break;
+		case 3://int
+			l(le)p("value_int : %d", *v.value_int);
+			break;
+		case 4://bool
+			l(le)p("value_bool : %s", *v.value_bool ? "true" : "false");
+			break;
+		case 5://float
+			l(le)p("value float : %f", *v.value_float);
+			break;
+		case 9: //T_FUNC
+		{
+			l(le)p("value function :\n");
+			l(le)p("{\n");
+			if (v.value_func != NULL)
+				echo_func_def(*v.value_func, le + 1);
+			l(le)p("}\n");
+			break;
+		}
+		default:
+			p("unimpl %d %s", __LINE__, __FILE__);
+			break;
+		}
+	}
+	l(le) p(", addr = {{%p}} , {{size = %d}} \n", v.values, v.size);
+
+	if (v.type_define != NULL)
 	{
-		l(le)p("value function :\n");
+		l(le)p("type define : \n");
 		l(le)p("{\n");
-		
-		echo_func_def( *v.value_func,le+1);
+		echo_type_def(*v.type_define, le + 1);
 		l(le)p("}\n");
-		break;
 	}
-	default:
-		p("unimpl %d %s", __LINE__, __FILE__);
-		break;
-	}
-	l(le) p(", addr = {{%#x}} , {{size = %d}} \n", (int)v.values, v.size);
-
-	//struct type_instance * holder;
-	l(le)p("type define : \n");
-	l(le)p("{\n");
-	echo_type_def(*v.type_define, le + 1);
-	l(le)p("}\n");
-	//struct type_def* base_type;
-
-	//struct node* ref;
-	//struct var* stack_next;
-	///enum var_access access;
-
-
 }
 void echo_func_def(func_deftion m, int le)
 {
@@ -100,12 +96,9 @@ void echo_func_def(func_deftion m, int le)
 	//function_type function_type;
 	l(le)p("return type : \n");
 	l(le)p("{\n");
-	echo_type_def(*m.return_type, le + 1);
+	if (m.return_type != NULL)
+		echo_type_def(*m.return_type, le + 1);
 	l(le)p("}\n");
-	node* ref;
-	//enum var_access access;
-	//unused
-	//struct func_deftion* stack_next;	
 }
 
 void echo_type_def(type_def c, int le)
@@ -143,7 +136,8 @@ void echo_type_def(type_def c, int le)
 }
 void echo_type_instance(type_instance* c, int le)
 {
-	l(le)p("props count : %d", c->propertys.size);
+	if (c == NULL) return;
+	l(le)p("props count : %d\n", c->propertys.size);
 	l(le)p("prop : \n");
 	l(le)p("{\n");
 	for (var* i = c->propertys.root; i != NULL; i = i->stack_next)
@@ -153,7 +147,7 @@ void echo_type_instance(type_instance* c, int le)
 	}
 	l(le)p("}\n");
 
-	l(le)p("function count : %d", c->functions.size);
+	l(le)p("function count : %d\n", c->functions.size);
 	l(le)p("functions :\n");
 	l(le)p("{\n");
 	for (func_deftion* i = c->functions.root; i != NULL; i = i->stack_next)
@@ -163,16 +157,18 @@ void echo_type_instance(type_instance* c, int le)
 	}
 	l(le)p("}\n");
 
-	l(le)p("type define : \n");
-	l(le)p("{\n");
-	echo_type_def(*c->type, le + 1);
-	l(le)p("}\n");
-	l(le)p("base :\n");
-	l(le)p("{\n");
-	echo_type_instance(c->base, le + 1);
-	l(le)p("}\n");
-	//struct type_def* stack_next;
-	//enum var_access access;
-	///enum w_type w;
-
+	if (c->type != NULL)
+	{
+		l(le)p("type define : \n");
+		l(le)p("{\n");
+		echo_type_def(*c->type, le + 1);
+		l(le)p("}\n");
+	}
+	if (c->base != NULL && c->base != c)
+	{
+		l(le)p("base :\n");
+		l(le)p("{\n");
+		echo_type_instance(c->base, le + 1);
+		l(le)p("}\n");
+	}
 }

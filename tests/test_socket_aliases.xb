@@ -1,0 +1,16 @@
+int s = socket("tcp")
+socket_set_reuseaddr(s, 1)
+bind(s, "127.0.0.1", 19880)
+listen(s, 5)
+
+int c = socket("tcp")
+connect(c, "127.0.0.1", 19880)
+
+int p = accept(s)
+send(c, "Aliased Socket Functions")
+string m = recv(p, 1024)
+print("Aliased received: %s", m)
+
+close(c)
+close(p)
+close(s)

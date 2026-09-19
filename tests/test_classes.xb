@@ -1,0 +1,22 @@
+class Animal(){
+int legs
+int speak(){
+print(legs)
+}
+}
+
+
+Animal cat
+cat.legs = 4
+cat.speak()
+
+
+class Point(){
+int x
+int y
+}
+Point p
+p.x = 10
+p.y = 20
+print(p.x)
+print(p.y)

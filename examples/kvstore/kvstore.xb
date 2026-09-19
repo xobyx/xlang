@@ -1,0 +1,155 @@
+import "map.xb"
+import "list.xb"
+import "file.xb"
+
+class KVStore() {
+    Map data
+    List keys_list
+    string wal_file
+    int ops_count
+
+    KVStore() {
+        wal_file = "store.wal"
+        ops_count = 0
+    }
+
+    int open(string path) {
+        wal_file = path
+        ops_count = 0
+        return 0
+    }
+
+    int set(string key, string val) {
+        if (data.has(key) == 0) {
+            keys_list.add(key)
+        }
+        data.set(key, val)
+        ops_count = ops_count + 1
+
+        # Append to Write-Ahead Log
+        string entry = "SET " + key + " " + val + "\n"
+        file_append(wal_file, entry)
+        return 0
+    }
+
+    string get(string key) {
+        if (data.has(key) == 0) {
+            return ""
+        }
+        return data.get(key)
+    }
+
+    int has(string key) {
+        return data.has(key)
+    }
+
+    int remove(string key) {
+        if (data.has(key) == 0) {
+            return 0
+        }
+        data.remove(key)
+        ops_count = ops_count + 1
+
+        int idx = keys_list.index_of(key)
+        if (idx >= 0) {
+            keys_list.remove_at(idx)
+        }
+
+        string entry = "DEL " + key + "\n"
+        file_append(wal_file, entry)
+        return 1
+    }
+
+    int size() {
+        return data.size()
+    }
+
+    string dump_json() {
+        return data.to_str()
+    }
+
+    List get_keys() {
+        return keys_list
+    }
+
+    int replay_wal() {
+        if (file_exists(wal_file) == 0) {
+            return 0
+        }
+        string content = file_read_all(wal_file)
+        string rem = content
+        int count = 0
+
+        int nl = 0
+        int rem_len = 0
+        string line = ""
+        string rest = ""
+        int sp = 0
+        string k = ""
+        string v = ""
+        int kidx = 0
+
+        while (rem.len() > 0) {
+            nl = index_of(rem, "\n")
+            if (nl >= 0) {
+                line = substr(rem, 0, nl)
+                rem_len = rem.len() - nl - 1
+                rem = substr(rem, nl + 1, rem_len)
+            }
+            else {
+                line = rem
+                rem = ""
+            }
+
+            if (starts_with(line, "SET ")) {
+                rest = substr(line, 4, line.len() - 4)
+                sp = index_of(rest, " ")
+                if (sp >= 0) {
+                    k = substr(rest, 0, sp)
+                    v = substr(rest, sp + 1, rest.len() - sp - 1)
+                    if (data.has(k) == 0) {
+                        keys_list.add(k)
+                    }
+                    data.set(k, v)
+                    count = count + 1
+                }
+            }
+            eif (starts_with(line, "DEL ")) {
+                k = substr(line, 4, line.len() - 4)
+                if (data.has(k) != 0) {
+                    data.remove(k)
+                    kidx = keys_list.index_of(k)
+                    if (kidx >= 0) {
+                        keys_list.remove_at(kidx)
+                    }
+                    count = count + 1
+                }
+            }
+        }
+        return count
+    }
+
+    int compact(string snapshot_path) {
+        string dump = ""
+        int i = 0
+        int sz = keys_list.size()
+        string k = ""
+        string v = ""
+        while (i < sz) {
+            k = keys_list.get(i)
+            v = data.get(k)
+            dump = dump + "SET " + k + " " + v + "\n"
+            i = i + 1
+        }
+        file_write_all(snapshot_path, dump)
+        return sz
+    }
+
+    int clear() {
+        data.clear()
+        keys_list.clear()
+        file_remove(wal_file)
+        ops_count = 0
+        return 0
+    }
+}

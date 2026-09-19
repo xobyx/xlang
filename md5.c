@@ -1,4 +1,4 @@
-﻿#include "md5.h"
+#include "md5.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -162,7 +162,6 @@ void SWAP(unsigned int *num) {
 void calc_md5(char * yy,unsigned int s[4]) {
     char *msg = yy;
     size_t len = strlen(msg);
-	long x=0;  
 	md5((uint8_t*)msg, len);
  
     //var char digest[16] := h0 append h1 append h2 append h3 //(Output is in little-endian)
@@ -173,16 +172,16 @@ void calc_md5(char * yy,unsigned int s[4]) {
 	
 
     p=(uint8_t *)&h0;
-	sprintf(digest,"%.2x%.2x%.2x%.2x", p[0], p[1], p[2], p[3], h0);
+	sprintf(digest,"%.2x%.2x%.2x%.2x", p[0], p[1], p[2], p[3]);
 	
     p=(uint8_t *)&h1;
-    sprintf(digest +8,"%2.2x%2.2x%2.2x%2.2x", p[0], p[1], p[2], p[3], h1);
+    sprintf(digest +8,"%2.2x%2.2x%2.2x%2.2x", p[0], p[1], p[2], p[3]);
  
     p=(uint8_t *)&h2;
-    sprintf(digest+16,"%2.2x%2.2x%2.2x%2.2x", p[0], p[1], p[2], p[3], h2);
+    sprintf(digest+16,"%2.2x%2.2x%2.2x%2.2x", p[0], p[1], p[2], p[3]);
  
     p=(uint8_t *)&h3;
-    sprintf(digest+24,"%2.2x%2.2x%2.2x%2.2x", p[0], p[1], p[2], p[3], h3);
+    sprintf(digest+24,"%2.2x%2.2x%2.2x%2.2x", p[0], p[1], p[2], p[3]);
     //puts("");
  
 	

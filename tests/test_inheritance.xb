@@ -1,0 +1,15 @@
+class Animal(){
+int legs
+int speak(){
+print(legs)
+}
+}
+class Dog(Animal){
+int bark(){
+print(111)
+}
+}
+Dog d
+d.legs = 4
+d.speak()
+d.bark()

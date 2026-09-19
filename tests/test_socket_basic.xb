@@ -1,0 +1,21 @@
+int s = socket_create("tcp")
+if (s >= 0) {
+    print("TCP socket created successfully")
+} else {
+    print("Failed to create TCP socket")
+}
+
+int rc = socket_close(s)
+if (rc == 0) {
+    print("Socket closed successfully")
+} else {
+    print("Failed to close socket")
+}
+
+int u = socket_create("udp")
+if (u >= 0) {
+    print("UDP socket created successfully")
+} else {
+    print("Failed to create UDP socket")
+}
+socket_close(u)

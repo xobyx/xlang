@@ -1,0 +1,24 @@
+string s = "   Hello World 123   "
+string tr = s.trim()
+print("Trimmed: '%s'", tr)
+
+string low = tr.to_lower()
+print("Lower: %s", low)
+
+string up = tr.to_upper()
+print("Upper: %s", up)
+
+string sub = tr.substr(0, 5)
+print("Substr: %s", sub)
+
+int idx = tr.index_of("World")
+print("Index: %d", idx)
+
+int sw = tr.starts_with("Hello")
+int ew = tr.ends_with("123")
+print("Starts/Ends: %d %d", sw, ew)
+
+int has_num = tr.regex_match("\d+")
+string num = tr.regex_find("\d+")
+string rep = tr.regex_replace("\d+", "999")
+print("Regex: %d, %s, %s", has_num, num, rep)

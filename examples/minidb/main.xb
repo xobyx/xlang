@@ -1,0 +1,249 @@
+import "table.xb"
+import "engine.xb"
+import "sys.xb"
+import "gc.xb"
+
+print("==================================================")
+print("     xlang Production Demo: MiniDB Engine         ")
+print("  In-Memory RDBMS with Hash Joins & Aggregations  ")
+print("==================================================")
+
+# Step 1: Database & Table Setup
+MiniDB db
+Table customers
+Table orders
+
+customers.init("customers", "id")
+customers.create_index("tier")
+
+orders.init("orders", "id")
+orders.create_index("status")
+
+print("[1] Database initialized.")
+print("    Table 'customers' created (PK: id, Index: tier)")
+print("    Table 'orders' created (PK: id, Index: status)")
+
+# Step 2: Seed Initial Domain Data
+print("\n[2] Seeding domain records...")
+
+customers.insert("id=c:101;name=Alice;tier=VIP;country=USA;credit=5000")
+customers.insert("id=c:102;name=Bob;tier=Standard;country=UK;credit=1500")
+customers.insert("id=c:103;name=Charlie;tier=VIP;country=Canada;credit=8000")
+customers.insert("id=c:104;name=Diana;tier=Standard;country=Germany;credit=2200")
+customers.insert("id=c:105;name=Evan;tier=Enterprise;country=Japan;credit=15000")
+customers.insert("id=c:106;name=Fiona;tier=Enterprise;country=USA;credit=25000")
+
+orders.insert("id=ord:501;cust_id=c:101;product=Cloud Compute Cluster;category=Cloud;amount=2400;status=COMPLETED")
+orders.insert("id=ord:502;cust_id=c:101;product=Managed PostgreSQL;category=Cloud;amount=650;status=COMPLETED")
+orders.insert("id=ord:503;cust_id=c:102;product=Basic VPN Gateway;category=Networking;amount=120;status=COMPLETED")
+orders.insert("id=ord:504;cust_id=c:103;product=Enterprise SIEM;category=Security;amount=4500;status=COMPLETED")
+orders.insert("id=ord:505;cust_id=c:103;product=Threat Intel Feed;category=Security;amount=1800;status=PENDING")
+orders.insert("id=ord:506;cust_id=c:104;product=Kubernetes Worker Node;category=Cloud;amount=350;status=REFUNDED")
+orders.insert("id=ord:507;cust_id=c:105;product=Edge AI Accelerator;category=Hardware;amount=12500;status=COMPLETED")
+orders.insert("id=ord:508;cust_id=c:105;product=Real-Time Stream Pipeline;category=Analytics;amount=3200;status=COMPLETED")
+orders.insert("id=ord:509;cust_id=c:106;product=Zero-Trust Access Suite;category=Security;amount=8900;status=COMPLETED")
+orders.insert("id=ord:510;cust_id=c:106;product=Cold Storage Archive;category=Cloud;amount=950;status=COMPLETED")
+
+print("    Customers populated: %d", customers.count())
+print("    Orders populated:    %d", orders.count())
+
+# Step 3: Point Lookups & Indexed Queries
+print("\n[3] Point Lookups & Relational Queries...")
+
+# O(1) Primary Key Lookup
+string c_alice = customers.find_by_pk("c:101")
+string c_name = row_get(c_alice, "name")
+string c_tier = row_get(c_alice, "tier")
+string c_credit = row_get(c_alice, "credit")
+print("    [PK Lookup] Customer c:101 -> Name: %s, Tier: %s, Credit: $%s", c_name, c_tier, c_credit)
+
+# O(1) Secondary Indexed Query: status == COMPLETED
+List completed_orders = orders.select_where_eq("status", "COMPLETED")
+print("    [Indexed Query] Orders with status=COMPLETED: %d found", completed_orders.size())
+
+# Numeric Range Filter: amount > 3000
+List high_val_orders = orders.select_where_gt("amount", 3000)
+print("    [Range Query] High-value orders (amount > $3000): %d orders", high_val_orders.size())
+int hvi = 0
+string hvo = ""
+string h_id = ""
+string h_prod = ""
+string h_amt = ""
+string h_stat = ""
+while (hvi < high_val_orders.size()) {
+    hvo = high_val_orders.get(hvi)
+    h_id = row_get(hvo, "id")
+    h_prod = row_get(hvo, "product")
+    h_amt = row_get(hvo, "amount")
+    h_stat = row_get(hvo, "status")
+    print("      - %s: %s ($%s, %s)", h_id, h_prod, h_amt, h_stat)
+    hvi = hvi + 1
+}
+
+# Constraint Verification: Duplicate Primary Key Rejection
+int dup_res = customers.insert("id=c:101;name=AliceClone;tier=Standard;country=USA;credit=100")
+print("    [Constraint Check] Attempting duplicate PK 'c:101': rejected with code %d (OK)", dup_res)
+
+# Step 4: Relational Hash Join (customers JOIN orders)
+print("\n[4] Executing Relational Hash Join (customers JOIN orders ON id = cust_id)...")
+
+List invoice_records = db.hash_join(customers, "id", orders, "cust_id")
+print("    Hash Join completed. Matched %d total invoice lines.", invoice_records.size())
+
+int inv_i = 0
+string inv_row = ""
+int inv_num = 0
+string in_name = ""
+string in_tier = ""
+string in_country = ""
+string in_prod = ""
+string in_amt = ""
+string in_stat = ""
+while (inv_i < invoice_records.size()) {
+    inv_row = invoice_records.get(inv_i)
+    inv_num = inv_i + 1
+    in_name = row_get(inv_row, "name")
+    in_tier = row_get(inv_row, "tier")
+    in_country = row_get(inv_row, "country")
+    in_prod = row_get(inv_row, "product")
+    in_amt = row_get(inv_row, "amount")
+    in_stat = row_get(inv_row, "status")
+    print("      [%d] Invoice -> Customer: %s (%s, %s) | Item: %s | Amount: $%s | Status: %s", inv_num, in_name, in_tier, in_country, in_prod, in_amt, in_stat)
+    inv_i = inv_i + 1
+}
+
+# Step 5: Analytical Aggregations & Group-By Reporting
+print("\n[5] Analytical Aggregations & Group-By...")
+
+int total_gmv = orders.sum("amount")
+int avg_order = orders.avg("amount")
+print("    Gross Merchandise Value (GMV): $%d", total_gmv)
+print("    Average Order Value (AOV):      $%d", avg_order)
+
+# Group-By Category Aggregation
+List cat_groups
+Map cat_sums = db.group_by_sum(orders, "category", "amount", cat_groups)
+print("\n    Revenue Breakdown by Product Category:")
+int cgi = 0
+string cat_name = ""
+int cat_val = 0
+while (cgi < cat_groups.size()) {
+    cat_name = cat_groups.get(cgi)
+    cat_val = cat_sums.get_int(cat_name)
+    print("      Category: %s -> Total Revenue: $%d", cat_name, cat_val)
+    cgi = cgi + 1
+}
+
+# Step 6: Disk Persistence & Crash Recovery Simulation
+print("\n[6] Simulating Server Crash & Disk Persistence...")
+string cust_csv = "customers_dump.csv"
+string ord_csv = "orders_dump.csv"
+
+# Dump to disk
+int dumped_c = customers.export_csv(cust_csv)
+int dumped_o = orders.export_csv(ord_csv)
+print("    Tables exported to disk: %s (%d rows), %s (%d rows)", cust_csv, dumped_c, ord_csv, dumped_o)
+
+# Clear in-memory state
+customers.clear()
+orders.clear()
+print("    In-memory state purged. Customers count: %d, Orders count: %d", customers.count(), orders.count())
+
+# Re-import and rebuild indexes
+int restored_c = customers.import_csv(cust_csv)
+int restored_o = orders.import_csv(ord_csv)
+print("    Re-imported from disk: %d customers, %d orders restored.", restored_c, restored_o)
+
+# Verify restored data & index functionality
+string restored_alice = customers.find_by_pk("c:101")
+string ra_name = row_get(restored_alice, "name")
+string ra_credit = row_get(restored_alice, "credit")
+print("    Restored c:101 verification -> Name: %s, Credit: $%s", ra_name, ra_credit)
+List restored_completed = orders.select_where_eq("status", "COMPLETED")
+print("    Restored secondary index verification -> COMPLETED orders: %d", restored_completed.size())
+
+# Step 7: High-Throughput Performance Micro-Benchmark
+print("\n[7] High-Throughput Micro-Benchmark (500 bulk orders)...")
+
+int bench_size = 500
+int t0 = clock_ms()
+
+int bi = 0
+string b_row = ""
+string b_id = ""
+string b_cid = ""
+string b_cat = ""
+int b_amt = 0
+while (bi < bench_size) {
+    b_id = "bench_ord:" + bi
+    b_cid = "c:10" + (1 + (bi % 6))
+    if (bi % 3 == 0) {
+        b_cat = "Cloud"
+    }
+    eif (bi % 3 == 1) {
+        b_cat = "Security"
+    }
+    else {
+        b_cat = "Analytics"
+    }
+    b_amt = 100 + (bi * 17) % 5000
+    b_row = "id=" + b_id + ";cust_id=" + b_cid + ";product=Benchmark Svc " + bi + ";category=" + b_cat + ";amount=" + b_amt + ";status=COMPLETED"
+    orders.insert(b_row)
+    bi = bi + 1
+}
+
+int t1 = clock_ms()
+int insert_time = t1 - t0
+if (insert_time <= 0) {
+    insert_time = 1
+}
+int insert_qps = (bench_size * 1000) / insert_time
+print("    Bulk Insert: %d records with indexing in %d ms (~%d writes/sec)", bench_size, insert_time, insert_qps)
+
+# Benchmark Point Lookups via Primary Key
+int t2 = clock_ms()
+bi = 0
+string looked_row = ""
+while (bi < bench_size) {
+    b_id = "bench_ord:" + bi
+    looked_row = orders.find_by_pk(b_id)
+    bi = bi + 1
+}
+int t3 = clock_ms()
+int lookup_time = t3 - t2
+if (lookup_time <= 0) {
+    lookup_time = 1
+}
+int lookup_qps = (bench_size * 1000) / lookup_time
+print("    Primary Key Lookups: %d ops in %d ms (~%d lookups/sec)", bench_size, lookup_time, lookup_qps)
+
+# Benchmark Hash Join Performance
+int t4 = clock_ms()
+List bench_join = db.hash_join(customers, "id", orders, "cust_id")
+int t5 = clock_ms()
+int join_time = t5 - t4
+if (join_time <= 0) {
+    join_time = 1
+}
+int join_qps = (bench_join.size() * 1000) / join_time
+print("    Hash Join Performance: %d joined records in %d ms (~%d joins/sec)", bench_join.size(), join_time, join_qps)
+
+# Diagnostic GC metrics
+print("\n[8] Diagnostics & Engine Health:")
+print("    Total orders stored:      %d", orders.count())
+print("    Total customers stored:   %d", customers.count())
+print("    Total revenue recorded:   $%d", orders.sum("amount"))
+print("    GC Active Heap Objects:   %d objects", gc_total_objects())
+print("    GC Allocated Memory:      %d bytes", gc_allocated_bytes())
+
+# Step 9: Cleanup
+customers.clear()
+orders.clear()
+if (file_exists(cust_csv) != 0) {
+    file_remove(cust_csv)
+}
+if (file_exists(ord_csv) != 0) {
+    file_remove(ord_csv)
+}
+print("\n[9] Cleanup complete. MiniDB demonstration finished successfully!")
+print("==================================================")

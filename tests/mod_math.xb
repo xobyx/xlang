@@ -1,0 +1,13 @@
+class GeometryHelper() {
+    static int rect_area(int w, int h) {
+        return w * h
+    }
+
+    static int rect_perimeter(int w, int h) {
+        return (w + h) * 2
+    }
+}
+
+int calc_cube(int x) {
+    return x * x * x
+}

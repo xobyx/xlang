@@ -1,0 +1,58 @@
+class Str() {
+    string value
+
+    Str() {
+    }
+
+    Str(string s) {
+        value = s
+    }
+
+    int len() {
+        return value.len()
+    }
+
+    string substr(int start, int length) {
+        return value.substr(start, length)
+    }
+
+    int index_of(string needle) {
+        return value.index_of(needle)
+    }
+
+    int find(string needle) {
+        return value.find(needle)
+    }
+
+    string trim() {
+        return value.trim()
+    }
+
+    string to_lower() {
+        return value.to_lower()
+    }
+
+    string to_upper() {
+        return value.to_upper()
+    }
+
+    int starts_with(string prefix) {
+        return value.starts_with(prefix)
+    }
+
+    int ends_with(string suffix) {
+        return value.ends_with(suffix)
+    }
+
+    int regex_match(string pattern) {
+        return value.regex_match(pattern)
+    }
+
+    string regex_find(string pattern) {
+        return value.regex_find(pattern)
+    }
+
+    string regex_replace(string pattern, string repl) {
+        return value.regex_replace(pattern, repl)
+    }
+}

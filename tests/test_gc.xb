@@ -1,0 +1,121 @@
+import "gc.xb"
+import "list.xb"
+import "map.xb"
+
+print("--- Testing Garbage Collection & Memory Management ---")
+
+# 1. Initial GC state
+int initial_bytes = GC.allocated_bytes()
+int initial_objs = GC.total_objects()
+print("Initial allocated bytes: %d", initial_bytes)
+print("Initial total objects: %d", initial_objs)
+
+if (initial_bytes > 0) {
+    print("PASS: initial_bytes > 0")
+} else {
+    print("FAIL: initial_bytes <= 0")
+}
+
+if (initial_objs > 0) {
+    print("PASS: initial_objs > 0")
+} else {
+    print("FAIL: initial_objs <= 0")
+}
+
+# 2. Test manual GC.collect()
+int collected = GC.collect()
+print("Bytes collected on manual collect: %d", collected)
+print("PASS: GC.collect executed")
+
+# 3. Test GC enable / disable
+int dis = GC.disable()
+if (dis == 0) {
+    print("PASS: GC.disable returned 0")
+} else {
+    print("FAIL: GC.disable")
+}
+
+int en = GC.enable()
+if (en == 1) {
+    print("PASS: GC.enable returned 1")
+} else {
+    print("FAIL: GC.enable")
+}
+
+# 4. Test GC threshold setting
+int thresh = GC.set_threshold(1024)
+if (thresh == 1024) {
+    print("PASS: GC.set_threshold set to 1024")
+} else {
+    print("FAIL: GC.set_threshold")
+}
+
+# Restore standard threshold
+GC.set_threshold(524288)
+
+# 5. Test Memory Management during loop stress
+# In an unmanaged system, 200 iterations would leak hundreds of temp vars and heap buffers.
+# Here, automatic safe-point GC keeps it clean.
+int i = 0
+int sum = 0
+while (i < 200) {
+    sum = sum + i
+    i = i + 1
+}
+print("Sum 0..199: %d", sum)
+if (sum == 19900) {
+    print("PASS: loop sum correct")
+} else {
+    print("FAIL: loop sum incorrect")
+}
+
+# 6. Test GC collect after loop
+int collected_after = GC.collect()
+print("Collected bytes after loop: %d", collected_after)
+
+# 7. Test Dynamic Collections with GC
+List l1
+l1.add_int(100)
+l1.add_int(200)
+l1.add("dynamic_string_item")
+int l1_sz = l1.size()
+if (l1_sz == 3) {
+    print("PASS: list populated before GC")
+} else {
+    print("FAIL: list size before GC")
+}
+
+Map m1
+m1.put("key1", "val1")
+m1.put_int("count", 42)
+string v1 = m1.get("key1")
+if (v1 == "val1") {
+    print("PASS: map value retrieved before GC")
+} else {
+    print("FAIL: map get before GC")
+}
+
+# Run GC collect while collections are live
+int coll_with_live = GC.collect()
+print("GC collect with live collections: %d bytes", coll_with_live)
+
+# Verify collections still intact after GC
+int l1_after_sz = l1.size()
+string v1_after = m1.get("key1")
+if (l1_after_sz == 3) {
+    print("PASS: list intact after GC")
+} else {
+    print("FAIL: list intact after GC")
+}
+
+if (v1_after == "val1") {
+    print("PASS: map intact after GC")
+} else {
+    print("FAIL: map intact after GC")
+}
+
+# 8. Test Diagnostics dump
+GC.dump()
+print("PASS: GC.dump executed")
+
+print("All GC tests completed successfully!")

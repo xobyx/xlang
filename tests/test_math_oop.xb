@@ -1,0 +1,27 @@
+import("math.xb")
+
+Math m
+float sq = m.sqrt(25.0)
+print("Math.sqrt(25.0) = %f", sq)
+
+float p = m.pow(2.0, 4.0)
+print("Math.pow(2, 4) = %f", p)
+
+int a = m.abs(0 - 99)
+print("Math.abs(-99) = %d", a)
+
+int mn = m.min(30, 40)
+int mx = m.max(30, 40)
+print("Math.min/max = %d %d", mn, mx)
+
+float fl = m.floor(5.8)
+float cl = m.ceil(5.2)
+float rd = m.round(5.5)
+print("Math.floor/ceil/round = %f %f %f", fl, cl, rd)
+
+float s = m.sin(0.0)
+float c = m.cos(0.0)
+print("Math.sin/cos(0) = %f %f", s, c)
+
+float l = m.log(1.0)
+print("Math.log(1.0) = %f", l)

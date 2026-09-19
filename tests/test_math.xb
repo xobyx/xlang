@@ -1,0 +1,27 @@
+float sq = sqrt(16.0)
+print("sqrt(16.0) = %f", sq)
+
+float pw = pow(2.0, 3.0)
+print("pow(2.0, 3.0) = %f", pw)
+
+int a_int = abs(0 - 42)
+print("abs(-42) = %d", a_int)
+
+float a_flt = abs(0.0 - 3.5)
+print("abs(-3.5) = %f", a_flt)
+
+int mn = min(15, 25)
+int mx = max(15, 25)
+print("min/max = %d %d", mn, mx)
+
+float fl = floor(3.7)
+float cl = ceil(3.2)
+float rd = round(3.6)
+print("floor/ceil/round = %f %f %f", fl, cl, rd)
+
+float s = sin(0.0)
+float c = cos(0.0)
+print("sin/cos(0) = %f %f", s, c)
+
+float lg = log(1.0)
+print("log(1.0) = %f", lg)

@@ -37,7 +37,7 @@ typedef void(*function_node)(struct fcall*);
 struct type_def;
 
 
-static const char* key_word[] = { "if", "for", "while", "do", "else", "eif", "return", "break", "class", "static" };
+extern const char* key_word[];
 
 typedef enum key_word_enum
 {
@@ -50,7 +50,8 @@ typedef enum key_word_enum
 	_return_,
 	_break_,
 	_class_,
-	_static_
+	_static_,
+	_import_
 } key_word_enum;
 
 // long[0],string[1],char[2],int[3]
@@ -61,11 +62,6 @@ typedef struct type_stack
 	int size;
 }type_stack;
 
-//static const char operators[] = { '+', '-', '/', '*', '=' };
-static char one_c[] = {
-	'+', 0, '-', 0, '/', 0, '*', 0, '=', 0, '(', 0, ')', 0, '{', 0, '}', 0, '[', 0, ']', 0, ',', 0, '>', 0, '<', 0, '|',
-	0, '&', 0, '!', 0, '.', 0, ':'
-};
 typedef unsigned short i16;
 
 /**
@@ -252,7 +248,7 @@ typedef struct var_stack
 
 
 	struct var* top;
-	byte size;
+	int size;
 	struct var* root;
 	struct type_instance* stack_holder;
 }var_stack;
@@ -280,6 +276,7 @@ typedef struct fcall
 	struct func_deftion* deftion;
 	struct var _return;
 	struct var* context;
+	bool has_returned;
 }fcall;
 typedef struct func_stack
 {
@@ -358,6 +355,12 @@ typedef struct type_instance
 					*mx = (*mx)  * (to);\
 					else if(*op=='/')\
 					*mx = *mx  / to;\
+					else if(*op=='%')\
+					*mx = *mx  % to;\
+					else if(*op=='&'&& *(op+1)=='&')\
+					*mx = *mx  && to;\
+					else if(*op=='|'&& *(op+1)=='|')\
+					*mx = *mx  || to;\
 					else if(*op=='&')\
 					*mx = *mx  & to;\
 					else if(*op=='|')\
@@ -368,29 +371,25 @@ typedef struct type_instance
 					*mx = *mx  <<(to);\
 					else if(*op=='=' && *(op+1)=='=')\
 					*mx = *mx == to;\
-					else if (*op == '&'&&*(op + 1) == '&')\
-					*mx = *mx  && to; \
-					else if (*op == '|'&&*(op + 1) == '|')\
-					*mx = *mx || to; \
-					else if (*op == '='&&*(op + 1) == '=')\
-					*mx = *mx == to; \
-					else if (*op == '>'&&*(op + 1) != '=')\
-					*mx = *mx > to; \
-					else if (*op == '<'&&*(op + 1) != '=')\
-					*mx = *mx < to; \
-					else if (*op == '>'&&*(op + 1) == '=')\
-					*mx = *mx >= to; \
-					else if (*op == '<'&&*(op + 1) == '=')\
-					*mx = *mx <= to;
+					else if(*op=='!' && *(op+1)=='=')\
+					*mx = *mx != to;\
+					else if(*op=='>' && *(op+1)=='=')\
+					*mx = *mx >= to;\
+					else if(*op=='<' && *(op+1)=='=')\
+					*mx = *mx <= to;\
+					else if(*op=='>')\
+					*mx = *mx > to;\
+					else if(*op=='<')\
+					*mx = *mx < to;
 
 #define BOOL_OPERATORS	if(*op=='='&&*(op+1)=='=')\
 					*mx = *mx  == to;\
+					else if(*op=='!'&&*(op+1)=='=')\
+					*mx = *mx  != to;\
 					else if(*op=='&'&&*(op+1)=='&')\
 					*mx = *mx  && to;\
 					else if(*op=='|'&&*(op+1)=='|')\
-					*mx = *mx  || to;\
-					else if(*op=='='&&*(op+1)=='=')\
-					*mx = *mx  == to;
+					*mx = *mx  || to;
 
 
 

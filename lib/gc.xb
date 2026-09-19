@@ -1,0 +1,44 @@
+class GC() {
+    GC() {
+    }
+
+    static int collect() {
+        return gc_collect()
+    }
+
+    static int allocated_bytes() {
+        return gc_allocated_bytes()
+    }
+
+    static int total_objects() {
+        return gc_total_objects()
+    }
+
+    static int enable() {
+        return gc_enable()
+    }
+
+    static int disable() {
+        return gc_disable()
+    }
+
+    static int set_threshold(int bytes) {
+        return gc_set_threshold(bytes)
+    }
+
+    static int dump() {
+        return gc_dump()
+    }
+
+    int run_collect() {
+        return gc_collect()
+    }
+
+    int get_allocated_bytes() {
+        return gc_allocated_bytes()
+    }
+
+    int get_total_objects() {
+        return gc_total_objects()
+    }
+}
