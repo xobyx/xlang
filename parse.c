@@ -72,9 +72,187 @@ void inherit_parent_flag(node* current_node, node* next_node)
 
 
 
+ParserContext* current_parser_ctx = NULL;
 node* save = NULL;
 int r = 0;
 static const char* current_parsing_class_name = NULL;
+
+void parser_context_init(ParserContext* ctx, bool interactive)
+{
+	if (ctx == NULL)
+		return;
+	ctx->delim_capacity = 64;
+	ctx->delim_stack = (fl*)calloc(ctx->delim_capacity, sizeof(fl));
+	ctx->save = NULL;
+	ctx->current_parsing_class_name = NULL;
+	ctx->current_line = 1;
+	ctx->interactive = interactive;
+	ctx->has_error = false;
+	ctx->error_msg[0] = '\0';
+	ctx->prev_ctx = NULL;
+}
+
+void parser_context_cleanup(ParserContext* ctx)
+{
+	if (ctx == NULL)
+		return;
+	if (ctx->delim_stack != NULL)
+	{
+		free(ctx->delim_stack);
+		ctx->delim_stack = NULL;
+	}
+	ctx->delim_capacity = 0;
+	ctx->save = NULL;
+	ctx->current_parsing_class_name = NULL;
+}
+
+ParserContext* parser_context_create(bool interactive)
+{
+	ParserContext* ctx = (ParserContext*)malloc(sizeof(ParserContext));
+	parser_context_init(ctx, interactive);
+	return ctx;
+}
+
+void parser_context_free(ParserContext* ctx)
+{
+	if (ctx != NULL)
+	{
+		parser_context_cleanup(ctx);
+		free(ctx);
+	}
+}
+
+node* parser_delim_op(ParserContext* ctx, const node_type mtype, node* w_node, bool added)
+{
+	if (ctx == NULL)
+		ctx = current_parser_ctx;
+	if (ctx == NULL || ctx->delim_stack == NULL)
+		return NULL;
+
+	node* p = NULL;
+	if (added)
+	{
+		int target_idx = -1;
+		for (int i = 0; i < ctx->delim_capacity; i++)
+		{
+			if (ctx->delim_stack[i].wait_type == 0)
+			{
+				target_idx = i;
+				break;
+			}
+		}
+		if (target_idx == -1)
+		{
+			int old_cap = ctx->delim_capacity;
+			int new_cap = old_cap > 0 ? old_cap * 2 : 64;
+			fl* new_stack = (fl*)realloc(ctx->delim_stack, new_cap * sizeof(fl));
+			if (new_stack != NULL)
+			{
+				memset(new_stack + old_cap, 0, (new_cap - old_cap) * sizeof(fl));
+				ctx->delim_stack = new_stack;
+				ctx->delim_capacity = new_cap;
+				target_idx = old_cap;
+			}
+			else
+			{
+				return NULL;
+			}
+		}
+		ctx->delim_stack[target_idx].wait_type = mtype;
+		ctx->delim_stack[target_idx].waiting_node = w_node;
+	}
+	else
+	{
+		for (int i = ctx->delim_capacity - 1; i >= 0; i--)
+		{
+			if (ctx->delim_stack[i].wait_type == mtype)
+			{
+				if (ctx->delim_stack[i].waiting_node != NULL)
+				{
+					ctx->delim_stack[i].waiting_node->ref_node = w_node;
+					p = ctx->delim_stack[i].waiting_node;
+				}
+				ctx->delim_stack[i].wait_type = (node_type)0;
+				ctx->delim_stack[i].waiting_node = NULL;
+				break;
+			}
+		}
+	}
+	return p;
+}
+
+bool parser_delim_check_unclosed(ParserContext* ctx, node_type* m)
+{
+	if (ctx == NULL)
+		ctx = current_parser_ctx;
+	if (ctx == NULL || ctx->delim_stack == NULL)
+		return false;
+
+	int* ma = (int*)m;
+	bool cont = false;
+	for (int i = 0; i < ctx->delim_capacity; i++)
+	{
+		if (ctx->delim_stack[i].wait_type != 0)
+		{
+			cont = true;
+			*ma |= ctx->delim_stack[i].wait_type;
+		}
+	}
+	return cont;
+}
+
+fl* parser_delim_get_first_unclosed(ParserContext* ctx)
+{
+	if (ctx == NULL)
+		ctx = current_parser_ctx;
+	if (ctx == NULL || ctx->delim_stack == NULL)
+		return NULL;
+
+	for (int i = 0; i < ctx->delim_capacity; i++)
+	{
+		if (ctx->delim_stack[i].wait_type != 0)
+		{
+			return &ctx->delim_stack[i];
+		}
+	}
+	return NULL;
+}
+
+bool parser_is_inside_func_param(ParserContext* ctx)
+{
+	if (ctx == NULL)
+		ctx = current_parser_ctx;
+	if (ctx == NULL || ctx->delim_stack == NULL)
+		return false;
+
+	for (int i = 0; i < ctx->delim_capacity; i++)
+	{
+		if (ctx->delim_stack[i].wait_type == parentheses4_c &&
+		    ctx->delim_stack[i].waiting_node != NULL &&
+		    ctx->delim_stack[i].waiting_node->opt_name_type == function_def)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool parser_has_open_brace(ParserContext* ctx)
+{
+	if (ctx == NULL)
+		ctx = current_parser_ctx;
+	if (ctx == NULL || ctx->delim_stack == NULL)
+		return false;
+
+	for (int i = 0; i < ctx->delim_capacity; i++)
+	{
+		if (ctx->delim_stack[i].wait_type == parentheses1_c)
+		{
+			return true;
+		}
+	}
+	return false;
+}
 
 static bool is_function_def_ahead(const char* buff)
 {
@@ -175,7 +353,10 @@ void parse_line(char* buff, node* n_node, const int line)
 			n_node->line = line;
 			n_node->next = nextc;
 			nextc->parent = n_node;
-			save = nextc;
+			if (current_parser_ctx != NULL)
+				current_parser_ctx->save = nextc;
+			else
+				save = nextc;
 			nextc->type_ = a | keyword | itype | var_name | (n_node->parent != NULL ? n_node->parent->flag_ : 0);
 			return;
 		}
@@ -226,6 +407,10 @@ void parse_line(char* buff, node* n_node, const int line)
 			next->type_ = var_name | s_index | dot;  // itype->var_name->(->itype->var_name) or itype->dot (static method)
 			bool is_func_param = false;
 			if (n_node->parent != NULL && (n_node->parent->_opt_ptr_ == function_def || n_node->parent->opt_name_type == function_def))
+			{
+				is_func_param = true;
+			}
+			else if (parser_is_inside_func_param(current_parser_ctx))
 			{
 				is_func_param = true;
 			}
@@ -363,16 +548,25 @@ void parse_line(char* buff, node* n_node, const int line)
 		n_node->value_char_ptr = getchar_x(*buff);
 
 		bool has_open_brace = false;
-		for (int fi = 0; fi < 10; fi++)
+		if (current_parser_ctx != NULL)
 		{
-			if (staic_flag2[fi].wait_type == parentheses1_c)
-			{
-				has_open_brace = true;
-				break;
-			}
+			has_open_brace = parser_has_open_brace(current_parser_ctx);
+			if (!has_open_brace)
+				current_parser_ctx->current_parsing_class_name = NULL;
 		}
-		if (!has_open_brace)
-			current_parsing_class_name = NULL;
+		else
+		{
+			for (int fi = 0; fi < 10; fi++)
+			{
+				if (staic_flag2[fi].wait_type == parentheses1_c)
+				{
+					has_open_brace = true;
+					break;
+				}
+			}
+			if (!has_open_brace)
+				current_parsing_class_name = NULL;
+		}
 
 		mbool = false;
 
@@ -420,7 +614,7 @@ void parse_line(char* buff, node* n_node, const int line)
 			static_flag_op2(parentheses4, n_node, false);
 			static_flag_op2(parentheses4_c, n_node, true);
 
-			next->type_ = value | var_name | parentheses4_c;
+			next->type_ = value | var_name | parentheses4_c | parentheses4;
 			if (n_node->parent != NULL && n_node->parent->type_ == var_name)
 			{
 				const int typ = n_node->parent->opt_name_type;
@@ -491,7 +685,7 @@ void parse_line(char* buff, node* n_node, const int line)
 			}
 			else
 			{
-				next->type_ = operators_n | endl;
+				next->type_ = operators_n | parentheses4_c | endl;
 				next->flag_ = value | var_name | keyword;
 				next->is_flagged = true;
 			}
@@ -871,7 +1065,10 @@ void parse_line(char* buff, node* n_node, const int line)
 				{
 					next->type_ = parentheses4;
 					n_node->opt_name_type = class_def; //k;
-					current_parsing_class_name = n_node->value_char_ptr;
+					if (current_parser_ctx != NULL)
+						current_parser_ctx->current_parsing_class_name = n_node->value_char_ptr;
+					else
+						current_parsing_class_name = n_node->value_char_ptr;
 					if (get_type_by_name(n_node->value_char_ptr) == NULL)
 					{
 						type_def* placeholder = new_type();
@@ -1046,11 +1243,12 @@ void parse_line(char* buff, node* n_node, const int line)
 //if()
 typedef var ver;
 
-void pre_parse_line(char* buff, const int line)
+void pre_parse_line_ctx(ParserContext* ctx, char* buff, const int line)
 {
 	node* n;
+	node* cur_save = (ctx != NULL) ? ctx->save : save;
 
-	if (save == NULL)
+	if (cur_save == NULL)
 	{
 		n = new_node(nodes);
 		n->line = line;
@@ -1059,8 +1257,11 @@ void pre_parse_line(char* buff, const int line)
 	}
 	else
 	{
-		n = save;
-		save = NULL;
+		n = cur_save;
+		if (ctx != NULL)
+			ctx->save = NULL;
+		else
+			save = NULL;
 	}
 
 	char* line_to_parse = buff;
@@ -1089,7 +1290,8 @@ void pre_parse_line(char* buff, const int line)
 			if (*p == '(' && is_function_def_ahead(p))
 			{
 				bool is_constr = false;
-				if (current_parsing_class_name != NULL && strcmp(id, current_parsing_class_name) == 0)
+				const char* c_name = (ctx != NULL) ? ctx->current_parsing_class_name : current_parsing_class_name;
+				if (c_name != NULL && strcmp(id, c_name) == 0)
 					is_constr = true;
 				else
 				{
@@ -1114,34 +1316,33 @@ void pre_parse_line(char* buff, const int line)
 		free(allocated_buff);
 }
 
+void pre_parse_line(char* buff, const int line)
+{
+	pre_parse_line_ctx(current_parser_ctx, buff, line);
+}
+
 #if  defined(__GNUC__)|| defined(__MINGW64__)
 #define strcpy_s(x,y,z) strcpy(x,z)
 #endif
-void start_parse_lines(char* buffe, bool active)
+
+void start_parse_lines_ctx(ParserContext* ctx, char* buffe, bool active)
 {
 	if (buffe == NULL || *buffe == '\0')
 		return;
-	current_parsing_class_name = NULL;
+	if (ctx != NULL)
+		ctx->current_parsing_class_name = NULL;
+	else
+		current_parsing_class_name = NULL;
+
 	size_t size1 = strlen(buffe) + 1;
 	char* buff = (char*)malloc(size1);
 	memset(buff, 0, size1);
 	strcpy_s(buff, size1, buffe);
 	int mline = 1;
 
-	/*char *temp;
-	char *p = strtok_s(buff, "\n", &temp);
-	do
-	{
-		if(*temp=='\n')++line;
-		pre_parse_line(p, mline++);
-	}
-	while ((p = strtok_s(NULL, "\n", &temp)) != NULL);*/
 	char* t = buff;
-	//debuge::bit8_color y;
-	//y.bf.background = 3;
-	//y.bf.foreground = 15;
 	int size = strlen(buff) - 1;
-	char* save = buff;
+	char* line_save = buff;
 	int i = 0;
 	while (true)
 	{
@@ -1151,19 +1352,16 @@ void start_parse_lines(char* buffe, bool active)
 			{
 				char* m = (char*)malloc(i + 1);
 				memset(m, 0, i + 1);
-				memcpy(m, save, i);
+				memcpy(m, line_save, i);
 				char* trimmed = m;
 				while (*trimmed == ' ' || *trimmed == '\t') trimmed++;
 				if (*trimmed != '#' && strncmp(trimmed, "//", 2) != 0 && *trimmed != '\0')
-					pre_parse_line(m, mline);
-				//else
-				//	mdebuge.cprintf(y.bf_color, "\ncomment: [%s]\n\n", m + 1);
-				//printf("%2d : %s\n",mline,m);
+					pre_parse_line_ctx(ctx, m, mline);
 				free(m);
 			}
 			if (t > buff + size)
 				break;
-			save = ++t;
+			line_save = ++t;
 
 			mline++;
 			i = 0;
@@ -1174,20 +1372,29 @@ void start_parse_lines(char* buffe, bool active)
 			t++;
 		}
 	}
-	fl* ip = static_flag_check2();
-	if (!active && ip != NULL && ip->waiting_node != NULL) //null in if() case
+	fl* ip = (ctx != NULL) ? parser_delim_get_first_unclosed(ctx) : static_flag_check2();
+	if (!active && ip != NULL && ip->waiting_node != NULL)
 	{
 		printf("Error : unclosed %s in line %d", parse_obj_to_str(ip->waiting_node->btype.name), ip->waiting_node->line);
 	}
-	/*char** at = get_lines_array(buff);
-
-
-	for (char** y = at; *y != NULL; y++)
-	{
-		if(*y!="")
-		pre_parse_line(*y, mline);
-
-		mline++;
-	}*/
 	free(buff);
+}
+
+void start_parse_lines(char* buffe, bool active)
+{
+	if (buffe == NULL || *buffe == '\0')
+		return;
+
+	ParserContext ctx;
+	parser_context_init(&ctx, active);
+
+	/* Push previous context to support nested/re-entrant parsing */
+	ctx.prev_ctx = current_parser_ctx;
+	current_parser_ctx = &ctx;
+
+	start_parse_lines_ctx(&ctx, buffe, active);
+
+	/* Restore previous context */
+	current_parser_ctx = ctx.prev_ctx;
+	parser_context_cleanup(&ctx);
 }

@@ -18,6 +18,7 @@
 #include "ximport.h"
 #include "xgc.h"
 #include "compile.h"
+#include "parse.h"
 
 //#define F
 
@@ -286,6 +287,10 @@ char* parse_obj_to_str(const node_type t)
 
 node* static_flag_op2(const node_type mtype, node* w_node, bool added)
 {
+	if (current_parser_ctx != NULL)
+	{
+		return parser_delim_op(current_parser_ctx, mtype, w_node, added);
+	}
 	node* p = NULL;
 	if (added)
 	{
@@ -319,6 +324,10 @@ node* static_flag_op2(const node_type mtype, node* w_node, bool added)
 
 bool static_flag_check2x(node_type* m)
 {
+	if (current_parser_ctx != NULL)
+	{
+		return parser_delim_check_unclosed(current_parser_ctx, m);
+	}
 	int* ma = (int*)m;
 	bool cont = false;
 	for (int i = 0; i < 10; i++)
@@ -333,6 +342,10 @@ bool static_flag_check2x(node_type* m)
 
 fl* static_flag_check2()
 {
+	if (current_parser_ctx != NULL)
+	{
+		return parser_delim_get_first_unclosed(current_parser_ctx);
+	}
 	for (int i = 0; i < 10; i++)
 		if (staic_flag2[i].wait_type != 0)
 		{
