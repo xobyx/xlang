@@ -7,14 +7,14 @@
 #include "types.h"
 #include "functions.h"
 #include "xgc.h"
+#include "xdiag.h"
 
-/* Report an error with the script line of the node plus the C source location. */
+/* Report an error with source line snippets and caret pointers */
 #define XERROR(L, ...)                                                            \
 	do {                                                                          \
-		fprintf(stderr, "ERROR on line %d (%s:%d, %s): ", (L), __FILE__,          \
-		        __LINE__, __func__);                                              \
-		fprintf(stderr, __VA_ARGS__);                                             \
-		fputc('\n', stderr);                                                      \
+		char _xerr_buf[512];                                                      \
+		snprintf(_xerr_buf, sizeof(_xerr_buf), __VA_ARGS__);                     \
+		xdiag_report(DIAG_ERROR, "E0003", NULL, (L), 1, 1, NULL, _xerr_buf, NULL); \
 	} while (0)
 
 /* Node types that terminate an expression (end of statement, closing brace, ...). */
@@ -24,6 +24,8 @@ static inline bool is_expression_end(const node* n)
 {
 	if (n == NULL) return true;
 	if (n->type_ == itype && n->next != NULL && n->next->type_ == dot)
+		return false;
+	if (n->type_ == keyword && n->value_keyword == _new_)
 		return false;
 	return (n->type_ & CALC_END_MASK) != 0;
 }
@@ -207,17 +209,73 @@ static bool eval_name(node** nod, fcall* calling_function, var* calling_object,
 			if (target == NULL)
 			{
 				type_def* td = get_type_by_name(n->value_char_ptr);
-				if (td != NULL)
+				if (td != NULL && !is_base_type(td))
 				{
-					for (int i = 0; i < td->d_function_size; i++)
+					int arg_count = 0;
+					node* p4 = n->next;
+					if (p4 != NULL && p4->type_ == parentheses4)
 					{
-						if (td->d_functions[i].func_name != NULL &&
-							(strcmp(td->d_functions[i].func_name, td->type_name) == 0 ||
-							 td->d_functions[i].function_type == constr))
+						node* pclose = get_close_part(p4);
+						if (pclose != NULL && p4->next != pclose)
 						{
-							target = &td->d_functions[i];
-							break;
+							int commas = 0;
+							for (node* a = p4->next; a != NULL && a != pclose; a = a->next)
+							{
+								if (a->type_ == parentheses4 || a->type_ == parentheses1 ||
+								    a->type_ == s_index)
+								{
+									node* inner_close = get_close_part(a);
+									if (inner_close != NULL)
+										a = inner_close;
+									continue;
+								}
+								if (a->type_ == comma)
+									commas++;
+							}
+							arg_count = commas + 1;
 						}
+					}
+
+					for (type_def* curr = td; curr != NULL; curr = curr->base)
+					{
+						for (int i = 0; i < curr->d_function_size; i++)
+						{
+							if (curr->d_functions[i].func_name != NULL &&
+								(strcmp(curr->d_functions[i].func_name, td->type_name) == 0 ||
+								 curr->d_functions[i].function_type == constr))
+							{
+								if (curr->d_functions[i].start_parm_count == arg_count)
+								{
+									target = &curr->d_functions[i];
+									break;
+								}
+								if (target == NULL)
+									target = &curr->d_functions[i];
+							}
+						}
+						if (target != NULL && target->start_parm_count == arg_count)
+							break;
+					}
+
+					if (target == NULL)
+					{
+						/* Class without explicit constructor: allocate default instance */
+						var* inst_var = new_temp_var(td);
+						inst_var->size = 1;
+						inst_var->values = install_memory_with_type(td, 1);
+						inst_var->value_type_instsance = (type_instance*)inst_var->values;
+						node* p4_fallback = (*nod)->next;
+						if (p4_fallback != NULL && p4_fallback->type_ == parentheses4)
+						{
+							node* pclose = get_close_part(p4_fallback);
+							if (pclose != NULL)
+								*nod = pclose;
+							else
+								*nod = p4_fallback;
+						}
+						step(nod);
+						*pmvar = inst_var;
+						return true;
 					}
 				}
 			}
@@ -763,6 +821,12 @@ node* calc(node* cnode, fcall* calling_function, var* calling_object, node_type 
 		if (stop_here(stop_in_type, stop_in_node, mnode))
 			break;
 
+		if (expect_operand && mnode->type_ == keyword && mnode->value_keyword == _new_)
+		{
+			step(&mnode);
+			continue;
+		}
+
 		if (expect_operand && !is_double_oprater(mnode) && (mnode->type_ == operators_n || is_double_equle(mnode)))
 		{
 			if (mnode->value_char_ptr != NULL && *mnode->value_char_ptr == '-')
@@ -942,6 +1006,10 @@ node* calc(node* cnode, fcall* calling_function, var* calling_object, node_type 
 				calc_result->values = final_val->values;
 				calc_result->type_define = final_val->type_define;
 				calc_result->size = final_val->size;
+				if (final_val->value_type_instsance != NULL)
+					calc_result->value_type_instsance = final_val->value_type_instsance;
+				else if (calc_result->type_define != NULL && !is_base_type(calc_result->type_define))
+					calc_result->value_type_instsance = (type_instance*)calc_result->values;
 			}
 		}
 	}

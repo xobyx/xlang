@@ -1,0 +1,99 @@
+import "lib/list.xb"
+
+class Box() {
+    int count
+    int total
+
+    Box() {
+        count = 0
+        total = 100
+    }
+
+    Box(int c, int t) {
+        count = c
+        total = t
+    }
+}
+
+// 1. Test new keyword
+Box b1 = new Box()
+print(b1.count)
+print(b1.total)
+
+Box b2 = new Box(5, 50)
+print(b2.count)
+print(b2.total)
+
+// 2. Test compound assignments on primitives
+int a = 10
+a += 20
+print(a)
+
+a -= 5
+print(a)
+
+a *= 2
+print(a)
+
+a /= 10
+print(a)
+
+a %= 3
+print(a)
+
+// 3. Test increment and decrement
+a++
+print(a)
+
+a++
+print(a)
+
+a--
+print(a)
+
+// 4. Test compound assignments and inc/dec on object properties
+b2.count += 10
+print(b2.count)
+
+b2.count++
+print(b2.count)
+
+b2.count--
+print(b2.count)
+
+b2.total -= 20
+print(b2.total)
+
+b2.total *= 3
+print(b2.total)
+
+b2.total /= 2
+print(b2.total)
+
+b2.total %= 11
+print(b2.total)
+
+// 5. Test string += concatenation
+string greeting = "Hello"
+greeting += ", "
+greeting += "world!"
+print(greeting)
+
+// 6. Test native string split
+string csv = "apple,banana,orange,grape"
+List fruits = csv.split(",")
+print(fruits.size())
+print(fruits.get(0))
+print(fruits.get(1))
+print(fruits.get(2))
+print(fruits.get(3))
+
+// 7. Test str_split function alias
+int raw_list = str_split("one:two:three", ":")
+print(list_size(raw_list))
+print(list_get(raw_list, 0))
+print(list_get(raw_list, 1))
+print(list_get(raw_list, 2))
+list_free(raw_list)
+
+print("test_ergonomics PASS")

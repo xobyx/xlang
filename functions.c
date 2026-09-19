@@ -15,6 +15,8 @@
 #include "xstring.h"
 #include "xmath.h"
 #include "xcollection.h"
+#include "xdatetime.h"
+#include "xjson.h"
 #include "ximport.h"
 #include "xgc.h"
 #include "compile.h"
@@ -169,10 +171,15 @@ type_def SIMPLE_TYPE[] = {
 			{
 				.start_func_parmeters = {T_STRING, T_STRING}, .func_code = &x_regex_replace, .func_name = "regex_replace",
 				.function_type = f_main, .access = PUBLIC,
-				.return_type = T_STRING, .ref = 0, .stack_next = 0, .start_parm_count = 2
+				.return_type = T_STRING, .ref = 0, .stack_next = T_STRING->d_functions + 17, .start_parm_count = 2
+			},
+			{
+				.start_func_parmeters = {T_STRING}, .func_code = &x_string_split, .func_name = "split",
+				.function_type = f_main, .access = PUBLIC,
+				.return_type = T_INT, .ref = 0, .stack_next = 0, .start_parm_count = 1
 			}
 		},
-		.d_function_size = 17, .base = 0,
+		.d_function_size = 18, .base = 0,
 		.stack_next = T_CHAR
 	},
 	{.type_id = 2, .type_name = "char", .base = 0, .stack_next = T_INT},
@@ -2263,6 +2270,74 @@ func_deftion simple_function_array[] = {
 	},
 	{
 		.start_func_parmeters = {}, .func_code = &x_clock_ms, .func_name = "time_ms",
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .ref = 0,
+		.stack_next = simple_function_array + 138
+	},
+	/* String Ergonomics (138) */
+	{
+		.start_func_parmeters = {T_STRING, T_STRING}, .func_code = &x_string_split, .func_name = "str_split",
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
+		.stack_next = simple_function_array + 139
+	},
+	/* JSON Module (139 - 141) */
+	{
+		.start_func_parmeters = {T_STRING}, .func_code = &x_json_parse, .func_name = "json_parse",
+		.function_type = f_main, .return_type = T_ANY, .start_parm_count = 1, .ref = 0,
+		.stack_next = simple_function_array + 140
+	},
+	{
+		.start_func_parmeters = {T_ANY}, .func_code = &x_json_stringify, .func_name = "json_stringify",
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .ref = 0,
+		.stack_next = simple_function_array + 141
+	},
+	{
+		.start_func_parmeters = {T_STRING}, .func_code = &x_json_is_valid, .func_name = "json_is_valid",
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
+		.stack_next = simple_function_array + 142
+	},
+	/* DateTime Module (142 - 150) */
+	{
+		.start_func_parmeters = {}, .func_code = &x_datetime_now, .func_name = "datetime_now",
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .ref = 0,
+		.stack_next = simple_function_array + 143
+	},
+	{
+		.start_func_parmeters = {T_INT, T_STRING}, .func_code = &x_datetime_format, .func_name = "datetime_format",
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 2, .ref = 0,
+		.stack_next = simple_function_array + 144
+	},
+	{
+		.start_func_parmeters = {T_INT}, .func_code = &x_datetime_year, .func_name = "datetime_year",
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
+		.stack_next = simple_function_array + 145
+	},
+	{
+		.start_func_parmeters = {T_INT}, .func_code = &x_datetime_month, .func_name = "datetime_month",
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
+		.stack_next = simple_function_array + 146
+	},
+	{
+		.start_func_parmeters = {T_INT}, .func_code = &x_datetime_day, .func_name = "datetime_day",
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
+		.stack_next = simple_function_array + 147
+	},
+	{
+		.start_func_parmeters = {T_INT}, .func_code = &x_datetime_hour, .func_name = "datetime_hour",
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
+		.stack_next = simple_function_array + 148
+	},
+	{
+		.start_func_parmeters = {T_INT}, .func_code = &x_datetime_minute, .func_name = "datetime_minute",
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
+		.stack_next = simple_function_array + 149
+	},
+	{
+		.start_func_parmeters = {T_INT}, .func_code = &x_datetime_second, .func_name = "datetime_second",
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
+		.stack_next = simple_function_array + 150
+	},
+	{
+		.start_func_parmeters = {}, .func_code = &x_datetime_clock_ms, .func_name = "datetime_clock_ms",
 		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .ref = 0,
 		.stack_next = 0
 	}

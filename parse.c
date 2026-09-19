@@ -3,7 +3,7 @@
 
 
 //[if[0],for[1],while[2],do[3],else[4],print[5],return[6]]
-const char* key_word[] = { "if", "for", "while", "do", "else", "eif", "return", "break", "class", "static", "import" };
+const char* key_word[] = { "if", "for", "while", "do", "else", "eif", "return", "break", "class", "static", "import", "new" };
 static char one_c[] = { '+', 0, '-', 0, '/', 0, '*', 0, '%', 0, '=', 0, '(', 0, ')', 0, '{', 0, '}', 0, '[', 0, ']', 0, ',', 0, '>', 0, '<', 0, '|', 0, '&', 0, '!', 0, '.', 0, ':', 0 };
 
 bool out_put;
@@ -473,6 +473,9 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 		if(*buff=='\n')n_node->line++;
 	}
 	n_node->line = line;
+	int cur_col = (ctx && ctx->current_line_start && buff >= ctx->current_line_start)
+	              ? (int)(buff - ctx->current_line_start) + 1 : 1;
+	n_node->col = cur_col;
 
 	node_type a = (node_type)0;
 	if (parser_delim_check_unclosed(ctx, &a))
@@ -489,8 +492,11 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 			node* nextc = new_node(nodes);
 			n_node->type_ = endl;
 			n_node->line = line;
+			n_node->col = cur_col;
 			n_node->next = nextc;
 			nextc->parent = n_node;
+			nextc->line = line;
+			nextc->col = cur_col;
 			if (ctx != NULL)
 				ctx->save = nextc;
 			else if (current_parser_ctx != NULL)
@@ -501,6 +507,7 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 		n_node->type_ = endl;
 		n_node->next = NULL;
 		n_node->line = line;
+		n_node->col = cur_col;
 
 		if (print_parse_log)
 			debuge->print_line_debuge(debuge, n_node, line);
@@ -516,6 +523,8 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 
 	node* next = new_node(nodes);
 	next->parent = n_node;
+	next->line = line;
+	next->col = cur_col;
 	n_node->next = next;
 
 	if (*buff == ',')
@@ -730,7 +739,7 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 		n_node->value_char_ptr = getchar_x(*buff);
 
 
-		next->type_ = value | var_name | itype;
+		next->type_ = value | var_name | itype | keyword;
 		next->flag_ = parentheses1_c | comma/*,} */;
 		next->is_flagged = true;
 		parse_line_ctx(ctx, buff + 1, next, line);
@@ -747,7 +756,7 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 			static_flag_op2(parentheses4, n_node, false);
 			static_flag_op2(parentheses4_c, n_node, true);
 
-			next->type_ = value | var_name | parentheses4_c | parentheses4;
+			next->type_ = value | var_name | parentheses4_c | parentheses4 | keyword;
 			if (n_node->parent != NULL && n_node->parent->type_ == var_name)
 			{
 				const int typ = n_node->parent->opt_name_type;
@@ -762,7 +771,7 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 					else
 					{
 						n_node->opt_name_type = function_call;
-						next->type_ = value | var_name | parentheses4_c | parentheses4;
+						next->type_ = value | var_name | parentheses4_c | parentheses4 | keyword;
 						next->flag_ = comma;
 					}
 				}
@@ -777,7 +786,7 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 				else if (typ == var_call) //switch form var call
 				{
 					//WHY
-					next->type_ = value | var_name | parentheses4_c;
+					next->type_ = value | var_name | parentheses4_c | keyword;
 					next->flag_ = comma;
 					n_node->parent->_opt_ptr_ = function_call;//changed form var call
 					n_node->opt_name_type = function_call;//a
@@ -952,7 +961,7 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 				}
 				else if (i == _return_)
 				{
-					next->type_ = var_name | value;
+					next->type_ = var_name | value | keyword;
 				}
 				else if (i == _static_)
 				{
@@ -987,6 +996,14 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 					next->type_ = value | var_name | parentheses4;
 					next->is_flagged = true;
 					next->flag_ = value | var_name | parentheses4 | parentheses4_c | endl;
+					parse_line_ctx(ctx, buff + strlen(key_word[i]), next, line);
+					return;
+				}
+				else if (i == _new_)
+				{
+					next->type_ = var_name;
+					next->flag_ = parentheses4;
+					next->is_flagged = true;
 					parse_line_ctx(ctx, buff + strlen(key_word[i]), next, line);
 					return;
 				}
@@ -1307,7 +1324,7 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 					if (n_node->type_ != equles)
 						next->type_ |= equles;
 				}
-				next->type_ |= value | var_name | parentheses1 | equles|parentheses4;
+				next->type_ |= value | var_name | parentheses1 | equles | parentheses4 | keyword;
 				parse_line_ctx(ctx, i + 1, next, line);
 				return;
 				////do next->.
@@ -1323,7 +1340,7 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 					if (*(char*)n_node->value_raw == *(char*)n_node->parent->value_raw ||
 					    *(char*)n_node->value_raw == '-' || *(char*)n_node->value_raw == '+')
 					{
-						next->type_ = var_name | value |parentheses4;
+						next->type_ = var_name | value | parentheses4 | endl;
 						inherit_parent_flag(n_node, next);
 						if ((n_node->parent != NULL && n_node->parent->is_flagged) || n_node->is_flagged)
 						{
@@ -1368,7 +1385,13 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 		//d->next = NULL;
 		//d->btype.nnType.operators_n = 0;
 		//parse_line(buff, d, line);
-		printf("\nunrecognized token : [ %s ] in line [ %d ] \n", buff, line);
+		int ucol = (ctx && ctx->current_line_start && buff >= ctx->current_line_start)
+		         ? (int)(buff - ctx->current_line_start) + 1 : 1;
+		int utlen = (int)strlen(buff);
+		char errmsg[256];
+		snprintf(errmsg, sizeof(errmsg), "unrecognized token: '%s'", buff);
+		xdiag_report(DIAG_ERROR, "E0001", ctx ? ctx->source_file : NULL, line, ucol, utlen, NULL, errmsg, "check for syntax errors, typos, or unsupported symbols");
+		if (ctx != NULL) ctx->has_error = true;
 		return;
 	}
 	//mdebuge.cprintf(12, "\nunrecognized token : [ %s ] in line [ %d ] \n", buff, line);
@@ -1386,6 +1409,8 @@ void pre_parse_line_ctx(ParserContext* ctx, char* buff, const int line)
 {
 	if (ctx == NULL)
 		ctx = current_parser_ctx;
+	if (ctx != NULL)
+		ctx->current_line_start = buff;
 
 	node* n;
 	node* cur_save = (ctx != NULL) ? ctx->save : NULL;
@@ -1487,6 +1512,10 @@ void start_parse_lines_ctx(ParserContext* ctx, char* buffe, bool active)
 	{
 		ctx->current_parsing_class_name = NULL;
 		ctx->scope_top = 0;
+		if (ctx->source_code == NULL)
+			ctx->source_code = buffe;
+		if (ctx->source_file == NULL)
+			ctx->source_file = xdiag_get_current_file();
 	}
 
 	size_t size1 = strlen(buffe) + 1;
@@ -1530,7 +1559,12 @@ void start_parse_lines_ctx(ParserContext* ctx, char* buffe, bool active)
 	fl* ip = (ctx != NULL) ? parser_delim_get_first_unclosed(ctx) : static_flag_check2();
 	if (!active && ip != NULL && ip->waiting_node != NULL)
 	{
-		printf("Error : unclosed %s in line %d", parse_obj_to_str(ip->waiting_node->btype.name), ip->waiting_node->line);
+		int eline = ip->waiting_node->line;
+		int ecol = ip->waiting_node->col > 0 ? ip->waiting_node->col : 1;
+		char dmsg[256];
+		snprintf(dmsg, sizeof(dmsg), "unclosed delimiter '%s'", parse_obj_to_str(ip->waiting_node->btype.name));
+		xdiag_report(DIAG_ERROR, "E0002", ctx ? ctx->source_file : NULL, eline, ecol, 1, NULL, dmsg, "missing matching closing delimiter");
+		if (ctx != NULL) ctx->has_error = true;
 	}
 	free(buff);
 }
@@ -1547,6 +1581,8 @@ void start_parse_lines(char* buffe, bool active)
 			parser_context_init(&interactive_ctx, true);
 			interactive_ctx_inited = true;
 		}
+		interactive_ctx.source_file = "<stdin>";
+		interactive_ctx.source_code = buffe;
 		current_parser_ctx = &interactive_ctx;
 		start_parse_lines_ctx(&interactive_ctx, buffe, true);
 		return;
@@ -1554,6 +1590,8 @@ void start_parse_lines(char* buffe, bool active)
 
 	ParserContext ctx;
 	parser_context_init(&ctx, active);
+	ctx.source_file = xdiag_get_current_file();
+	ctx.source_code = buffe;
 
 	/* Push previous context to support nested/re-entrant parsing */
 	ctx.prev_ctx = current_parser_ctx;

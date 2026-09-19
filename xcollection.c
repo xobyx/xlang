@@ -1490,3 +1490,367 @@ void x_collection_gc_sweep(void)
 	}
 }
 
+/* ------------------------------------------------------------------------- */
+/* Direct C API for collections                                              */
+/* ------------------------------------------------------------------------- */
+
+int x_list_alloc(void)
+{
+	int slot = -1;
+	for (int i = 1; i < MAX_LISTS; i++)
+	{
+		if (s_lists[i] == NULL || !s_lists[i]->active)
+		{
+			slot = i;
+			break;
+		}
+	}
+	if (slot == -1) return -1;
+
+	if (s_lists[slot] == NULL)
+		s_lists[slot] = (x_list_t*)calloc(1, sizeof(x_list_t));
+
+	x_list_t* l = s_lists[slot];
+	l->id = slot;
+	l->active = true;
+	l->size = 0;
+	l->capacity = 0;
+	l->items = NULL;
+	list_ensure_capacity(l, INITIAL_LIST_CAP);
+	return slot;
+}
+
+int x_list_append_str(int id, const char* val)
+{
+	if (id <= 0 || id >= MAX_LISTS || s_lists[id] == NULL || !s_lists[id]->active)
+		return -1;
+	x_list_t* l = s_lists[id];
+	list_ensure_capacity(l, l->size + 1);
+	x_list_item_t* it = &l->items[l->size++];
+	it->type = X_ELEM_STR;
+	it->str_val = strdup(val != NULL ? val : "");
+	sync_item_var(it);
+	return l->size;
+}
+
+int x_list_append_int(int id, int val)
+{
+	if (id <= 0 || id >= MAX_LISTS || s_lists[id] == NULL || !s_lists[id]->active)
+		return -1;
+	x_list_t* l = s_lists[id];
+	list_ensure_capacity(l, l->size + 1);
+	x_list_item_t* it = &l->items[l->size++];
+	it->type = X_ELEM_INT;
+	it->int_val = val;
+	sync_item_var(it);
+	return l->size;
+}
+
+int x_list_append_float(int id, float val)
+{
+	if (id <= 0 || id >= MAX_LISTS || s_lists[id] == NULL || !s_lists[id]->active)
+		return -1;
+	x_list_t* l = s_lists[id];
+	list_ensure_capacity(l, l->size + 1);
+	x_list_item_t* it = &l->items[l->size++];
+	it->type = X_ELEM_FLOAT;
+	it->float_val = val;
+	sync_item_var(it);
+	return l->size;
+}
+
+int x_list_count(int id)
+{
+	if (id <= 0 || id >= MAX_LISTS || s_lists[id] == NULL || !s_lists[id]->active)
+		return 0;
+	return s_lists[id]->size;
+}
+
+const char* x_list_item_str(int id, int index)
+{
+	if (id <= 0 || id >= MAX_LISTS || s_lists[id] == NULL || !s_lists[id]->active)
+		return "";
+	x_list_t* l = s_lists[id];
+	if (index < 0 || index >= l->size) return "";
+	if (l->items[index].type == X_ELEM_STR)
+		return l->items[index].str_val ? l->items[index].str_val : "";
+	return "";
+}
+
+int x_list_item_int(int id, int index)
+{
+	if (id <= 0 || id >= MAX_LISTS || s_lists[id] == NULL || !s_lists[id]->active)
+		return 0;
+	x_list_t* l = s_lists[id];
+	if (index < 0 || index >= l->size) return 0;
+	if (l->items[index].type == X_ELEM_INT) return l->items[index].int_val;
+	if (l->items[index].type == X_ELEM_FLOAT) return (int)l->items[index].float_val;
+	if (l->items[index].type == X_ELEM_STR && l->items[index].str_val)
+		return atoi(l->items[index].str_val);
+	return 0;
+}
+
+float x_list_item_float(int id, int index)
+{
+	if (id <= 0 || id >= MAX_LISTS || s_lists[id] == NULL || !s_lists[id]->active)
+		return 0.0f;
+	x_list_t* l = s_lists[id];
+	if (index < 0 || index >= l->size) return 0.0f;
+	if (l->items[index].type == X_ELEM_FLOAT) return l->items[index].float_val;
+	if (l->items[index].type == X_ELEM_INT) return (float)l->items[index].int_val;
+	if (l->items[index].type == X_ELEM_STR && l->items[index].str_val)
+		return (float)atof(l->items[index].str_val);
+	return 0.0f;
+}
+
+int x_list_item_type(int id, int index)
+{
+	if (id <= 0 || id >= MAX_LISTS || s_lists[id] == NULL || !s_lists[id]->active)
+		return 0;
+	x_list_t* l = s_lists[id];
+	if (index < 0 || index >= l->size) return 0;
+	return (int)l->items[index].type;
+}
+
+int x_map_alloc(void)
+{
+	int slot = -1;
+	for (int i = 1; i < MAX_MAPS; i++)
+	{
+		if (s_maps[i] == NULL || !s_maps[i]->active)
+		{
+			slot = i;
+			break;
+		}
+	}
+	if (slot == -1) return -1;
+
+	if (s_maps[slot] == NULL)
+		s_maps[slot] = (x_map_t*)calloc(1, sizeof(x_map_t));
+
+	x_map_t* m = s_maps[slot];
+	m->id = slot;
+	m->active = true;
+	m->size = 0;
+	m->num_buckets = INITIAL_MAP_BUCKETS;
+	m->buckets = (x_map_entry_t**)calloc(INITIAL_MAP_BUCKETS, sizeof(x_map_entry_t*));
+	return slot;
+}
+
+int x_map_insert_str(int id, const char* key, const char* val)
+{
+	if (id <= 0 || id >= MAX_MAPS || s_maps[id] == NULL || !s_maps[id]->active || key == NULL)
+		return 0;
+	x_map_t* m = s_maps[id];
+	if (m->size >= m->num_buckets * 3 / 4) map_rehash(m);
+
+	unsigned long h = djb2_hash(key) % m->num_buckets;
+	x_map_entry_t* curr = m->buckets[h];
+	while (curr != NULL)
+	{
+		if (strcmp(curr->key, key) == 0)
+		{
+			if (curr->type == X_ELEM_STR && curr->str_val != NULL) free(curr->str_val);
+			curr->type = X_ELEM_STR;
+			curr->str_val = strdup(val != NULL ? val : "");
+			return 1;
+		}
+		curr = curr->next;
+	}
+	x_map_entry_t* n = (x_map_entry_t*)malloc(sizeof(x_map_entry_t));
+	n->key = strdup(key);
+	n->type = X_ELEM_STR;
+	n->str_val = strdup(val != NULL ? val : "");
+	n->next = m->buckets[h];
+	m->buckets[h] = n;
+	m->size++;
+	return 1;
+}
+
+int x_map_insert_int(int id, const char* key, int val)
+{
+	if (id <= 0 || id >= MAX_MAPS || s_maps[id] == NULL || !s_maps[id]->active || key == NULL)
+		return 0;
+	x_map_t* m = s_maps[id];
+	if (m->size >= m->num_buckets * 3 / 4) map_rehash(m);
+
+	unsigned long h = djb2_hash(key) % m->num_buckets;
+	x_map_entry_t* curr = m->buckets[h];
+	while (curr != NULL)
+	{
+		if (strcmp(curr->key, key) == 0)
+		{
+			if (curr->type == X_ELEM_STR && curr->str_val != NULL) free(curr->str_val);
+			curr->type = X_ELEM_INT;
+			curr->int_val = val;
+			return 1;
+		}
+		curr = curr->next;
+	}
+	x_map_entry_t* n = (x_map_entry_t*)malloc(sizeof(x_map_entry_t));
+	n->key = strdup(key);
+	n->type = X_ELEM_INT;
+	n->int_val = val;
+	n->next = m->buckets[h];
+	m->buckets[h] = n;
+	m->size++;
+	return 1;
+}
+
+int x_map_insert_float(int id, const char* key, float val)
+{
+	if (id <= 0 || id >= MAX_MAPS || s_maps[id] == NULL || !s_maps[id]->active || key == NULL)
+		return 0;
+	x_map_t* m = s_maps[id];
+	if (m->size >= m->num_buckets * 3 / 4) map_rehash(m);
+
+	unsigned long h = djb2_hash(key) % m->num_buckets;
+	x_map_entry_t* curr = m->buckets[h];
+	while (curr != NULL)
+	{
+		if (strcmp(curr->key, key) == 0)
+		{
+			if (curr->type == X_ELEM_STR && curr->str_val != NULL) free(curr->str_val);
+			curr->type = X_ELEM_FLOAT;
+			curr->float_val = val;
+			return 1;
+		}
+		curr = curr->next;
+	}
+	x_map_entry_t* n = (x_map_entry_t*)malloc(sizeof(x_map_entry_t));
+	n->key = strdup(key);
+	n->type = X_ELEM_FLOAT;
+	n->float_val = val;
+	n->next = m->buckets[h];
+	m->buckets[h] = n;
+	m->size++;
+	return 1;
+}
+
+int x_map_count(int id)
+{
+	if (id <= 0 || id >= MAX_MAPS || s_maps[id] == NULL || !s_maps[id]->active)
+		return 0;
+	return s_maps[id]->size;
+}
+
+bool x_map_contains_key(int id, const char* key)
+{
+	if (id <= 0 || id >= MAX_MAPS || s_maps[id] == NULL || !s_maps[id]->active || key == NULL)
+		return false;
+	x_map_t* m = s_maps[id];
+	if (m->num_buckets == 0 || m->buckets == NULL) return false;
+	unsigned long h = djb2_hash(key) % m->num_buckets;
+	x_map_entry_t* curr = m->buckets[h];
+	while (curr != NULL)
+	{
+		if (strcmp(curr->key, key) == 0) return true;
+		curr = curr->next;
+	}
+	return false;
+}
+
+const char* x_map_fetch_str(int id, const char* key)
+{
+	if (id <= 0 || id >= MAX_MAPS || s_maps[id] == NULL || !s_maps[id]->active || key == NULL)
+		return "";
+	x_map_t* m = s_maps[id];
+	if (m->num_buckets == 0 || m->buckets == NULL) return "";
+	unsigned long h = djb2_hash(key) % m->num_buckets;
+	x_map_entry_t* curr = m->buckets[h];
+	while (curr != NULL)
+	{
+		if (strcmp(curr->key, key) == 0)
+		{
+			if (curr->type == X_ELEM_STR) return curr->str_val ? curr->str_val : "";
+			return "";
+		}
+		curr = curr->next;
+	}
+	return "";
+}
+
+int x_map_fetch_int(int id, const char* key)
+{
+	if (id <= 0 || id >= MAX_MAPS || s_maps[id] == NULL || !s_maps[id]->active || key == NULL)
+		return 0;
+	x_map_t* m = s_maps[id];
+	if (m->num_buckets == 0 || m->buckets == NULL) return 0;
+	unsigned long h = djb2_hash(key) % m->num_buckets;
+	x_map_entry_t* curr = m->buckets[h];
+	while (curr != NULL)
+	{
+		if (strcmp(curr->key, key) == 0)
+		{
+			if (curr->type == X_ELEM_INT) return curr->int_val;
+			if (curr->type == X_ELEM_FLOAT) return (int)curr->float_val;
+			if (curr->type == X_ELEM_STR && curr->str_val) return atoi(curr->str_val);
+			return 0;
+		}
+		curr = curr->next;
+	}
+	return 0;
+}
+
+float x_map_fetch_float(int id, const char* key)
+{
+	if (id <= 0 || id >= MAX_MAPS || s_maps[id] == NULL || !s_maps[id]->active || key == NULL)
+		return 0.0f;
+	x_map_t* m = s_maps[id];
+	if (m->num_buckets == 0 || m->buckets == NULL) return 0.0f;
+	unsigned long h = djb2_hash(key) % m->num_buckets;
+	x_map_entry_t* curr = m->buckets[h];
+	while (curr != NULL)
+	{
+		if (strcmp(curr->key, key) == 0)
+		{
+			if (curr->type == X_ELEM_FLOAT) return curr->float_val;
+			if (curr->type == X_ELEM_INT) return (float)curr->int_val;
+			if (curr->type == X_ELEM_STR && curr->str_val) return (float)atof(curr->str_val);
+			return 0.0f;
+		}
+		curr = curr->next;
+	}
+	return 0.0f;
+}
+
+int x_map_fetch_type(int id, const char* key)
+{
+	if (id <= 0 || id >= MAX_MAPS || s_maps[id] == NULL || !s_maps[id]->active || key == NULL)
+		return 0;
+	x_map_t* m = s_maps[id];
+	if (m->num_buckets == 0 || m->buckets == NULL) return 0;
+	unsigned long h = djb2_hash(key) % m->num_buckets;
+	x_map_entry_t* curr = m->buckets[h];
+	while (curr != NULL)
+	{
+		if (strcmp(curr->key, key) == 0) return (int)curr->type;
+		curr = curr->next;
+	}
+	return 0;
+}
+
+int x_map_get_all_keys(int id, char*** out_keys)
+{
+	if (id <= 0 || id >= MAX_MAPS || s_maps[id] == NULL || !s_maps[id]->active || out_keys == NULL)
+		return 0;
+	x_map_t* m = s_maps[id];
+	if (m->size == 0) { *out_keys = NULL; return 0; }
+	char** keys = (char**)malloc(m->size * sizeof(char*));
+	int count = 0;
+	for (int i = 0; i < m->num_buckets; i++)
+	{
+		x_map_entry_t* curr = m->buckets[i];
+		while (curr != NULL)
+		{
+			if (count < m->size)
+			{
+				keys[count++] = curr->key;
+			}
+			curr = curr->next;
+		}
+	}
+	*out_keys = keys;
+	return count;
+}
+

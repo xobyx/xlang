@@ -55,4 +55,8 @@ class Str() {
     string regex_replace(string pattern, string repl) {
         return value.regex_replace(pattern, repl)
     }
+
+    List split(string delim) {
+        return value.split(delim)
+    }
 }

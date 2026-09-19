@@ -16,5 +16,6 @@ void x_to_lower(fcall* fc);
 void x_to_upper(fcall* fc);
 void x_starts_with(fcall* fc);
 void x_ends_with(fcall* fc);
+void x_string_split(fcall* fc);
 
 #endif /* XSTRING_H */

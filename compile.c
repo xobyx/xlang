@@ -1,6 +1,7 @@
 #include "compile.h"
 #include "ximport.h"
 #include "xgc.h"
+#include "xdiag.h"
 #include <execinfo.h>
 extern int get_index_value2(node** nod, fcall* calling_function, var* calling_object);
 extern node* calc(node* cnode, fcall* calling_function, var* calling_object, node_type stop_in_type, node* stop_in_node,
@@ -114,9 +115,10 @@ node* add_new_func_code(node* c, type_def* return_type, type_def* container_clas
 	node* end = get_close_part(func_decl);
 	if (end == NULL)
 	{
-		printf("error { not closed");
-		printf("ERROR: missing \'}\'  in function %s on line %d __ C:%s:%d ", m->func_name, func_decl->line, __FILE__,
-		       __LINE__);
+		char errmsg[256];
+		snprintf(errmsg, sizeof(errmsg), "missing closing '}' in function '%s'", m->func_name ? m->func_name : "anonymous");
+		xdiag_report(DIAG_ERROR, "E0004", NULL, func_decl->line, func_decl->col > 0 ? func_decl->col : 1, 1,
+		             NULL, errmsg, "ensure each opening brace '{' has a matching closing brace '}'");
 		exit(-1);
 	}
 	m->func_code = &call_func_in;
@@ -752,6 +754,111 @@ var* add_var_to(node** c, fcall* c_function, var* calling_object, type_def* ncal
 	return out;
 }
 
+static node* handle_assign_or_compound(node* c, var* x, fcall* c_function, var* parent)
+{
+	if (c == NULL)
+		return NULL;
+
+	if (c->type_ == equles)
+	{
+		c = calc(c->next, c_function, parent, none, NULL, x);
+	}
+	else if (c->type_ == operators_n && c->next != NULL && c->next->type_ == equles)
+	{
+		/* Compound assignment: +=, -=, *=, /=, %= */
+		char op = c->value_char_ptr ? *c->value_char_ptr : '+';
+		var* rhs = new_temp_var(x ? x->type_define : NULL);
+		c = calc(c->next->next, c_function, parent, none, NULL, rhs);
+		if (x != NULL && rhs != NULL)
+		{
+			if (x->type_define == T_INT && x->value_int != NULL)
+			{
+				int r = (rhs->type_define == T_INT && rhs->value_int != NULL) ? *rhs->value_int :
+				        (rhs->type_define == T_FLOAT && rhs->value_float != NULL) ? (int)*rhs->value_float :
+				        (rhs->type_define == T_LONG && rhs->value_long != NULL) ? (int)*rhs->value_long : 0;
+				if (op == '+') *x->value_int += r;
+				else if (op == '-') *x->value_int -= r;
+				else if (op == '*') *x->value_int *= r;
+				else if (op == '/' && r != 0) *x->value_int /= r;
+				else if (op == '%' && r != 0) *x->value_int %= r;
+			}
+			else if (x->type_define == T_FLOAT && x->value_float != NULL)
+			{
+				float r = (rhs->type_define == T_FLOAT && rhs->value_float != NULL) ? *rhs->value_float :
+				          (rhs->type_define == T_INT && rhs->value_int != NULL) ? (float)*rhs->value_int : 0.0f;
+				if (op == '+') *x->value_float += r;
+				else if (op == '-') *x->value_float -= r;
+				else if (op == '*') *x->value_float *= r;
+				else if (op == '/' && r != 0.0f) *x->value_float /= r;
+			}
+			else if (x->type_define == T_LONG && x->value_long != NULL)
+			{
+				long r = (rhs->type_define == T_LONG && rhs->value_long != NULL) ? *rhs->value_long :
+				         (rhs->type_define == T_INT && rhs->value_int != NULL) ? (long)*rhs->value_int : 0L;
+				if (op == '+') *x->value_long += r;
+				else if (op == '-') *x->value_long -= r;
+				else if (op == '*') *x->value_long *= r;
+				else if (op == '/' && r != 0) *x->value_long /= r;
+				else if (op == '%' && r != 0) *x->value_long %= r;
+			}
+			else if (x->type_define == T_STRING && op == '+')
+			{
+				const char* rstr = (rhs->type_define == T_STRING && rhs->value_str_ptr != NULL && *rhs->value_str_ptr != NULL) ? *rhs->value_str_ptr :
+				                   (rhs->value_char_ptr != NULL) ? rhs->value_char_ptr : "";
+				const char* xstr = (x->value_str_ptr != NULL && *x->value_str_ptr != NULL) ? *x->value_str_ptr :
+				                   (x->value_char_ptr != NULL) ? x->value_char_ptr : "";
+				size_t xlen = strlen(xstr);
+				size_t rlen = strlen(rstr);
+				char* new_str = (char*)gc_malloc(xlen + rlen + 1, GC_KIND_STRING);
+				if (new_str != NULL)
+				{
+					memcpy(new_str, xstr, xlen);
+					memcpy(new_str + xlen, rstr, rlen + 1);
+					if (x->value_str_ptr != NULL)
+						*x->value_str_ptr = new_str;
+					else
+						x->value_char_ptr = new_str;
+				}
+			}
+		}
+		free_temp_var(rhs);
+	}
+	else if (c->type_ == operators_n && c->next != NULL && c->next->type_ == operators_n &&
+	         c->value_char_ptr != NULL && c->next->value_char_ptr != NULL &&
+	         *c->value_char_ptr == *c->next->value_char_ptr)
+	{
+		/* Increment / Decrement: ++, -- */
+		char op = *c->value_char_ptr;
+		if (x != NULL)
+		{
+			if (x->type_define == T_INT && x->value_int != NULL)
+			{
+				if (op == '+') (*x->value_int)++;
+				else if (op == '-') (*x->value_int)--;
+			}
+			else if (x->type_define == T_FLOAT && x->value_float != NULL)
+			{
+				if (op == '+') (*x->value_float) += 1.0f;
+				else if (op == '-') (*x->value_float) -= 1.0f;
+			}
+			else if (x->type_define == T_LONG && x->value_long != NULL)
+			{
+				if (op == '+') (*x->value_long)++;
+				else if (op == '-') (*x->value_long)--;
+			}
+		}
+		c = c->next->next;
+		while (c != NULL && c->type_ != endl)
+			c = c->next;
+	}
+	else
+	{
+		while (c != NULL && c->type_ != endl)
+			c = c->next;
+	}
+	return c;
+}
+
 node* compile(var* parent, node* out, fcall* c_function, node* stop, type_def* ncalss)
 {
 	//func* temp=NULL;
@@ -780,21 +887,14 @@ node* compile(var* parent, node* out, fcall* c_function, node* stop, type_def* n
 		{
 			break;
 		}
+
 		switch (c->type_)
 		{
 		case var_name:
 			{
 				is_static_decl = false;
 				var* x = name_exp_assign(&c, c_function, parent);
-				if (c != NULL && c->type_ == equles)
-				{
-					c = calc(c->next, c_function, parent, none,NULL, x);
-				}
-				else
-				{
-					while (c != NULL && c->type_ != endl)
-						c = c->next;
-				}
+				c = handle_assign_or_compound(c, x, c_function, parent);
 			}
 			break;
 		case itype:
@@ -803,15 +903,7 @@ node* compile(var* parent, node* out, fcall* c_function, node* stop, type_def* n
 				{
 					is_static_decl = false;
 					var* x = name_exp_assign(&c, c_function, parent);
-					if (c != NULL && c->type_ == equles)
-					{
-						c = calc(c->next, c_function, parent, none, NULL, x);
-					}
-					else
-					{
-						while (c != NULL && c->type_ != endl)
-							c = c->next;
-					}
+					c = handle_assign_or_compound(c, x, c_function, parent);
 					break;
 				}
 				type_def* var_type = c->value_type;
@@ -1009,6 +1101,8 @@ node* compile(var* parent, node* out, fcall* c_function, node* stop, type_def* n
 						}
 						break;
 					}
+				case _new_:
+					break;
 				}
 			}
 

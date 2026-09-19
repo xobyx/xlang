@@ -1,5 +1,6 @@
 #include "xstring.h"
 #include "functions.h"
+#include "xcollection.h"
 #include "pcre.h"
 #include <ctype.h>
 #include <stdio.h>
@@ -395,4 +396,67 @@ void x_ends_with(fcall* fc)
 
 	fc->_return.value_int = new_int(1, res);
 	fc->_return.type_define = T_INT;
+}
+
+void x_string_split(fcall* fc)
+{
+	const char* str = get_target_str(fc);
+	const char* delim = get_sub_str_arg(fc, 0, "");
+
+	int list_id = x_list_alloc();
+	if (list_id != -1 && str != NULL)
+	{
+		size_t dlen = delim ? strlen(delim) : 0;
+		if (dlen == 0)
+		{
+			char single[2] = {0, 0};
+			for (const char* p = str; *p != '\0'; p++)
+			{
+				single[0] = *p;
+				x_list_append_str(list_id, single);
+			}
+		}
+		else
+		{
+			const char* cur = str;
+			const char* found = strstr(cur, delim);
+			while (found != NULL)
+			{
+				size_t part_len = (size_t)(found - cur);
+				char* part = (char*)malloc(part_len + 1);
+				if (part != NULL)
+				{
+					memcpy(part, cur, part_len);
+					part[part_len] = '\0';
+					x_list_append_str(list_id, part);
+					free(part);
+				}
+				cur = found + dlen;
+				found = strstr(cur, delim);
+			}
+			x_list_append_str(list_id, cur);
+		}
+	}
+
+	type_def* list_td = get_type_by_name("List");
+	if (is_str_method_call(fc) && list_td != NULL && !is_base_type(list_td))
+	{
+		type_instance* inst = (type_instance*)install_memory_with_type(list_td, 1);
+		var* id_prop = get_var_by_name_on_stack("id", &inst->propertys);
+		if (id_prop != NULL && id_prop->value_int != NULL)
+		{
+			*id_prop->value_int = list_id;
+		}
+		fc->_return.type_define = list_td;
+		fc->_return.values = inst;
+		fc->_return.value_type_instsance = inst;
+		fc->_return.size = 1;
+	}
+	else
+	{
+		fc->_return.value_int = new_int(1, list_id);
+		fc->_return.values = fc->_return.value_int;
+		fc->_return.type_define = T_INT;
+		fc->_return.size = 1;
+	}
 }

@@ -29,6 +29,9 @@ typedef struct ParserContext {
 
 	node* save;
 	const char* current_parsing_class_name;
+	const char* source_file;
+	const char* source_code;
+	const char* current_line_start;
 	int current_line;
 	bool interactive;
 	bool has_error;

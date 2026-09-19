@@ -31,6 +31,7 @@ __pragma(warning(disable: 4996));
 #include "compile.h"
 #include "parse.h"
 #include "md5.h"
+#include "xdiag.h"
 
 /**
  * \brief 

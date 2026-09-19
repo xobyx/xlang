@@ -1,0 +1,51 @@
+class DateTime() {
+    int timestamp
+
+    DateTime() {
+        timestamp = datetime_now()
+    }
+
+    DateTime(int ts) {
+        timestamp = ts
+    }
+
+    static DateTime now() {
+        return new DateTime(datetime_now())
+    }
+
+    string format(string fmt) {
+        return datetime_format(timestamp, fmt)
+    }
+
+    string to_str() {
+        return datetime_format(timestamp, "%Y-%m-%d %H:%M:%S")
+    }
+
+    int year() {
+        return datetime_year(timestamp)
+    }
+
+    int month() {
+        return datetime_month(timestamp)
+    }
+
+    int day() {
+        return datetime_day(timestamp)
+    }
+
+    int hour() {
+        return datetime_hour(timestamp)
+    }
+
+    int minute() {
+        return datetime_minute(timestamp)
+    }
+
+    int second() {
+        return datetime_second(timestamp)
+    }
+
+    static int clock_ms() {
+        return datetime_clock_ms()
+    }
+}

@@ -1,0 +1,18 @@
+import "lib/map.xb"
+
+class JSON() {
+    JSON() {
+    }
+
+    static Map parse(string json_str) {
+        return json_parse(json_str)
+    }
+
+    static string stringify(Map m) {
+        return json_stringify(m)
+    }
+
+    static int is_valid(string json_str) {
+        return json_is_valid(json_str)
+    }
+}

@@ -163,6 +163,7 @@ int main(const int argc, char** argv)
 	t = clock();
 	if (argc == 1)
 	{
+		xdiag_set_current_file("<stdin>");
 		interupter();
 		clean_memory();
 		return 0;
@@ -191,6 +192,8 @@ int main(const int argc, char** argv)
 	}
 	buff = get_file_buffer(code_file);
 	fclose(code_file);
+	xdiag_set_current_file(argv[1]);
+	xdiag_set_source_code(buff);
 
 	change_dir(argv);
 
@@ -272,6 +275,7 @@ void clean_memory(void)
 	x_import_cleanup();
 	gc_cleanup();
 	parser_interactive_cleanup();
+	xdiag_set_source_code(NULL);
 }
 
 void start_compile(void)

@@ -51,7 +51,8 @@ typedef enum key_word_enum
 	_break_,
 	_class_,
 	_static_,
-	_import_
+	_import_,
+	_new_
 } key_word_enum;
 
 // long[0],string[1],char[2],int[3]
@@ -154,6 +155,7 @@ typedef struct node
 	node_type_raw btype;
 	node_type_raw fflag;
 	int line;
+	int col;
 
 	struct node* parent;
 	struct  node* next;
