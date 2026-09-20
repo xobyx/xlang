@@ -49,6 +49,7 @@ struct XVm;
 XClosure* xclosure_create(struct XVm* vm, XFunction* function);
 void xclosure_free(XClosure* closure);
 XInstance* xinstance_create(struct XVm* vm, const char* class_name);
+XInstance* xinstance_create_with_id(struct XVm* vm, const char* class_name, int id);
 void xinstance_free(XInstance* inst);
 
 typedef struct XCallFrame {

@@ -80,6 +80,8 @@ const char* x_map_fetch_str(int id, const char* key);
 int x_map_fetch_int(int id, const char* key);
 float x_map_fetch_float(int id, const char* key);
 int x_map_fetch_type(int id, const char* key);
+int x_list_free_id(int id);
+int x_map_free_id(int id);
 int x_map_get_all_keys(int id, char*** out_keys);
 
 #ifdef __cplusplus

@@ -199,6 +199,51 @@ static AstExpr* parse_primary(AstArena* arena, node** n, node* stop)
 		}
 	}
 
+	/* 'new' Expression: new ClassName(args...) */
+	if (curr->type_ == keyword && curr->value_keyword == _new_)
+	{
+		*n = curr->next;
+		if (!is_end(*n, stop))
+		{
+			node* cnode = *n;
+			char* class_name = cnode->value_char_ptr;
+			if (cnode->type_ == itype && cnode->value_type != NULL && cnode->value_type->type_name != NULL)
+			{
+				class_name = cnode->value_type->type_name;
+			}
+			*n = cnode->next;
+
+			AstExpr* args[32];
+			int arg_count = 0;
+
+			if (!is_end(*n, stop) && (*n)->type_ == parentheses4)
+			{
+				node* pclose = get_close_part(*n);
+				*n = (*n)->next;
+
+				while (!is_end(*n, pclose) && *n != pclose)
+				{
+					if ((*n)->type_ == comma)
+					{
+						*n = (*n)->next;
+						continue;
+					}
+					AstExpr* arg = parse_expr_prec(arena, n, pclose, 1);
+					if (arg && arg_count < 32)
+					{
+						args[arg_count++] = arg;
+					}
+					if (!is_end(*n, pclose) && (*n)->type_ == comma)
+					{
+						*n = (*n)->next;
+					}
+				}
+				if (*n == pclose) *n = (*n)->next;
+			}
+			return ast_expr_call(arena, class_name ? class_name : "Object", args, arg_count, line, col);
+		}
+	}
+
 	/* Variable or Function Call */
 	if (curr->type_ == var_name || curr->type_ == itype)
 	{

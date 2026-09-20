@@ -2,28 +2,43 @@
 #include "xcollection.h"
 #include "functions.h"
 #include <inttypes.h>
+#include <time.h>
 
 /* -------------------------------------------------------------------------
  * Instance Lifecycle
  * ------------------------------------------------------------------------- */
-XInstance* xinstance_create(XVm* vm, const char* class_name)
+XInstance* xinstance_create_with_id(XVm* vm, const char* class_name, int id)
 {
 	XInstance* inst = (XInstance*)calloc(1, sizeof(XInstance));
 	inst->class_name = strdup(class_name ? class_name : "Object");
-	if (strcmp(inst->class_name, "List") == 0)
-	{
-		inst->id = x_list_alloc();
-	}
-	else if (strcmp(inst->class_name, "Map") == 0 || strcmp(inst->class_name, "HashMap") == 0)
-	{
-		inst->id = x_map_alloc();
-	}
+	inst->id = id;
 	if (vm)
 	{
 		inst->next = vm->all_instances;
 		vm->all_instances = inst;
 	}
 	return inst;
+}
+
+XInstance* xinstance_create(XVm* vm, const char* class_name)
+{
+	int id = 0;
+	if (class_name)
+	{
+		if (strcmp(class_name, "List") == 0)
+		{
+			id = x_list_alloc();
+		}
+		else if (strcmp(class_name, "Map") == 0 || strcmp(class_name, "HashMap") == 0)
+		{
+			id = x_map_alloc();
+		}
+		else if (strcmp(class_name, "DateTime") == 0)
+		{
+			id = (int)time(NULL);
+		}
+	}
+	return xinstance_create_with_id(vm, class_name, id);
 }
 
 void xinstance_free(XInstance* inst)
@@ -484,8 +499,32 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 		case OP_NEW_INSTANCE:
 			{
 				uint16_t s_idx = read_short(frame);
+				uint8_t arg_count = *frame->ip++;
 				const char* class_name = (s_idx < current_chunk->symbols.count) ? current_chunk->symbols.symbols[s_idx] : "";
-				XInstance* inst = xinstance_create(vm, class_name);
+				XValue args[32];
+				for (int i = arg_count - 1; i >= 0; i--)
+				{
+					args[i] = xvm_pop(vm);
+				}
+
+				XInstance* inst = NULL;
+				if (strcmp(class_name, "DateTime") == 0)
+				{
+					int ts = (arg_count >= 1 && args[0].type == VAL_INT) ? (int)args[0].as.ival : (int)time(NULL);
+					inst = xinstance_create_with_id(vm, class_name, ts);
+				}
+				else if (strcmp(class_name, "List") == 0)
+				{
+					inst = xinstance_create_with_id(vm, class_name, x_list_alloc());
+				}
+				else if (strcmp(class_name, "Map") == 0 || strcmp(class_name, "HashMap") == 0)
+				{
+					inst = xinstance_create_with_id(vm, class_name, x_map_alloc());
+				}
+				else
+				{
+					inst = xinstance_create(vm, class_name);
+				}
 				xvm_push(vm, xval_obj(inst));
 				break;
 			}
@@ -517,7 +556,8 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 				if (obj.type == VAL_OBJECT && obj.as.oval != NULL)
 				{
 					XInstance* inst = (XInstance*)obj.as.oval;
-					if (strcmp(field_name, "id") == 0)
+					if (strcmp(field_name, "id") == 0 ||
+					    (strcmp(inst->class_name, "DateTime") == 0 && strcmp(field_name, "timestamp") == 0))
 					{
 						xvm_push(vm, xval_int(inst->id));
 						break;
@@ -547,7 +587,9 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 				if (obj.type == VAL_OBJECT && obj.as.oval != NULL)
 				{
 					XInstance* inst = (XInstance*)obj.as.oval;
-					if (strcmp(field_name, "id") == 0 && val.type == VAL_INT)
+					if ((strcmp(field_name, "id") == 0 ||
+					     (strcmp(inst->class_name, "DateTime") == 0 && strcmp(field_name, "timestamp") == 0)) &&
+					    val.type == VAL_INT)
 					{
 						inst->id = (int)val.as.ival;
 						xvm_push(vm, val);
@@ -1023,12 +1065,43 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 								{
 									XInstance* inst = (XInstance*)n_args[i].as.oval;
 									i_buf[i] = inst->id;
-									fc.func_parmeters[i].type_define = T_INT;
+									type_def* td = get_type_by_name(inst->class_name ? inst->class_name : "");
+									fc.func_parmeters[i].type_define = td ? td : T_INT;
 									fc.func_parmeters[i].value_int = &i_buf[i];
 									fc.func_parmeters[i].values = &i_buf[i];
 								}
 							}
 							native_fn->func_code(&fc);
+							if (strcmp(name, "json_parse") == 0)
+							{
+								int obj_id = -1;
+								const char* tname = (fc._return.type_define && !is_base_type(fc._return.type_define) && fc._return.type_define->type_name) ? fc._return.type_define->type_name : "Map";
+								if (fc._return.type_define != NULL && !is_base_type(fc._return.type_define))
+								{
+									type_instance* ti = fc._return.value_type_instsance ? fc._return.value_type_instsance : (type_instance*)fc._return.values;
+									if (ti != NULL)
+									{
+										var* id_prop = get_var_by_name_on_stack("id", &ti->propertys);
+										if (id_prop != NULL && id_prop->value_int != NULL)
+											obj_id = *id_prop->value_int;
+									}
+								}
+								else if (fc._return.value_int != NULL)
+								{
+									obj_id = *fc._return.value_int;
+								}
+
+								if (obj_id >= 0)
+								{
+									XInstance* inst = xinstance_create_with_id(vm, tname, obj_id);
+									xvm_push(vm, xval_obj(inst));
+								}
+								else
+								{
+									xvm_push(vm, xval_null());
+								}
+								break;
+							}
 							if (fc._return.type_define == T_INT && fc._return.value_int)
 								xvm_push(vm, xval_int(*fc._return.value_int));
 							else if (fc._return.type_define == T_FLOAT && fc._return.value_float)
@@ -1037,6 +1110,20 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 								xvm_push(vm, xval_str(*fc._return.value_str_ptr));
 							else if (fc._return.type_define == T_BOOL && fc._return.value_bool)
 								xvm_push(vm, xval_bool(*fc._return.value_bool));
+							else if (fc._return.type_define != NULL && !is_base_type(fc._return.type_define))
+							{
+								const char* tname = fc._return.type_define->type_name ? fc._return.type_define->type_name : "Object";
+								int obj_id = 0;
+								type_instance* ti = fc._return.value_type_instsance ? fc._return.value_type_instsance : (type_instance*)fc._return.values;
+								if (ti != NULL)
+								{
+									var* id_prop = get_var_by_name_on_stack("id", &ti->propertys);
+									if (id_prop != NULL && id_prop->value_int != NULL)
+										obj_id = *id_prop->value_int;
+								}
+								XInstance* inst = xinstance_create_with_id(vm, tname, obj_id);
+								xvm_push(vm, xval_obj(inst));
+							}
 							else
 								xvm_push(vm, xval_null());
 							break;
@@ -1126,6 +1213,12 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 							xvm_push(vm, xval_int(x_list_count(inst->id)));
 							break;
 						}
+						else if (strcmp(method_name, "free") == 0)
+						{
+							x_list_free_id(inst->id);
+							xvm_push(vm, xval_int(0));
+							break;
+						}
 					}
 					else if (strcmp(inst->class_name, "Map") == 0 || strcmp(inst->class_name, "HashMap") == 0)
 					{
@@ -1160,6 +1253,65 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 						else if (strcmp(method_name, "size") == 0 || strcmp(method_name, "length") == 0)
 						{
 							xvm_push(vm, xval_int(x_map_count(inst->id)));
+							break;
+						}
+						else if (strcmp(method_name, "free") == 0)
+						{
+							x_map_free_id(inst->id);
+							xvm_push(vm, xval_int(0));
+							break;
+						}
+					}
+					else if (strcmp(inst->class_name, "DateTime") == 0)
+					{
+						time_t t = (time_t)inst->id;
+						if (t <= 0) t = time(NULL);
+						struct tm tm_info;
+						localtime_r(&t, &tm_info);
+
+						if (strcmp(method_name, "year") == 0)
+						{
+							xvm_push(vm, xval_int(tm_info.tm_year + 1900));
+							break;
+						}
+						else if (strcmp(method_name, "month") == 0)
+						{
+							xvm_push(vm, xval_int(tm_info.tm_mon + 1));
+							break;
+						}
+						else if (strcmp(method_name, "day") == 0)
+						{
+							xvm_push(vm, xval_int(tm_info.tm_mday));
+							break;
+						}
+						else if (strcmp(method_name, "hour") == 0)
+						{
+							xvm_push(vm, xval_int(tm_info.tm_hour));
+							break;
+						}
+						else if (strcmp(method_name, "minute") == 0)
+						{
+							xvm_push(vm, xval_int(tm_info.tm_min));
+							break;
+						}
+						else if (strcmp(method_name, "second") == 0)
+						{
+							xvm_push(vm, xval_int(tm_info.tm_sec));
+							break;
+						}
+						else if (strcmp(method_name, "to_str") == 0)
+						{
+							char buf[64];
+							strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm_info);
+							xvm_push(vm, xval_str(buf));
+							break;
+						}
+						else if (strcmp(method_name, "format") == 0)
+						{
+							const char* fmt = (arg_count >= 1 && args[0].type == VAL_STRING) ? args[0].as.sval : "%Y-%m-%d %H:%M:%S";
+							char buf[256];
+							strftime(buf, sizeof(buf), fmt ? fmt : "%Y-%m-%d %H:%M:%S", &tm_info);
+							xvm_push(vm, xval_str(buf));
 							break;
 						}
 					}
@@ -1199,7 +1351,7 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 				}
 				else if (receiver.type == VAL_STRING)
 				{
-					if (strcmp(method_name, "length") == 0 || strcmp(method_name, "size") == 0)
+					if (strcmp(method_name, "length") == 0 || strcmp(method_name, "size") == 0 || strcmp(method_name, "len") == 0)
 					{
 						xvm_push(vm, xval_int(receiver.as.sval ? (int64_t)strlen(receiver.as.sval) : 0));
 						break;

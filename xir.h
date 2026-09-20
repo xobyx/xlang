@@ -37,7 +37,7 @@ typedef enum XIrOpCode {
 	OP_LOAD_INDEX,
 	OP_STORE_INDEX,
 	OP_BUILD_LIST,    /* operand: uint16 element count */
-	OP_NEW_INSTANCE,  /* operand: uint16 symbol index (class name) */
+	OP_NEW_INSTANCE,  /* operand: uint16 symbol index (class name), uint8 arg_count */
 
 	/* Stack Operations */
 	OP_POP,

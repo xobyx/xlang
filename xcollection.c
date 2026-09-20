@@ -1854,3 +1854,25 @@ int x_map_get_all_keys(int id, char*** out_keys)
 	return count;
 }
 
+int x_list_free_id(int id)
+{
+	if (id > 0 && id < MAX_LISTS && s_lists[id] != NULL && s_lists[id]->active)
+	{
+		free_list_items(s_lists[id]);
+		s_lists[id]->active = false;
+		return 1;
+	}
+	return 0;
+}
+
+int x_map_free_id(int id)
+{
+	if (id > 0 && id < MAX_MAPS && s_maps[id] != NULL && s_maps[id]->active)
+	{
+		free_map_entries(s_maps[id]);
+		s_maps[id]->active = false;
+		return 1;
+	}
+	return 0;
+}
+

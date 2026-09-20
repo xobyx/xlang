@@ -551,6 +551,11 @@ void x_json_parse(fcall* fc)
 		{
 			type_instance* inst = (type_instance*)install_memory_with_type(map_td, 1);
 			var* id_prop = get_var_by_name_on_stack("id", &inst->propertys);
+			if (id_prop == NULL)
+			{
+				id_prop = new_var_on_stack(&inst->propertys, "id", T_INT);
+				id_prop->values = install_memory_with_type(T_INT, 1);
+			}
 			if (id_prop != NULL && id_prop->value_int != NULL)
 				*id_prop->value_int = map_id;
 			fc->_return.type_define = map_td;
@@ -572,6 +577,11 @@ void x_json_parse(fcall* fc)
 		{
 			type_instance* inst = (type_instance*)install_memory_with_type(list_td, 1);
 			var* id_prop = get_var_by_name_on_stack("id", &inst->propertys);
+			if (id_prop == NULL)
+			{
+				id_prop = new_var_on_stack(&inst->propertys, "id", T_INT);
+				id_prop->values = install_memory_with_type(T_INT, 1);
+			}
 			if (id_prop != NULL && id_prop->value_int != NULL)
 				*id_prop->value_int = list_id;
 			fc->_return.type_define = list_td;
@@ -621,6 +631,18 @@ void x_json_stringify(fcall* fc)
 				else
 				{
 					buf_append(&sb, "{}");
+				}
+			}
+			else if (arg->value_int != NULL && arg->type_define != NULL && !is_base_type(arg->type_define))
+			{
+				int id = *arg->value_int;
+				if (arg->type_define->type_name != NULL && strcmp(arg->type_define->type_name, "List") == 0)
+				{
+					stringify_list(&sb, id);
+				}
+				else
+				{
+					stringify_map(&sb, id);
 				}
 			}
 			else if (arg->type_define == T_INT && arg->value_int != NULL)

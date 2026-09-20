@@ -153,7 +153,7 @@ void xval_print(XValue v)
 	switch (v.type)
 	{
 	case VAL_NULL:   printf("null"); break;
-	case VAL_BOOL:   printf("%s", v.as.bval ? "true" : "false"); break;
+	case VAL_BOOL:   printf("%s", v.as.bval ? "True" : "False"); break;
 	case VAL_INT:    printf("%" PRId64, v.as.ival); break;
 	case VAL_FLOAT:  printf("%g", v.as.fval); break;
 	case VAL_STRING: printf("%s", v.as.sval ? v.as.sval : ""); break;
@@ -479,9 +479,10 @@ int xir_disassemble_instruction(const XIrChunk* chunk, int offset)
 	case OP_NEW_INSTANCE:
 		{
 			uint16_t s_idx = (chunk->code[offset + 1] << 8) | chunk->code[offset + 2];
+			uint8_t arg_count = chunk->code[offset + 3];
 			const char* sym = (s_idx < chunk->symbols.count) ? chunk->symbols.symbols[s_idx] : "???";
-			printf("sym \033[36m%s\033[0m\n", sym);
-			return offset + 3;
+			printf("sym \033[36m%s\033[0m (%d args)\n", sym, arg_count);
+			return offset + 4;
 		}
 
 	case OP_JUMP:

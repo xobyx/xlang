@@ -282,6 +282,25 @@ static void compile_expr_node(XCompiler* c, const AstExpr* expr)
 			}
 			else
 			{
+				/* Check if calling a ClassName(...) constructor */
+				type_def* class_td = get_type_by_name((char*)expr->as.call.name);
+				if ((class_td != NULL && !is_base_type(class_td)) ||
+				    strcmp(expr->as.call.name, "List") == 0 ||
+				    strcmp(expr->as.call.name, "Map") == 0 ||
+				    strcmp(expr->as.call.name, "HashMap") == 0 ||
+				    strcmp(expr->as.call.name, "DateTime") == 0)
+				{
+					for (int i = 0; i < expr->as.call.arg_count; i++)
+					{
+						compile_expr_node(c, expr->as.call.args[i]);
+					}
+					int s_idx = xir_add_symbol(c->chunk, expr->as.call.name);
+					xir_emit_op(c->chunk, OP_NEW_INSTANCE, line);
+					xir_emit_short(c->chunk, (uint16_t)s_idx, line);
+					xir_emit_byte(c->chunk, (uint8_t)expr->as.call.arg_count, line);
+					break;
+				}
+
 				/* Named global call */
 				for (int i = 0; i < expr->as.call.arg_count; i++)
 				{
@@ -451,6 +470,7 @@ static void compile_stmt_node(XCompiler* c, const AstStmt* stmt)
 			int s_idx = xir_add_symbol(c->chunk, stmt->as.var_decl.type_name);
 			xir_emit_op(c->chunk, OP_NEW_INSTANCE, line);
 			xir_emit_short(c->chunk, (uint16_t)s_idx, line);
+			xir_emit_byte(c->chunk, 0, line);
 		}
 		else
 		{
