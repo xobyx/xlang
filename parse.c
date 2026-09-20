@@ -4,9 +4,10 @@
 
 //[if[0],for[1],while[2],do[3],else[4],print[5],return[6]]
 const char* key_word[] = { "if", "for", "while", "do", "else", "eif", "return", "break", "class", "static", "import", "new", "in" };
-static char one_c[] = { '+', 0, '-', 0, '/', 0, '*', 0, '%', 0, '=', 0, '(', 0, ')', 0, '{', 0, '}', 0, '[', 0, ']', 0, ',', 0, '>', 0, '<', 0, '|', 0, '&', 0, '!', 0, '.', 0, ':', 0 };
+static char one_c[] = { '+', 0, '-', 0, '/', 0, '*', 0, '%', 0, '=', 0, '(', 0, ')', 0, '{', 0, '}', 0, '[', 0, ']', 0, ',', 0, '>', 0, '<', 0, '|', 0, '&', 0, '^', 0, '~', 0, '!', 0, '.', 0, ':', 0 };
 
 bool out_put;
+bool g_parse_only = false;
 
 
 
@@ -524,7 +525,10 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 			debuge->print_line_debuge(debuge, n_node, line);
 
 
-		compile(NULL, n_node, NULL, NULL, NULL);
+		if (!g_parse_only)
+		{
+			compile(NULL, n_node, NULL, NULL, NULL);
+		}
 
 
 
@@ -1379,7 +1383,7 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 				return;
 				////do next->.
 			}
-			else if ((*i >= 42 && *i <= 47) || *i == 0x3c || *i == 0x3e || *i == 38 || *i == '|' || *i == '%' || *i == '!')//oprator +-*/%
+			else if ((*i >= 42 && *i <= 47) || *i == 0x3c || *i == 0x3e || *i == 38 || *i == '|' || *i == '%' || *i == '!' || *i == '^' || *i == '~')//oprator +-*/%^~
 			{
 				n_node->type_ = operators_n;
 				n_node->value_char_ptr = getchar_x(*i);

@@ -18,6 +18,11 @@ __  __   ___   | |__    _   _  __  __
 #include "ximport.h"
 #include "xgc.h"
 #include "parse.h"
+#include "xast.h"
+#include "xast_parser.h"
+#include "xir.h"
+#include "xir_compiler.h"
+#include "xvm.h"
 #include <ctype.h>
 clock_t t;
 //C:\Tests\t.xb
@@ -239,8 +244,8 @@ static void repl_print_help(void)
 	printf("  \033[1m:help, :?\033[0m         Show this help information\n");
 	printf("  \033[1m:vars\033[0m             List all defined global variables and values\n");
 	printf("  \033[1m:classes, :types\033[0m  List all loaded classes, methods, and properties\n");
-	printf("  \033[1m:ast\033[0m              Toggle AST debug parsing output (currently: %s)\n",
-	       print_parse_log ? "\033[32mON\033[0m" : "\033[31mOFF\033[0m");
+	printf("  \033[1m:ast\033[0m              Display Structured AST for current session\n");
+	printf("  \033[1m:ir, :dis\033[0m         Display Bytecode IR disassembly for current session\n");
 	printf("  \033[1m:gc\033[0m               Show GC metrics and run garbage collection\n");
 	printf("  \033[1m:reset\033[0m            Reset environment and clear all variables\n");
 	printf("  \033[1m:quit, :exit, :q\033[0m  Exit the REPL\n\n");
@@ -319,8 +324,42 @@ void interupter(void)
 			}
 			if (strcmp(trimmed, ":ast") == 0)
 			{
-				print_parse_log = !print_parse_log;
-				printf("AST debug parsing log: %s\n", print_parse_log ? "ENABLED" : "DISABLED");
+				if (nodes != NULL && nodes->root != NULL)
+				{
+					AstArena* arena = ast_arena_create(32 * 1024);
+					AstProgram* prog = xast_parse_node_stream(arena, nodes->root, NULL);
+					if (prog != NULL)
+					{
+						xast_dump_program(prog);
+					}
+					ast_arena_destroy(arena);
+				}
+				else
+				{
+					printf("No AST nodes in current session.\n");
+				}
+				continue;
+			}
+			if (strcmp(trimmed, ":ir") == 0 || strcmp(trimmed, ":dis") == 0)
+			{
+				if (nodes != NULL && nodes->root != NULL)
+				{
+					AstArena* arena = ast_arena_create(32 * 1024);
+					AstProgram* prog = xast_parse_node_stream(arena, nodes->root, NULL);
+					if (prog != NULL)
+					{
+						XIrChunk chunk;
+						xir_chunk_init(&chunk);
+						xir_compile_program(prog, &chunk);
+						xir_disassemble_chunk(&chunk, "repl_history");
+						xir_chunk_free(&chunk);
+					}
+					ast_arena_destroy(arena);
+				}
+				else
+				{
+					printf("No bytecode instructions in current session.\n");
+				}
 				continue;
 			}
 			if (strcmp(trimmed, ":gc") == 0)
@@ -389,10 +428,68 @@ int main(const int argc, char** argv)
 		return 0;
 	}
 
-	if (argc > 2)
+	bool flag_dump_ast = false;
+	bool flag_dump_ir = false;
+	bool flag_vm = false;
+	bool flag_trace_vm = false;
+	int file_arg_idx = 1;
+
+	while (file_arg_idx < argc && argv[file_arg_idx][0] == '-')
 	{
-		g_script_argc = argc - 2;
-		g_script_argv = argv + 2;
+		if (strcmp(argv[file_arg_idx], "--dump-ast") == 0)
+		{
+			flag_dump_ast = true;
+			file_arg_idx++;
+		}
+		else if (strcmp(argv[file_arg_idx], "--dump-ir") == 0)
+		{
+			flag_dump_ir = true;
+			file_arg_idx++;
+		}
+		else if (strcmp(argv[file_arg_idx], "--vm") == 0)
+		{
+			flag_vm = true;
+			file_arg_idx++;
+		}
+		else if (strcmp(argv[file_arg_idx], "--trace-vm") == 0)
+		{
+			flag_vm = true;
+			flag_trace_vm = true;
+			file_arg_idx++;
+		}
+		else if (strcmp(argv[file_arg_idx], "-h") == 0 || strcmp(argv[file_arg_idx], "--help") == 0)
+		{
+			printf("xlang 0.4.0 - Language & Runtime\n");
+			printf("Usage: xlang [options] <script.xb> [args...]\n\n");
+			printf("Options:\n");
+			printf("  --dump-ast     Parse script and display Structured AST\n");
+			printf("  --dump-ir      Compile script to Bytecode IR and disassemble\n");
+			printf("  --vm           Execute script using the Bytecode Virtual Machine\n");
+			printf("  --trace-vm     Execute in VM with instruction execution tracing\n");
+			printf("  -h, --help     Show this help message\n\n");
+			clean_memory();
+			return 0;
+		}
+		else
+		{
+			break;
+		}
+	}
+
+	if (file_arg_idx >= argc)
+	{
+		xdiag_set_current_file("<stdin>");
+		interupter();
+		clean_memory();
+		return 0;
+	}
+
+	const char* script_path = argv[file_arg_idx];
+
+	if (argc > file_arg_idx + 1)
+	{
+		g_script_argc = argc - file_arg_idx - 1;
+		g_script_argv = argv + file_arg_idx + 1;
 	}
 	else
 	{
@@ -401,60 +498,74 @@ int main(const int argc, char** argv)
 	}
 
 	FILE* code_file = NULL;
-	FILE* saved_code_file = NULL;
-
-	errno_t code_file_status = fopen_s(&code_file, argv[1], "r");
-	errno_t saved_code_file_status;
+	errno_t code_file_status = fopen_s(&code_file, script_path, "r");
 	if (code_file_status != 0)
 	{
-		printf("[%d]-file [%s] not found..\n", code_file_status, argv[1]);
+		printf("[%d]-file [%s] not found..\n", code_file_status, script_path);
 		exit(-1);
 	}
 	buff = get_file_buffer(code_file);
 	fclose(code_file);
-	xdiag_set_current_file(argv[1]);
+	xdiag_set_current_file(script_path);
 	xdiag_set_source_code(buff);
 
-	change_dir(argv);
+	change_dir(argv + file_arg_idx - 1);
 
-
-
-
-	if (load_saved_code)
+	if (flag_dump_ast || flag_dump_ir || flag_vm)
 	{
-		saved_code_file_path = (char*)malloc(strlen(argv[1]) + 3 + 1);
-		saved_code_file_path = strcpy(saved_code_file_path, argv[1]);
-		strcat(saved_code_file_path, "cxx");
-		printf("saved to %s\n", saved_code_file_path);
-		saved_code_file_status = fopen_s(&saved_code_file, saved_code_file_path, "rb");
-		printf("found saved to %d\n", saved_code_file_status);
-		////
-		if (saved_code_file_status == 0)
-		{
-			calc_md5(buff, file_md5);
-			getsavedMD5(saved_code_file);
-			if (file_md5[0] == saved_md5[0])
-			{
-				printf("from file : %s\n", saved_code_file_path);
-				read_file_parse(saved_code_file, nodes);
-			}
-			else
-			{
-				fclose(saved_code_file);
-				start_compile();
-			}
-			fclose(saved_code_file);
-		}
+		g_parse_only = true;
+		print_parse_log = 0;
 	}
-	else
-	{
-		start_compile();
-	}
-	if (save_code)
-	{
-		save_file(saved_code_file_path, nodes, file_md5);  /////save
 
+	if (flag_dump_ast)
+	{
+		AstArena* arena = ast_arena_create(64 * 1024);
+		start_parse_lines(buff, false);
+		AstProgram* prog = xast_parse_node_stream(arena, nodes->root, NULL);
+		xast_dump_program(prog);
+		ast_arena_destroy(arena);
+		free(buff);
+		clean_memory();
+		return 0;
 	}
+
+	if (flag_dump_ir)
+	{
+		AstArena* arena = ast_arena_create(64 * 1024);
+		start_parse_lines(buff, false);
+		AstProgram* prog = xast_parse_node_stream(arena, nodes->root, NULL);
+		XIrChunk chunk;
+		xir_chunk_init(&chunk);
+		xir_compile_program(prog, &chunk);
+		xir_disassemble_chunk(&chunk, script_path);
+		xir_chunk_free(&chunk);
+		ast_arena_destroy(arena);
+		free(buff);
+		clean_memory();
+		return 0;
+	}
+
+	if (flag_vm)
+	{
+		AstArena* arena = ast_arena_create(64 * 1024);
+		start_parse_lines(buff, false);
+		AstProgram* prog = xast_parse_node_stream(arena, nodes->root, NULL);
+		XIrChunk chunk;
+		xir_chunk_init(&chunk);
+		xir_compile_program(prog, &chunk);
+		XVm vm;
+		xvm_init(&vm);
+		vm.print_trace = flag_trace_vm;
+		XVmResult res = xvm_run(&vm, &chunk);
+		xvm_free(&vm);
+		xir_chunk_free(&chunk);
+		ast_arena_destroy(arena);
+		free(buff);
+		clean_memory();
+		return (res == VM_OK) ? 0 : 1;
+	}
+
+	start_compile();
 
 	t = clock() - t;
 	const double time_taken = ((double)t) / CLOCKS_PER_SEC; // in seconds
@@ -462,9 +573,6 @@ int main(const int argc, char** argv)
 	printf("\ntook %f seconds to execute \n", time_taken);
 	printf("\nvar num: %d , temp var num: %d\n", varss->size, t_varss->size);
 
-
-
-	//getchar();
 	free(saved_code_file_path);
 	free(buff);
 	clean_memory();

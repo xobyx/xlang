@@ -58,6 +58,8 @@ bool parser_is_inside_func_param(ParserContext* ctx);
 bool parser_has_open_brace(ParserContext* ctx);
 void parser_delim_clear(ParserContext* ctx);
 
+extern bool g_parse_only;
+
 /* Dynamic Scope Stack operations */
 void parser_scope_push(ParserContext* ctx, ScopeKind kind, const char* name, node* opening_node, int line);
 ScopeEntry* parser_scope_pop(ParserContext* ctx);

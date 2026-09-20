@@ -1,0 +1,71 @@
+# Test suite for Structured AST, Bytecode IR generation, and VM Execution
+
+print("=== [1] Basic Arithmetic & Literals ===")
+int a = 15
+int b = 4
+int sum = a + b
+int diff = a - b
+int prod = a * b
+int quot = a / b
+int rem = a % b
+print(sum)
+print(diff)
+print(prod)
+print(quot)
+print(rem)
+
+print("=== [2] Comparisons & Boolean Logic ===")
+int x = 20
+int y = 30
+if (x < y) {
+    print("x < y is true")
+} else {
+    print("FAIL")
+}
+
+if (x == y) {
+    print("FAIL")
+} else {
+    print("x != y is true")
+}
+
+print("=== [3] While Loop & Accumulator ===")
+int count = 0
+int total = 0
+while (count < 5) {
+    count = count + 1
+    total = total + count
+}
+print(total)
+
+print("=== [4] Floating Point Math ===")
+float pi = 3.14159
+float radius = 2.0
+float area = pi * radius * radius
+print(area)
+
+print("=== [5] Bitwise Operators ===")
+int mask1 = 12
+int mask2 = 10
+int bit_and = mask1 & mask2
+int bit_or = mask1 | mask2
+int bit_xor = mask1 ^ mask2
+print(bit_and)
+print(bit_or)
+print(bit_xor)
+
+print("=== [6] String Operations ===")
+string greeting = "Hello, "
+string target = "VM"
+string msg = greeting + target
+print(msg)
+
+print("=== [7] Compound Assignments ===")
+int val = 100
+val += 50
+val -= 20
+val *= 2
+val /= 4
+print(val)
+
+print("=== ALL AST/IR/VM TESTS PASSED ===")
