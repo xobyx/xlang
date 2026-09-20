@@ -1,0 +1,68 @@
+# Test suite for Bytecode VM Functions, CallFrames, Recursion, and Closures
+
+print("=== [1] User-Defined Functions & Return Values ===")
+int add(int a, int b) {
+    return a + b
+}
+int sub(int a, int b) {
+    return a - b
+}
+int r1 = add(25, 17)
+int r2 = sub(50, 18)
+print(r1)
+print(r2)
+
+print("=== [2] Nested Function Invocations ===")
+int square(int n) {
+    return n * n
+}
+int sum_of_squares(int x, int y) {
+    return square(x) + square(y)
+}
+int r3 = sum_of_squares(3, 4)
+print(r3)
+
+print("=== [3] Recursive Functions (Fibonacci & Factorial) ===")
+int fact(int n) {
+    if (n <= 1) {
+        return 1
+    }
+    return n * fact(n - 1)
+}
+
+int fib(int n) {
+    if (n <= 1) {
+        return n
+    }
+    return fib(n - 1) + fib(n - 2)
+}
+
+print(fact(5))
+print(fact(6))
+print(fib(0))
+print(fib(1))
+print(fib(7))
+print(fib(10))
+
+print("=== [4] String Handling in Functions ===")
+string greet(string prefix, string name) {
+    return prefix + ", " + name + "!"
+}
+string g = greet("Welcome", "Developer")
+print(g)
+
+print("=== [5] Local Functions & Lexical Closures ===")
+int test_closure() {
+    int base = 100
+    int bump(int step) {
+        base = base + step
+        return base
+    }
+    int b1 = bump(5)
+    int b2 = bump(15)
+    return b2
+}
+int r4 = test_closure()
+print(r4)
+
+print("=== ALL FUNCTION & CALLFRAME TESTS PASSED ===")

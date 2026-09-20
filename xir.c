@@ -53,6 +53,10 @@ const char* xir_opcode_name(XIrOpCode op)
 	case OP_CALL_METHOD:  return "OP_CALL_METHOD";
 	case OP_PRINT:        return "OP_PRINT";
 	case OP_RETURN:       return "OP_RETURN";
+	case OP_CLOSURE:       return "OP_CLOSURE";
+	case OP_GET_UPVALUE:   return "OP_GET_UPVALUE";
+	case OP_SET_UPVALUE:   return "OP_SET_UPVALUE";
+	case OP_CLOSE_UPVALUE: return "OP_CLOSE_UPVALUE";
 	case OP_HALT:         return "OP_HALT";
 	default:              return "OP_UNKNOWN";
 	}
@@ -109,6 +113,40 @@ XValue xval_obj(void* o)
 	return v;
 }
 
+XValue xval_func(XFunction* fn)
+{
+	XValue v;
+	v.type = VAL_FUNCTION;
+	v.as.fnval = fn;
+	return v;
+}
+
+XFunction* xfunc_create(const char* name, int arity)
+{
+	XFunction* fn = (XFunction*)malloc(sizeof(XFunction));
+	fn->name = name ? strdup(name) : strdup("fn");
+	fn->arity = arity;
+	fn->upvalue_count = 0;
+	xir_chunk_init(&fn->chunk);
+	return fn;
+}
+
+void xfunc_free(XFunction* fn)
+{
+	if (!fn) return;
+	if (fn->name) free(fn->name);
+	xir_chunk_free(&fn->chunk);
+	free(fn);
+}
+
+XValue xval_closure(XClosure* c)
+{
+	XValue v;
+	v.type = VAL_CLOSURE;
+	v.as.closureval = c;
+	return v;
+}
+
 void xval_print(XValue v)
 {
 	switch (v.type)
@@ -119,6 +157,15 @@ void xval_print(XValue v)
 	case VAL_FLOAT:  printf("%g", v.as.fval); break;
 	case VAL_STRING: printf("%s", v.as.sval ? v.as.sval : ""); break;
 	case VAL_OBJECT: printf("[object %p]", v.as.oval); break;
+	case VAL_FUNCTION:
+		if (v.as.fnval)
+			printf("<fn %s/%d>", v.as.fnval->name ? v.as.fnval->name : "fn", v.as.fnval->arity);
+		else
+			printf("<fn null>");
+		break;
+	case VAL_CLOSURE:
+		printf("<closure %p>", (void*)v.as.closureval);
+		break;
 	}
 }
 
@@ -132,6 +179,8 @@ bool xval_is_truthy(XValue v)
 	case VAL_FLOAT:  return v.as.fval != 0.0;
 	case VAL_STRING: return v.as.sval && v.as.sval[0] != '\0';
 	case VAL_OBJECT: return v.as.oval != NULL;
+	case VAL_FUNCTION: return true;
+	case VAL_CLOSURE: return true;
 	default:         return false;
 	}
 }
@@ -156,6 +205,8 @@ bool xval_equal(XValue a, XValue b)
 	case VAL_FLOAT:  return a.as.fval == b.as.fval;
 	case VAL_STRING: return strcmp(a.as.sval ? a.as.sval : "", b.as.sval ? b.as.sval : "") == 0;
 	case VAL_OBJECT: return a.as.oval == b.as.oval;
+	case VAL_FUNCTION: return a.as.fnval == b.as.fnval;
+	case VAL_CLOSURE: return a.as.closureval == b.as.closureval;
 	default:         return false;
 	}
 }
@@ -190,6 +241,10 @@ void xir_chunk_free(XIrChunk* chunk)
 		if (chunk->constants.values[i].type == VAL_STRING && chunk->constants.values[i].as.sval)
 		{
 			free(chunk->constants.values[i].as.sval);
+		}
+		else if (chunk->constants.values[i].type == VAL_FUNCTION && chunk->constants.values[i].as.fnval)
+		{
+			xfunc_free(chunk->constants.values[i].as.fnval);
 		}
 	}
 	if (chunk->constants.values) free(chunk->constants.values);
@@ -306,6 +361,17 @@ void xir_disassemble_chunk(const XIrChunk* chunk, const char* name)
 		offset = xir_disassemble_instruction(chunk, offset);
 	}
 	printf("\033[1;36m====================================================\033[0m\n\n");
+
+	/* Disassemble any nested functions in the constant pool */
+	for (int i = 0; i < chunk->constants.count; i++)
+	{
+		if (chunk->constants.values[i].type == VAL_FUNCTION && chunk->constants.values[i].as.fnval)
+		{
+			char sub_name[256];
+			snprintf(sub_name, sizeof(sub_name), "%s::<fn %s>", name ? name : "chunk", chunk->constants.values[i].as.fnval->name);
+			xir_disassemble_chunk(&chunk->constants.values[i].as.fnval->chunk, sub_name);
+		}
+	}
 }
 
 int xir_disassemble_instruction(const XIrChunk* chunk, int offset)
@@ -444,8 +510,267 @@ int xir_disassemble_instruction(const XIrChunk* chunk, int offset)
 			return offset + 2;
 		}
 
+	case OP_CLOSURE:
+		{
+			uint16_t c_idx = (chunk->code[offset + 1] << 8) | chunk->code[offset + 2];
+			printf("[%d] ", c_idx);
+			if (c_idx < chunk->constants.count && chunk->constants.values[c_idx].type == VAL_FUNCTION)
+			{
+				XFunction* fn = chunk->constants.values[c_idx].as.fnval;
+				printf("<fn \033[35m%s\033[0m arity=%d upvalues=%d>\n", fn->name, fn->arity, fn->upvalue_count);
+				int cur = offset + 3;
+				for (int j = 0; j < fn->upvalue_count; j++)
+				{
+					uint8_t is_local = chunk->code[cur++];
+					uint8_t index = chunk->code[cur++];
+					printf("      |                     %s %d\n", is_local ? "local" : "upvalue", index);
+				}
+				return cur;
+			}
+			printf("\n");
+			return offset + 3;
+		}
+
+	case OP_GET_UPVALUE:
+	case OP_SET_UPVALUE:
+		{
+			uint8_t slot = chunk->code[offset + 1];
+			printf("upvalue \033[33m%d\033[0m\n", slot);
+			return offset + 2;
+		}
+
+	case OP_CLOSE_UPVALUE:
+		printf("\n");
+		return offset + 1;
+
 	default:
 		printf("Unknown opcode 0x%02x\n", opcode);
 		return offset + 1;
 	}
+}
+
+/* -------------------------------------------------------------------------
+ * Bytecode File Serialization (.xbc)
+ * ------------------------------------------------------------------------- */
+static void write_u8(FILE* f, uint8_t v) { fwrite(&v, 1, 1, f); }
+static void write_u32(FILE* f, uint32_t v) { fwrite(&v, 4, 1, f); }
+static void write_i64(FILE* f, int64_t v) { fwrite(&v, 8, 1, f); }
+static void write_double(FILE* f, double v) { fwrite(&v, 8, 1, f); }
+static void write_str(FILE* f, const char* s)
+{
+	uint32_t len = s ? (uint32_t)strlen(s) : 0;
+	write_u32(f, len);
+	if (len > 0) fwrite(s, 1, len, f);
+}
+
+static bool read_u8(FILE* f, uint8_t* out) { return fread(out, 1, 1, f) == 1; }
+static bool read_u32(FILE* f, uint32_t* out) { return fread(out, 4, 1, f) == 1; }
+static bool read_i64(FILE* f, int64_t* out) { return fread(out, 8, 1, f) == 1; }
+static bool read_double(FILE* f, double* out) { return fread(out, 8, 1, f) == 1; }
+static char* read_str(FILE* f)
+{
+	uint32_t len = 0;
+	if (!read_u32(f, &len)) return NULL;
+	char* s = (char*)malloc(len + 1);
+	if (!s) return NULL;
+	if (len > 0)
+	{
+		if (fread(s, 1, len, f) != len) { free(s); return NULL; }
+	}
+	s[len] = '\0';
+	return s;
+}
+
+bool xir_serialize_chunk(const XIrChunk* chunk, FILE* f)
+{
+	if (!chunk || !f) return false;
+
+	/* 1. Code buffer */
+	write_u32(f, (uint32_t)chunk->count);
+	if (chunk->count > 0)
+	{
+		fwrite(chunk->code, 1, chunk->count, f);
+		for (int i = 0; i < chunk->count; i++)
+		{
+			write_u32(f, (uint32_t)chunk->lines[i]);
+		}
+	}
+
+	/* 2. Constants */
+	write_u32(f, (uint32_t)chunk->constants.count);
+	for (int i = 0; i < chunk->constants.count; i++)
+	{
+		XValue val = chunk->constants.values[i];
+		write_u8(f, (uint8_t)val.type);
+		switch (val.type)
+		{
+		case VAL_NULL: break;
+		case VAL_BOOL: write_u8(f, val.as.bval ? 1 : 0); break;
+		case VAL_INT: write_i64(f, val.as.ival); break;
+		case VAL_FLOAT: write_double(f, val.as.fval); break;
+		case VAL_STRING: write_str(f, val.as.sval); break;
+		case VAL_FUNCTION:
+			if (val.as.fnval)
+			{
+				write_str(f, val.as.fnval->name);
+				write_u32(f, (uint32_t)val.as.fnval->arity);
+				write_u32(f, (uint32_t)val.as.fnval->upvalue_count);
+				if (!xir_serialize_chunk(&val.as.fnval->chunk, f)) return false;
+			}
+			else
+			{
+				write_str(f, "");
+				write_u32(f, 0);
+				write_u32(f, 0);
+				XIrChunk empty;
+				xir_chunk_init(&empty);
+				xir_serialize_chunk(&empty, f);
+			}
+			break;
+		default:
+			write_u8(f, 0);
+			break;
+		}
+	}
+
+	/* 3. Symbols */
+	write_u32(f, (uint32_t)chunk->symbols.count);
+	for (int i = 0; i < chunk->symbols.count; i++)
+	{
+		write_str(f, chunk->symbols.symbols[i]);
+	}
+
+	return true;
+}
+
+bool xir_deserialize_chunk(XIrChunk* chunk, FILE* f)
+{
+	if (!chunk || !f) return false;
+	xir_chunk_init(chunk);
+
+	/* 1. Code buffer */
+	uint32_t code_count = 0;
+	if (!read_u32(f, &code_count)) return false;
+	chunk->count = (int)code_count;
+	chunk->capacity = chunk->count > 0 ? chunk->count : 1;
+	chunk->code = (uint8_t*)malloc(chunk->capacity);
+	chunk->lines = (int*)malloc(chunk->capacity * sizeof(int));
+	if (code_count > 0)
+	{
+		if (fread(chunk->code, 1, code_count, f) != code_count) return false;
+		for (uint32_t i = 0; i < code_count; i++)
+		{
+			uint32_t line = 0;
+			if (!read_u32(f, &line)) return false;
+			chunk->lines[i] = (int)line;
+		}
+	}
+
+	/* 2. Constants */
+	uint32_t const_count = 0;
+	if (!read_u32(f, &const_count)) return false;
+	for (uint32_t i = 0; i < const_count; i++)
+	{
+		uint8_t type_byte = 0;
+		if (!read_u8(f, &type_byte)) return false;
+		XValue val = xval_null();
+		switch ((XValueType)type_byte)
+		{
+		case VAL_NULL: val = xval_null(); break;
+		case VAL_BOOL:
+			{
+				uint8_t b = 0;
+				if (!read_u8(f, &b)) return false;
+				val = xval_bool(b != 0);
+				break;
+			}
+		case VAL_INT:
+			{
+				int64_t iv = 0;
+				if (!read_i64(f, &iv)) return false;
+				val = xval_int(iv);
+				break;
+			}
+		case VAL_FLOAT:
+			{
+				double fv = 0.0;
+				if (!read_double(f, &fv)) return false;
+				val = xval_float(fv);
+				break;
+			}
+		case VAL_STRING:
+			{
+				char* s = read_str(f);
+				if (!s) return false;
+				val = xval_str(s);
+				free(s);
+				break;
+			}
+		case VAL_FUNCTION:
+			{
+				char* fname = read_str(f);
+				if (!fname) return false;
+				uint32_t arity = 0, upvalues = 0;
+				if (!read_u32(f, &arity) || !read_u32(f, &upvalues)) { free(fname); return false; }
+				XFunction* fn = xfunc_create(fname, (int)arity);
+				fn->upvalue_count = (int)upvalues;
+				free(fname);
+				if (!xir_deserialize_chunk(&fn->chunk, f)) { xfunc_free(fn); return false; }
+				val = xval_func(fn);
+				break;
+			}
+		default:
+			val = xval_null();
+			break;
+		}
+		xir_add_constant(chunk, val);
+	}
+
+	/* 3. Symbols */
+	uint32_t sym_count = 0;
+	if (!read_u32(f, &sym_count)) return false;
+	for (uint32_t i = 0; i < sym_count; i++)
+	{
+		char* sym = read_str(f);
+		if (!sym) return false;
+		xir_add_symbol(chunk, sym);
+		free(sym);
+	}
+
+	return true;
+}
+
+bool xir_save_file(const XIrChunk* chunk, const char* filepath)
+{
+	if (!chunk || !filepath) return false;
+	FILE* f = fopen(filepath, "wb");
+	if (!f) return false;
+
+	uint32_t magic = XBC_MAGIC;
+	uint32_t version = XBC_VERSION;
+	write_u32(f, magic);
+	write_u32(f, version);
+	write_u32(f, 0); /* flags */
+	write_u32(f, 0); /* reserved */
+
+	bool ok = xir_serialize_chunk(chunk, f);
+	fclose(f);
+	return ok;
+}
+
+bool xir_load_file(XIrChunk* chunk, const char* filepath)
+{
+	if (!chunk || !filepath) return false;
+	FILE* f = fopen(filepath, "rb");
+	if (!f) return false;
+
+	uint32_t magic = 0, version = 0, r1 = 0, r2 = 0;
+	if (!read_u32(f, &magic) || magic != XBC_MAGIC) { fclose(f); return false; }
+	if (!read_u32(f, &version) || version != XBC_VERSION) { fclose(f); return false; }
+	read_u32(f, &r1);
+	read_u32(f, &r2);
+
+	bool ok = xir_deserialize_chunk(chunk, f);
+	fclose(f);
+	return ok;
 }

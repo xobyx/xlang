@@ -416,6 +416,20 @@ void interupter(void)
 	}
 }
 
+static bool is_xbc_file(const char* path)
+{
+	if (!path) return false;
+	size_t len = strlen(path);
+	if (len >= 4 && strcmp(path + len - 4, ".xbc") == 0) return true;
+
+	FILE* f = fopen(path, "rb");
+	if (!f) return false;
+	uint32_t magic = 0;
+	size_t read_bytes = fread(&magic, 1, 4, f);
+	fclose(f);
+	return (read_bytes == 4 && magic == XBC_MAGIC);
+}
+
 int main(const int argc, char** argv)
 {
 	int_xlang();
@@ -428,55 +442,66 @@ int main(const int argc, char** argv)
 		return 0;
 	}
 
+	bool flag_compile = false;
+	const char* output_bc_path = NULL;
 	bool flag_dump_ast = false;
 	bool flag_dump_ir = false;
 	bool flag_vm = false;
 	bool flag_trace_vm = false;
-	int file_arg_idx = 1;
+	const char* script_path = NULL;
+	int script_idx = -1;
 
-	while (file_arg_idx < argc && argv[file_arg_idx][0] == '-')
+	for (int i = 1; i < argc; i++)
 	{
-		if (strcmp(argv[file_arg_idx], "--dump-ast") == 0)
+		if (strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--compile") == 0)
+		{
+			flag_compile = true;
+		}
+		else if (strcmp(argv[i], "-o") == 0)
+		{
+			i++;
+			if (i < argc) output_bc_path = argv[i];
+		}
+		else if (strcmp(argv[i], "--dump-ast") == 0)
 		{
 			flag_dump_ast = true;
-			file_arg_idx++;
 		}
-		else if (strcmp(argv[file_arg_idx], "--dump-ir") == 0)
+		else if (strcmp(argv[i], "--dump-ir") == 0)
 		{
 			flag_dump_ir = true;
-			file_arg_idx++;
 		}
-		else if (strcmp(argv[file_arg_idx], "--vm") == 0)
+		else if (strcmp(argv[i], "--vm") == 0)
 		{
 			flag_vm = true;
-			file_arg_idx++;
 		}
-		else if (strcmp(argv[file_arg_idx], "--trace-vm") == 0)
+		else if (strcmp(argv[i], "--trace-vm") == 0)
 		{
 			flag_vm = true;
 			flag_trace_vm = true;
-			file_arg_idx++;
 		}
-		else if (strcmp(argv[file_arg_idx], "-h") == 0 || strcmp(argv[file_arg_idx], "--help") == 0)
+		else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0)
 		{
 			printf("xlang 0.4.0 - Language & Runtime\n");
-			printf("Usage: xlang [options] <script.xb> [args...]\n\n");
+			printf("Usage: xlang [options] <script.xb | bytecode.xbc> [args...]\n\n");
 			printf("Options:\n");
+			printf("  -c, --compile  Compile script to bytecode (.xbc)\n");
+			printf("  -o <file>      Specify output bytecode file path\n");
 			printf("  --dump-ast     Parse script and display Structured AST\n");
-			printf("  --dump-ir      Compile script to Bytecode IR and disassemble\n");
+			printf("  --dump-ir      Compile/load bytecode and disassemble\n");
 			printf("  --vm           Execute script using the Bytecode Virtual Machine\n");
 			printf("  --trace-vm     Execute in VM with instruction execution tracing\n");
 			printf("  -h, --help     Show this help message\n\n");
 			clean_memory();
 			return 0;
 		}
-		else
+		else if (argv[i][0] != '-' && script_path == NULL)
 		{
-			break;
+			script_path = argv[i];
+			script_idx = i;
 		}
 	}
 
-	if (file_arg_idx >= argc)
+	if (script_path == NULL)
 	{
 		xdiag_set_current_file("<stdin>");
 		interupter();
@@ -484,17 +509,45 @@ int main(const int argc, char** argv)
 		return 0;
 	}
 
-	const char* script_path = argv[file_arg_idx];
-
-	if (argc > file_arg_idx + 1)
+	if (argc > script_idx + 1)
 	{
-		g_script_argc = argc - file_arg_idx - 1;
-		g_script_argv = argv + file_arg_idx + 1;
+		g_script_argc = argc - script_idx - 1;
+		g_script_argv = argv + script_idx + 1;
 	}
 	else
 	{
 		g_script_argc = 0;
 		g_script_argv = NULL;
+	}
+
+	/* Check if executing pre-compiled bytecode (.xbc) */
+	if (is_xbc_file(script_path))
+	{
+		XIrChunk chunk;
+		xir_chunk_init(&chunk);
+		if (!xir_load_file(&chunk, script_path))
+		{
+			fprintf(stderr, "Error: Failed to load bytecode file '%s'\n", script_path);
+			clean_memory();
+			return 1;
+		}
+
+		if (flag_dump_ir)
+		{
+			xir_disassemble_chunk(&chunk, script_path);
+			xir_chunk_free(&chunk);
+			clean_memory();
+			return 0;
+		}
+
+		XVm vm;
+		xvm_init(&vm);
+		vm.print_trace = flag_trace_vm;
+		XVmResult res = xvm_run(&vm, &chunk);
+		xvm_free(&vm);
+		xir_chunk_free(&chunk);
+		clean_memory();
+		return (res == VM_OK) ? 0 : 1;
 	}
 
 	FILE* code_file = NULL;
@@ -509,12 +562,46 @@ int main(const int argc, char** argv)
 	xdiag_set_current_file(script_path);
 	xdiag_set_source_code(buff);
 
-	change_dir(argv + file_arg_idx - 1);
-
-	if (flag_dump_ast || flag_dump_ir || flag_vm)
+	if (flag_dump_ast || flag_dump_ir || flag_vm || flag_compile)
 	{
 		g_parse_only = true;
 		print_parse_log = 0;
+	}
+
+	if (flag_compile)
+	{
+		AstArena* arena = ast_arena_create(64 * 1024);
+		start_parse_lines(buff, false);
+		AstProgram* prog = xast_parse_node_stream(arena, nodes->root, NULL);
+		XIrChunk chunk;
+		xir_chunk_init(&chunk);
+		xir_compile_program(prog, &chunk);
+
+		char out_path_buf[512] = {0};
+		const char* target_out = output_bc_path;
+		if (!target_out)
+		{
+			snprintf(out_path_buf, sizeof(out_path_buf), "%s", script_path);
+			char* dot = strrchr(out_path_buf, '.');
+			if (dot) strcpy(dot, ".xbc");
+			else strcat(out_path_buf, ".xbc");
+			target_out = out_path_buf;
+		}
+
+		bool ok = xir_save_file(&chunk, target_out);
+		if (ok)
+		{
+			printf("Compiled '%s' -> '%s' (%d bytes of bytecode)\n", script_path, target_out, chunk.count);
+		}
+		else
+		{
+			fprintf(stderr, "Failed to write bytecode to '%s'\n", target_out);
+		}
+		xir_chunk_free(&chunk);
+		ast_arena_destroy(arena);
+		free(buff);
+		clean_memory();
+		return ok ? 0 : 1;
 	}
 
 	if (flag_dump_ast)
@@ -565,6 +652,7 @@ int main(const int argc, char** argv)
 		return (res == VM_OK) ? 0 : 1;
 	}
 
+	change_dir(argv + script_idx - 1);
 	start_compile();
 
 	t = clock() - t;

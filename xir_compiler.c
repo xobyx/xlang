@@ -12,19 +12,31 @@ typedef struct XIrLoop {
 	struct XIrLoop* enclosing;
 } XIrLoop;
 
+typedef struct XCompilerUpvalue {
+	uint8_t index;
+	bool is_local;
+} XCompilerUpvalue;
+
 typedef struct XCompiler {
+	struct XCompiler* enclosing;
+	XFunction* function;
 	XIrChunk* chunk;
 	XIrLocal locals[256];
 	int local_count;
 	int scope_depth;
+	XCompilerUpvalue upvalues[64];
+	int upvalue_count;
 	XIrLoop* current_loop;
 } XCompiler;
 
 static void compiler_init(XCompiler* c, XIrChunk* chunk)
 {
+	c->enclosing = NULL;
+	c->function = NULL;
 	c->chunk = chunk;
 	c->local_count = 0;
 	c->scope_depth = 0;
+	c->upvalue_count = 0;
 	c->current_loop = NULL;
 }
 
@@ -49,6 +61,7 @@ static void exit_scope(XCompiler* c, int line)
 
 static int resolve_local(XCompiler* c, const char* name)
 {
+	if (!c || !name) return -1;
 	for (int i = c->local_count - 1; i >= 0; i--)
 	{
 		if (c->locals[i].name && strcmp(c->locals[i].name, name) == 0)
@@ -65,6 +78,40 @@ static void add_local(XCompiler* c, const char* name)
 	c->locals[c->local_count].name = strdup(name ? name : "");
 	c->locals[c->local_count].depth = c->scope_depth;
 	c->local_count++;
+}
+
+static int add_upvalue(XCompiler* c, uint8_t index, bool is_local)
+{
+	for (int i = 0; i < c->upvalue_count; i++)
+	{
+		if (c->upvalues[i].index == index && c->upvalues[i].is_local == is_local)
+		{
+			return i;
+		}
+	}
+	if (c->upvalue_count >= 64) return -1;
+	c->upvalues[c->upvalue_count].index = index;
+	c->upvalues[c->upvalue_count].is_local = is_local;
+	return c->upvalue_count++;
+}
+
+static int resolve_upvalue(XCompiler* c, const char* name)
+{
+	if (c == NULL || c->enclosing == NULL || name == NULL) return -1;
+
+	int local = resolve_local(c->enclosing, name);
+	if (local != -1)
+	{
+		return add_upvalue(c, (uint8_t)local, true);
+	}
+
+	int upvalue = resolve_upvalue(c->enclosing, name);
+	if (upvalue != -1)
+	{
+		return add_upvalue(c, (uint8_t)upvalue, false);
+	}
+
+	return -1;
 }
 
 /* Forward declarations */
@@ -117,9 +164,18 @@ static void compile_expr_node(XCompiler* c, const AstExpr* expr)
 			}
 			else
 			{
-				int s_idx = xir_add_symbol(c->chunk, expr->as.identifier_name);
-				xir_emit_op(c->chunk, OP_LOAD_GLOBAL, line);
-				xir_emit_short(c->chunk, (uint16_t)s_idx, line);
+				int upvalue_slot = resolve_upvalue(c, expr->as.identifier_name);
+				if (upvalue_slot != -1)
+				{
+					xir_emit_op(c->chunk, OP_GET_UPVALUE, line);
+					xir_emit_byte(c->chunk, (uint8_t)upvalue_slot, line);
+				}
+				else
+				{
+					int s_idx = xir_add_symbol(c->chunk, expr->as.identifier_name);
+					xir_emit_op(c->chunk, OP_LOAD_GLOBAL, line);
+					xir_emit_short(c->chunk, (uint16_t)s_idx, line);
+				}
 			}
 			break;
 		}
@@ -197,14 +253,44 @@ static void compile_expr_node(XCompiler* c, const AstExpr* expr)
 				return;
 			}
 
-			int s_idx = xir_add_symbol(c->chunk, expr->as.call.name);
-			for (int i = 0; i < expr->as.call.arg_count; i++)
+			int local_slot = resolve_local(c, expr->as.call.name);
+			int upvalue_slot = (local_slot == -1) ? resolve_upvalue(c, expr->as.call.name) : -1;
+
+			if (local_slot != -1 || upvalue_slot != -1)
 			{
-				compile_expr_node(c, expr->as.call.args[i]);
+				/* Local/upvalue function closure: push callee first, then args */
+				if (local_slot != -1)
+				{
+					xir_emit_op(c->chunk, OP_LOAD_LOCAL, line);
+					xir_emit_short(c->chunk, (uint16_t)local_slot, line);
+				}
+				else
+				{
+					xir_emit_op(c->chunk, OP_GET_UPVALUE, line);
+					xir_emit_byte(c->chunk, (uint8_t)upvalue_slot, line);
+				}
+
+				for (int i = 0; i < expr->as.call.arg_count; i++)
+				{
+					compile_expr_node(c, expr->as.call.args[i]);
+				}
+
+				xir_emit_op(c->chunk, OP_CALL, line);
+				xir_emit_short(c->chunk, 0xFFFF, line);
+				xir_emit_byte(c->chunk, (uint8_t)expr->as.call.arg_count, line);
 			}
-			xir_emit_op(c->chunk, OP_CALL, line);
-			xir_emit_short(c->chunk, (uint16_t)s_idx, line);
-			xir_emit_byte(c->chunk, (uint8_t)expr->as.call.arg_count, line);
+			else
+			{
+				/* Named global call */
+				for (int i = 0; i < expr->as.call.arg_count; i++)
+				{
+					compile_expr_node(c, expr->as.call.args[i]);
+				}
+				int s_idx = xir_add_symbol(c->chunk, expr->as.call.name);
+				xir_emit_op(c->chunk, OP_CALL, line);
+				xir_emit_short(c->chunk, (uint16_t)s_idx, line);
+				xir_emit_byte(c->chunk, (uint8_t)expr->as.call.arg_count, line);
+			}
 			break;
 		}
 
@@ -282,9 +368,18 @@ static void compile_expr_node(XCompiler* c, const AstExpr* expr)
 				}
 				else
 				{
-					int s_idx = xir_add_symbol(c->chunk, target->as.identifier_name);
-					xir_emit_op(c->chunk, OP_STORE_GLOBAL, line);
-					xir_emit_short(c->chunk, (uint16_t)s_idx, line);
+					int upvalue_slot = resolve_upvalue(c, target->as.identifier_name);
+					if (upvalue_slot != -1)
+					{
+						xir_emit_op(c->chunk, OP_SET_UPVALUE, line);
+						xir_emit_byte(c->chunk, (uint8_t)upvalue_slot, line);
+					}
+					else
+					{
+						int s_idx = xir_add_symbol(c->chunk, target->as.identifier_name);
+						xir_emit_op(c->chunk, OP_STORE_GLOBAL, line);
+						xir_emit_short(c->chunk, (uint16_t)s_idx, line);
+					}
 				}
 			}
 			else if (target->type == AST_EXPR_MEMBER)
@@ -577,14 +672,88 @@ static void compile_stmt_node(XCompiler* c, const AstStmt* stmt)
 		break;
 
 	case AST_STMT_FUNC_DECL:
-		/* Functions can be compiled as sub-chunks or registered in the environment */
-		break;
+		{
+			const char* fname = stmt->as.func_decl.name ? stmt->as.func_decl.name : "fn";
+			char full_name[256];
+			if (stmt->as.func_decl.class_name && strlen(stmt->as.func_decl.class_name) > 0)
+			{
+				snprintf(full_name, sizeof(full_name), "%s.%s", stmt->as.func_decl.class_name, fname);
+			}
+			else
+			{
+				snprintf(full_name, sizeof(full_name), "%s", fname);
+			}
+
+			XFunction* fn = xfunc_create(full_name, stmt->as.func_decl.param_count);
+			XCompiler fn_compiler;
+			compiler_init(&fn_compiler, &fn->chunk);
+			fn_compiler.enclosing = c;
+			fn_compiler.function = fn;
+
+			if (c->scope_depth > 0)
+			{
+				add_local(c, fname);
+			}
+
+			/* Parameters are initial local variables of the function (slots 0..param_count-1) */
+			for (int p = 0; p < stmt->as.func_decl.param_count; p++)
+			{
+				add_local(&fn_compiler, stmt->as.func_decl.params[p].name);
+			}
+
+			if (stmt->as.func_decl.body)
+			{
+				compile_stmt_node(&fn_compiler, stmt->as.func_decl.body);
+			}
+
+			/* Implicit return null and halt */
+			xir_emit_op(&fn->chunk, OP_CONST_NULL, line);
+			xir_emit_op(&fn->chunk, OP_RETURN, line);
+
+			fn->upvalue_count = fn_compiler.upvalue_count;
+
+			/* Free local names in fn_compiler */
+			for (int l = 0; l < fn_compiler.local_count; l++)
+			{
+				if (fn_compiler.locals[l].name) free(fn_compiler.locals[l].name);
+			}
+
+			/* Add function to enclosing chunk's constant pool */
+			int c_idx = xir_add_constant(c->chunk, xval_func(fn));
+
+			/* Emit OP_CLOSURE and upvalue descriptors */
+			xir_emit_op(c->chunk, OP_CLOSURE, line);
+			xir_emit_short(c->chunk, (uint16_t)c_idx, line);
+			for (int u = 0; u < fn->upvalue_count; u++)
+			{
+				xir_emit_byte(c->chunk, fn_compiler.upvalues[u].is_local ? 1 : 0, line);
+				xir_emit_byte(c->chunk, fn_compiler.upvalues[u].index, line);
+			}
+
+			/* Store in local or global */
+			if (c->scope_depth == 0)
+			{
+				int s_idx = xir_add_symbol(c->chunk, full_name);
+				xir_emit_op(c->chunk, OP_STORE_GLOBAL, line);
+				xir_emit_short(c->chunk, (uint16_t)s_idx, line);
+			}
+			/* If local (c->scope_depth > 0), the closure value stays on the stack in its local slot */
+			break;
+		}
 
 	case AST_STMT_CLASS_DECL:
 		/* Class decls compile their member methods */
 		for (int i = 0; i < stmt->as.class_decl.member_count; i++)
 		{
-			compile_stmt_node(c, stmt->as.class_decl.members[i]);
+			AstStmt* m = stmt->as.class_decl.members[i];
+			if (m && m->type == AST_STMT_FUNC_DECL)
+			{
+				if (!m->as.func_decl.class_name)
+				{
+					m->as.func_decl.class_name = stmt->as.class_decl.name;
+				}
+			}
+			compile_stmt_node(c, m);
 		}
 		break;
 

@@ -7,7 +7,8 @@
 extern "C" {
 #endif
 
-#define VM_STACK_MAX 2048
+#define VM_FRAMES_MAX 256
+#define VM_STACK_MAX (VM_FRAMES_MAX * 256)
 #define VM_GLOBALS_MAX 512
 
 typedef enum XVmResult {
@@ -21,12 +22,41 @@ typedef struct XVmGlobal {
 	XValue value;
 } XVmGlobal;
 
-typedef struct XVm {
-	XIrChunk* chunk;
+typedef struct XUpvalue {
+	XValue* location;
+	XValue closed;
+	struct XUpvalue* next;
+	struct XUpvalue* all_next;
+} XUpvalue;
+
+struct XClosure {
+	XFunction* function;
+	XUpvalue** upvalues;
+	int upvalue_count;
+	struct XClosure* next;
+};
+
+struct XVm;
+XClosure* xclosure_create(struct XVm* vm, XFunction* function);
+void xclosure_free(XClosure* closure);
+
+typedef struct XCallFrame {
+	XClosure* closure;
 	uint8_t* ip;
+	XValue* slots;
+	XValue* return_slot;
+} XCallFrame;
+
+typedef struct XVm {
+	XCallFrame frames[VM_FRAMES_MAX];
+	int frame_count;
 
 	XValue stack[VM_STACK_MAX];
 	XValue* stack_top;
+
+	XUpvalue* open_upvalues;
+	XUpvalue* all_upvalues;
+	XClosure* all_closures;
 
 	XVmGlobal globals[VM_GLOBALS_MAX];
 	int global_count;

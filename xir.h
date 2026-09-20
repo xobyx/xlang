@@ -79,6 +79,12 @@ typedef enum XIrOpCode {
 	OP_PRINT,         /* operand: uint8 arg_count */
 	OP_RETURN,
 
+	/* Closures & Upvalues */
+	OP_CLOSURE,       /* operand: uint16 constant pool index of function, followed by upvalue descriptors */
+	OP_GET_UPVALUE,   /* operand: uint8 upvalue index */
+	OP_SET_UPVALUE,   /* operand: uint8 upvalue index */
+	OP_CLOSE_UPVALUE, /* closes open upvalues for current scope */
+
 	/* Execution control */
 	OP_HALT
 } XIrOpCode;
@@ -94,8 +100,13 @@ typedef enum XValueType {
 	VAL_INT,
 	VAL_FLOAT,
 	VAL_STRING,
-	VAL_OBJECT
+	VAL_OBJECT,
+	VAL_FUNCTION,
+	VAL_CLOSURE
 } XValueType;
+
+typedef struct XFunction XFunction;
+typedef struct XClosure XClosure;
 
 typedef struct XValue {
 	XValueType type;
@@ -105,6 +116,8 @@ typedef struct XValue {
 		double fval;
 		char* sval;
 		void* oval;
+		XFunction* fnval;
+		XClosure* closureval;
 	} as;
 } XValue;
 
@@ -114,6 +127,8 @@ XValue xval_int(int64_t i);
 XValue xval_float(double f);
 XValue xval_str(const char* s);
 XValue xval_obj(void* o);
+XValue xval_func(XFunction* fn);
+XValue xval_closure(XClosure* c);
 
 void xval_print(XValue v);
 bool xval_is_truthy(XValue v);
@@ -148,6 +163,16 @@ typedef struct XIrChunk {
 	XIrSymbolTable symbols;
 } XIrChunk;
 
+struct XFunction {
+	char* name;
+	int arity;
+	int upvalue_count;
+	XIrChunk chunk;
+};
+
+XFunction* xfunc_create(const char* name, int arity);
+void xfunc_free(XFunction* fn);
+
 void xir_chunk_init(XIrChunk* chunk);
 void xir_chunk_free(XIrChunk* chunk);
 
@@ -171,6 +196,17 @@ int xir_add_symbol(XIrChunk* chunk, const char* name);
  * ------------------------------------------------------------------------- */
 void xir_disassemble_chunk(const XIrChunk* chunk, const char* name);
 int xir_disassemble_instruction(const XIrChunk* chunk, int offset);
+
+/* -------------------------------------------------------------------------
+ * Bytecode File Serialization (.xbc)
+ * ------------------------------------------------------------------------- */
+#define XBC_MAGIC 0x01434258 /* "XBC\x01" */
+#define XBC_VERSION 1
+
+bool xir_serialize_chunk(const XIrChunk* chunk, FILE* f);
+bool xir_deserialize_chunk(XIrChunk* chunk, FILE* f);
+bool xir_save_file(const XIrChunk* chunk, const char* filepath);
+bool xir_load_file(XIrChunk* chunk, const char* filepath);
 
 #ifdef __cplusplus
 }
