@@ -1,5 +1,6 @@
 #include "parse.h"
 #include "lexer.h"
+#include "ximport.h"
 
 
 //[if[0],for[1],while[2],do[3],else[4],print[5],return[6]]
@@ -524,6 +525,31 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 		if (print_parse_log)
 			debuge->print_line_debuge(debuge, n_node, line);
 
+		node* root = get_root(n_node);
+		if (root != NULL && root->type_ == keyword && root->value_keyword == _import_)
+		{
+			const char* mod_name = NULL;
+			node* p = root->next;
+			if (p != NULL && p->type_ == parentheses4)
+			{
+				p = p->next;
+			}
+			if (p != NULL)
+			{
+				if (p->type_ == value && p->opt_type_ptr == T_STRING)
+				{
+					mod_name = (char*)p->value_raw;
+				}
+				else if (p->type_ == var_name && p->value_char_ptr != NULL)
+				{
+					mod_name = p->value_char_ptr;
+				}
+			}
+			if (mod_name != NULL)
+			{
+				x_import_module(mod_name);
+			}
+		}
 
 		if (!g_parse_only)
 		{

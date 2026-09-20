@@ -36,9 +36,20 @@ struct XClosure {
 	struct XClosure* next;
 };
 
+struct XInstance {
+	char* class_name;
+	int id;
+	int field_count;
+	char** field_names;
+	XValue* field_values;
+	struct XInstance* next;
+};
+
 struct XVm;
 XClosure* xclosure_create(struct XVm* vm, XFunction* function);
 void xclosure_free(XClosure* closure);
+XInstance* xinstance_create(struct XVm* vm, const char* class_name);
+void xinstance_free(XInstance* inst);
 
 typedef struct XCallFrame {
 	XClosure* closure;
@@ -57,6 +68,7 @@ typedef struct XVm {
 	XUpvalue* open_upvalues;
 	XUpvalue* all_upvalues;
 	XClosure* all_closures;
+	XInstance* all_instances;
 
 	XVmGlobal globals[VM_GLOBALS_MAX];
 	int global_count;

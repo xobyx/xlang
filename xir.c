@@ -24,6 +24,7 @@ const char* xir_opcode_name(XIrOpCode op)
 	case OP_LOAD_INDEX:   return "OP_LOAD_INDEX";
 	case OP_STORE_INDEX:  return "OP_STORE_INDEX";
 	case OP_BUILD_LIST:   return "OP_BUILD_LIST";
+	case OP_NEW_INSTANCE: return "OP_NEW_INSTANCE";
 	case OP_POP:          return "OP_POP";
 	case OP_DUP:          return "OP_DUP";
 	case OP_ADD:          return "OP_ADD";
@@ -472,6 +473,14 @@ int xir_disassemble_instruction(const XIrChunk* chunk, int offset)
 		{
 			uint16_t count = (chunk->code[offset + 1] << 8) | chunk->code[offset + 2];
 			printf("%d items\n", count);
+			return offset + 3;
+		}
+
+	case OP_NEW_INSTANCE:
+		{
+			uint16_t s_idx = (chunk->code[offset + 1] << 8) | chunk->code[offset + 2];
+			const char* sym = (s_idx < chunk->symbols.count) ? chunk->symbols.symbols[s_idx] : "???";
+			printf("sym \033[36m%s\033[0m\n", sym);
 			return offset + 3;
 		}
 

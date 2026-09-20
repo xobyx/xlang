@@ -37,6 +37,7 @@ typedef enum XIrOpCode {
 	OP_LOAD_INDEX,
 	OP_STORE_INDEX,
 	OP_BUILD_LIST,    /* operand: uint16 element count */
+	OP_NEW_INSTANCE,  /* operand: uint16 symbol index (class name) */
 
 	/* Stack Operations */
 	OP_POP,
@@ -107,6 +108,7 @@ typedef enum XValueType {
 
 typedef struct XFunction XFunction;
 typedef struct XClosure XClosure;
+typedef struct XInstance XInstance;
 
 typedef struct XValue {
 	XValueType type;

@@ -1,4 +1,5 @@
 #include "xir_compiler.h"
+#include "functions.h"
 
 typedef struct XIrLocal {
 	char* name;
@@ -296,6 +297,27 @@ static void compile_expr_node(XCompiler* c, const AstExpr* expr)
 
 	case AST_EXPR_METHOD_CALL:
 		{
+			/* Check for static method call: ClassName.methodName(...) */
+			if (expr->as.method_call.object->type == AST_EXPR_IDENTIFIER)
+			{
+				const char* obj_name = expr->as.method_call.object->as.identifier_name;
+				if (resolve_local(c, obj_name) == -1 && resolve_upvalue(c, obj_name) == -1 &&
+				    get_type_by_name((char*)obj_name) != NULL)
+				{
+					char static_full_name[256];
+					snprintf(static_full_name, sizeof(static_full_name), "%s.%s", obj_name, expr->as.method_call.method_name);
+					for (int i = 0; i < expr->as.method_call.arg_count; i++)
+					{
+						compile_expr_node(c, expr->as.method_call.args[i]);
+					}
+					int s_idx = xir_add_symbol(c->chunk, static_full_name);
+					xir_emit_op(c->chunk, OP_CALL, line);
+					xir_emit_short(c->chunk, (uint16_t)s_idx, line);
+					xir_emit_byte(c->chunk, (uint8_t)expr->as.method_call.arg_count, line);
+					break;
+				}
+			}
+
 			compile_expr_node(c, expr->as.method_call.object);
 			for (int i = 0; i < expr->as.method_call.arg_count; i++)
 			{
@@ -419,6 +441,16 @@ static void compile_stmt_node(XCompiler* c, const AstStmt* stmt)
 		if (stmt->as.var_decl.init_expr)
 		{
 			compile_expr_node(c, stmt->as.var_decl.init_expr);
+		}
+		else if (stmt->as.var_decl.type_name &&
+		         (strcmp(stmt->as.var_decl.type_name, "List") == 0 ||
+		          strcmp(stmt->as.var_decl.type_name, "Map") == 0 ||
+		          strcmp(stmt->as.var_decl.type_name, "HashMap") == 0 ||
+		          (get_type_by_name((char*)stmt->as.var_decl.type_name) != NULL && !is_base_type(get_type_by_name((char*)stmt->as.var_decl.type_name)))))
+		{
+			int s_idx = xir_add_symbol(c->chunk, stmt->as.var_decl.type_name);
+			xir_emit_op(c->chunk, OP_NEW_INSTANCE, line);
+			xir_emit_short(c->chunk, (uint16_t)s_idx, line);
 		}
 		else
 		{
@@ -752,8 +784,8 @@ static void compile_stmt_node(XCompiler* c, const AstStmt* stmt)
 				{
 					m->as.func_decl.class_name = stmt->as.class_decl.name;
 				}
+				compile_stmt_node(c, m);
 			}
-			compile_stmt_node(c, m);
 		}
 		break;
 

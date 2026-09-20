@@ -1,5 +1,43 @@
 #include "xvm.h"
+#include "xcollection.h"
+#include "functions.h"
 #include <inttypes.h>
+
+/* -------------------------------------------------------------------------
+ * Instance Lifecycle
+ * ------------------------------------------------------------------------- */
+XInstance* xinstance_create(XVm* vm, const char* class_name)
+{
+	XInstance* inst = (XInstance*)calloc(1, sizeof(XInstance));
+	inst->class_name = strdup(class_name ? class_name : "Object");
+	if (strcmp(inst->class_name, "List") == 0)
+	{
+		inst->id = x_list_alloc();
+	}
+	else if (strcmp(inst->class_name, "Map") == 0 || strcmp(inst->class_name, "HashMap") == 0)
+	{
+		inst->id = x_map_alloc();
+	}
+	if (vm)
+	{
+		inst->next = vm->all_instances;
+		vm->all_instances = inst;
+	}
+	return inst;
+}
+
+void xinstance_free(XInstance* inst)
+{
+	if (!inst) return;
+	if (inst->class_name) free(inst->class_name);
+	for (int i = 0; i < inst->field_count; i++)
+	{
+		if (inst->field_names[i]) free(inst->field_names[i]);
+	}
+	if (inst->field_names) free(inst->field_names);
+	if (inst->field_values) free(inst->field_values);
+	free(inst);
+}
 
 /* -------------------------------------------------------------------------
  * Closure & Upvalue Lifecycle
@@ -94,6 +132,7 @@ void xvm_init(XVm* vm)
 	vm->open_upvalues = NULL;
 	vm->all_upvalues = NULL;
 	vm->all_closures = NULL;
+	vm->all_instances = NULL;
 	vm->global_count = 0;
 	vm->print_trace = false;
 }
@@ -124,6 +163,16 @@ void xvm_free(XVm* vm)
 		c = next;
 	}
 	vm->all_closures = NULL;
+
+	/* Free all tracked instances */
+	XInstance* inst = vm->all_instances;
+	while (inst != NULL)
+	{
+		XInstance* next = inst->next;
+		xinstance_free(inst);
+		inst = next;
+	}
+	vm->all_instances = NULL;
 
 	/* Free global variables */
 	for (int i = 0; i < vm->global_count; i++)
@@ -429,6 +478,151 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 				{
 					xvm_push(vm, xval_null());
 				}
+				break;
+			}
+
+		case OP_NEW_INSTANCE:
+			{
+				uint16_t s_idx = read_short(frame);
+				const char* class_name = (s_idx < current_chunk->symbols.count) ? current_chunk->symbols.symbols[s_idx] : "";
+				XInstance* inst = xinstance_create(vm, class_name);
+				xvm_push(vm, xval_obj(inst));
+				break;
+			}
+
+		case OP_BUILD_LIST:
+			{
+				uint16_t count = read_short(frame);
+				XInstance* inst = xinstance_create(vm, "List");
+				XValue items[64];
+				for (int i = count - 1; i >= 0; i--)
+				{
+					items[i] = xvm_pop(vm);
+				}
+				for (int i = 0; i < count; i++)
+				{
+					if (items[i].type == VAL_INT) x_list_append_int(inst->id, (int)items[i].as.ival);
+					else if (items[i].type == VAL_FLOAT) x_list_append_float(inst->id, (float)items[i].as.fval);
+					else if (items[i].type == VAL_STRING) x_list_append_str(inst->id, items[i].as.sval ? items[i].as.sval : "");
+				}
+				xvm_push(vm, xval_obj(inst));
+				break;
+			}
+
+		case OP_LOAD_FIELD:
+			{
+				uint16_t s_idx = read_short(frame);
+				const char* field_name = (s_idx < current_chunk->symbols.count) ? current_chunk->symbols.symbols[s_idx] : "";
+				XValue obj = xvm_pop(vm);
+				if (obj.type == VAL_OBJECT && obj.as.oval != NULL)
+				{
+					XInstance* inst = (XInstance*)obj.as.oval;
+					if (strcmp(field_name, "id") == 0)
+					{
+						xvm_push(vm, xval_int(inst->id));
+						break;
+					}
+					bool found = false;
+					for (int i = 0; i < inst->field_count; i++)
+					{
+						if (strcmp(inst->field_names[i], field_name) == 0)
+						{
+							xvm_push(vm, inst->field_values[i]);
+							found = true;
+							break;
+						}
+					}
+					if (found) break;
+				}
+				xvm_push(vm, xval_null());
+				break;
+			}
+
+		case OP_STORE_FIELD:
+			{
+				uint16_t s_idx = read_short(frame);
+				const char* field_name = (s_idx < current_chunk->symbols.count) ? current_chunk->symbols.symbols[s_idx] : "";
+				XValue val = xvm_pop(vm);
+				XValue obj = xvm_pop(vm);
+				if (obj.type == VAL_OBJECT && obj.as.oval != NULL)
+				{
+					XInstance* inst = (XInstance*)obj.as.oval;
+					if (strcmp(field_name, "id") == 0 && val.type == VAL_INT)
+					{
+						inst->id = (int)val.as.ival;
+						xvm_push(vm, val);
+						break;
+					}
+					int idx = -1;
+					for (int i = 0; i < inst->field_count; i++)
+					{
+						if (strcmp(inst->field_names[i], field_name) == 0)
+						{
+							idx = i;
+							break;
+						}
+					}
+					if (idx == -1)
+					{
+						inst->field_count++;
+						inst->field_names = (char**)realloc(inst->field_names, inst->field_count * sizeof(char*));
+						inst->field_values = (XValue*)realloc(inst->field_values, inst->field_count * sizeof(XValue));
+						idx = inst->field_count - 1;
+						inst->field_names[idx] = strdup(field_name);
+					}
+					inst->field_values[idx] = val;
+				}
+				xvm_push(vm, val);
+				break;
+			}
+
+		case OP_LOAD_INDEX:
+			{
+				XValue idx_val = xvm_pop(vm);
+				XValue target = xvm_pop(vm);
+				if (target.type == VAL_OBJECT && target.as.oval != NULL)
+				{
+					XInstance* inst = (XInstance*)target.as.oval;
+					if (strcmp(inst->class_name, "List") == 0 && idx_val.type == VAL_INT)
+					{
+						int idx = (int)idx_val.as.ival;
+						int itype = x_list_item_type(inst->id, idx);
+						if (itype == 1) xvm_push(vm, xval_int(x_list_item_int(inst->id, idx)));
+						else if (itype == 2) xvm_push(vm, xval_float(x_list_item_float(inst->id, idx)));
+						else xvm_push(vm, xval_str(x_list_item_str(inst->id, idx)));
+						break;
+					}
+					else if ((strcmp(inst->class_name, "Map") == 0 || strcmp(inst->class_name, "HashMap") == 0) && idx_val.type == VAL_STRING)
+					{
+						const char* key = idx_val.as.sval ? idx_val.as.sval : "";
+						int mtype = x_map_fetch_type(inst->id, key);
+						if (mtype == 1) xvm_push(vm, xval_int(x_map_fetch_int(inst->id, key)));
+						else if (mtype == 2) xvm_push(vm, xval_float(x_map_fetch_float(inst->id, key)));
+						else xvm_push(vm, xval_str(x_map_fetch_str(inst->id, key)));
+						break;
+					}
+				}
+				xvm_push(vm, xval_null());
+				break;
+			}
+
+		case OP_STORE_INDEX:
+			{
+				XValue val = xvm_pop(vm);
+				XValue idx_val = xvm_pop(vm);
+				XValue target = xvm_pop(vm);
+				if (target.type == VAL_OBJECT && target.as.oval != NULL)
+				{
+					XInstance* inst = (XInstance*)target.as.oval;
+					if ((strcmp(inst->class_name, "Map") == 0 || strcmp(inst->class_name, "HashMap") == 0) && idx_val.type == VAL_STRING)
+					{
+						const char* key = idx_val.as.sval ? idx_val.as.sval : "";
+						if (val.type == VAL_INT) x_map_insert_int(inst->id, key, (int)val.as.ival);
+						else if (val.type == VAL_FLOAT) x_map_insert_float(inst->id, key, (float)val.as.fval);
+						else x_map_insert_str(inst->id, key, val.as.sval ? val.as.sval : "");
+					}
+				}
+				xvm_push(vm, val);
 				break;
 			}
 
@@ -779,6 +973,75 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 					XValue fn_val = xval_null();
 					if (!xvm_get_global(vm, name, &fn_val))
 					{
+						func_deftion* native_fn = get_func_by_name((char*)name);
+						if (native_fn != NULL && native_fn->func_code != NULL)
+						{
+							XValue n_args[32];
+							for (int i = arg_count - 1; i >= 0; i--)
+							{
+								n_args[i] = xvm_pop(vm);
+							}
+							fcall fc;
+							memset(&fc, 0, sizeof(fcall));
+							fc.deftion = native_fn;
+							fc.parm_count_c = arg_count;
+							int i_buf[32];
+							float f_buf[32];
+							char* s_buf[32];
+							bool b_buf[32];
+							for (int i = 0; i < arg_count; i++)
+							{
+								if (n_args[i].type == VAL_INT)
+								{
+									i_buf[i] = (int)n_args[i].as.ival;
+									fc.func_parmeters[i].type_define = T_INT;
+									fc.func_parmeters[i].value_int = &i_buf[i];
+									fc.func_parmeters[i].values = &i_buf[i];
+								}
+								else if (n_args[i].type == VAL_FLOAT)
+								{
+									f_buf[i] = (float)n_args[i].as.fval;
+									fc.func_parmeters[i].type_define = T_FLOAT;
+									fc.func_parmeters[i].value_float = &f_buf[i];
+									fc.func_parmeters[i].values = &f_buf[i];
+								}
+								else if (n_args[i].type == VAL_STRING)
+								{
+									s_buf[i] = n_args[i].as.sval;
+									fc.func_parmeters[i].type_define = T_STRING;
+									fc.func_parmeters[i].value_str_ptr = &s_buf[i];
+									fc.func_parmeters[i].values = &s_buf[i];
+								}
+								else if (n_args[i].type == VAL_BOOL)
+								{
+									b_buf[i] = n_args[i].as.bval;
+									fc.func_parmeters[i].type_define = T_BOOL;
+									fc.func_parmeters[i].value_bool = &b_buf[i];
+									fc.func_parmeters[i].values = &b_buf[i];
+								}
+								else if (n_args[i].type == VAL_OBJECT && n_args[i].as.oval != NULL)
+								{
+									XInstance* inst = (XInstance*)n_args[i].as.oval;
+									i_buf[i] = inst->id;
+									fc.func_parmeters[i].type_define = T_INT;
+									fc.func_parmeters[i].value_int = &i_buf[i];
+									fc.func_parmeters[i].values = &i_buf[i];
+								}
+							}
+							native_fn->func_code(&fc);
+							if (fc._return.type_define == T_INT && fc._return.value_int)
+								xvm_push(vm, xval_int(*fc._return.value_int));
+							else if (fc._return.type_define == T_FLOAT && fc._return.value_float)
+								xvm_push(vm, xval_float(*fc._return.value_float));
+							else if (fc._return.type_define == T_STRING && fc._return.value_str_ptr && *fc._return.value_str_ptr)
+								xvm_push(vm, xval_str(*fc._return.value_str_ptr));
+							else if (fc._return.type_define == T_BOOL && fc._return.value_bool)
+								xvm_push(vm, xval_bool(*fc._return.value_bool));
+							else
+								xvm_push(vm, xval_null());
+							break;
+						}
+
 						fprintf(stderr, "VM Runtime Error: Undefined function '%s'\n", name);
 						return VM_RUNTIME_ERROR;
 					}
@@ -820,6 +1083,133 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 				break;
 			}
 
+		case OP_CALL_METHOD:
+			{
+				uint16_t s_idx = read_short(frame);
+				uint8_t arg_count = *frame->ip++;
+				const char* method_name = (s_idx < current_chunk->symbols.count) ? current_chunk->symbols.symbols[s_idx] : "";
+
+				XValue args[32];
+				for (int i = arg_count - 1; i >= 0; i--)
+				{
+					args[i] = xvm_pop(vm);
+				}
+				XValue receiver = xvm_pop(vm);
+
+				if (receiver.type == VAL_OBJECT && receiver.as.oval != NULL)
+				{
+					XInstance* inst = (XInstance*)receiver.as.oval;
+					if (strcmp(inst->class_name, "List") == 0)
+					{
+						if (strcmp(method_name, "add") == 0 || strcmp(method_name, "add_int") == 0 || strcmp(method_name, "add_float") == 0)
+						{
+							if (arg_count >= 1)
+							{
+								if (args[0].type == VAL_INT) x_list_append_int(inst->id, (int)args[0].as.ival);
+								else if (args[0].type == VAL_FLOAT) x_list_append_float(inst->id, (float)args[0].as.fval);
+								else x_list_append_str(inst->id, args[0].as.sval ? args[0].as.sval : "");
+							}
+							xvm_push(vm, xval_int(x_list_count(inst->id)));
+							break;
+						}
+						else if (strcmp(method_name, "get") == 0 || strcmp(method_name, "get_int") == 0 || strcmp(method_name, "get_float") == 0)
+						{
+							int idx = (arg_count >= 1 && args[0].type == VAL_INT) ? (int)args[0].as.ival : 0;
+							int itype = x_list_item_type(inst->id, idx);
+							if (itype == 1) xvm_push(vm, xval_int(x_list_item_int(inst->id, idx)));
+							else if (itype == 2) xvm_push(vm, xval_float(x_list_item_float(inst->id, idx)));
+							else xvm_push(vm, xval_str(x_list_item_str(inst->id, idx)));
+							break;
+						}
+						else if (strcmp(method_name, "size") == 0 || strcmp(method_name, "length") == 0)
+						{
+							xvm_push(vm, xval_int(x_list_count(inst->id)));
+							break;
+						}
+					}
+					else if (strcmp(inst->class_name, "Map") == 0 || strcmp(inst->class_name, "HashMap") == 0)
+					{
+						if (strcmp(method_name, "put") == 0 || strcmp(method_name, "set") == 0 ||
+						    strcmp(method_name, "put_int") == 0 || strcmp(method_name, "put_float") == 0)
+						{
+							const char* key = (arg_count >= 1 && args[0].type == VAL_STRING) ? args[0].as.sval : "";
+							if (arg_count >= 2)
+							{
+								if (args[1].type == VAL_INT) x_map_insert_int(inst->id, key, (int)args[1].as.ival);
+								else if (args[1].type == VAL_FLOAT) x_map_insert_float(inst->id, key, (float)args[1].as.fval);
+								else x_map_insert_str(inst->id, key, args[1].as.sval ? args[1].as.sval : "");
+							}
+							xvm_push(vm, xval_int(1));
+							break;
+						}
+						else if (strcmp(method_name, "get") == 0 || strcmp(method_name, "get_int") == 0 || strcmp(method_name, "get_float") == 0)
+						{
+							const char* key = (arg_count >= 1 && args[0].type == VAL_STRING) ? args[0].as.sval : "";
+							int mtype = x_map_fetch_type(inst->id, key);
+							if (mtype == 1) xvm_push(vm, xval_int(x_map_fetch_int(inst->id, key)));
+							else if (mtype == 2) xvm_push(vm, xval_float(x_map_fetch_float(inst->id, key)));
+							else xvm_push(vm, xval_str(x_map_fetch_str(inst->id, key)));
+							break;
+						}
+						else if (strcmp(method_name, "has") == 0 || strcmp(method_name, "contains") == 0)
+						{
+							const char* key = (arg_count >= 1 && args[0].type == VAL_STRING) ? args[0].as.sval : "";
+							xvm_push(vm, xval_bool(x_map_contains_key(inst->id, key)));
+							break;
+						}
+						else if (strcmp(method_name, "size") == 0 || strcmp(method_name, "length") == 0)
+						{
+							xvm_push(vm, xval_int(x_map_count(inst->id)));
+							break;
+						}
+					}
+					else
+					{
+						/* User class method: lookup "ClassName.methodName" */
+						char user_mname[256];
+						snprintf(user_mname, sizeof(user_mname), "%s.%s", inst->class_name, method_name);
+						XValue mfn = xval_null();
+						if (xvm_get_global(vm, user_mname, &mfn))
+						{
+							XClosure* cl = NULL;
+							if (mfn.type == VAL_CLOSURE) cl = mfn.as.closureval;
+							else if (mfn.type == VAL_FUNCTION && mfn.as.fnval) cl = xclosure_create(vm, mfn.as.fnval);
+							if (cl != NULL)
+							{
+								if (vm->frame_count >= VM_FRAMES_MAX)
+								{
+									fprintf(stderr, "VM Stack Overflow\n");
+									return VM_RUNTIME_ERROR;
+								}
+								xvm_push(vm, receiver);
+								for (int i = 0; i < arg_count; i++)
+								{
+									xvm_push(vm, args[i]);
+								}
+								XCallFrame* new_frame = &vm->frames[vm->frame_count++];
+								new_frame->closure = cl;
+								new_frame->ip = cl->function->chunk.code;
+								new_frame->slots = vm->stack_top - (arg_count + 1);
+								new_frame->return_slot = vm->stack_top - (arg_count + 1);
+								frame = new_frame;
+								break;
+							}
+						}
+					}
+				}
+				else if (receiver.type == VAL_STRING)
+				{
+					if (strcmp(method_name, "length") == 0 || strcmp(method_name, "size") == 0)
+					{
+						xvm_push(vm, xval_int(receiver.as.sval ? (int64_t)strlen(receiver.as.sval) : 0));
+						break;
+					}
+				}
+
+				xvm_push(vm, xval_null());
+				break;
+			}
+
 		case OP_RETURN:
 			{
 				XValue result = xvm_pop(vm);
@@ -844,12 +1234,61 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 				{
 					args[i] = xvm_pop(vm);
 				}
-				for (int i = 0; i < arg_count; i++)
+
+				if (arg_count > 0 && args[0].type == VAL_STRING && strchr(args[0].as.sval ? args[0].as.sval : "", '%') != NULL)
 				{
-					xval_print(args[i]);
-					if (i < arg_count - 1) printf(" ");
+					const char* fmt = args[0].as.sval;
+					int arg_idx = 1;
+					for (const char* p = fmt; *p != '\0'; p++)
+					{
+						if (*p == '%' && *(p + 1) != '\0')
+						{
+							p++;
+							if (*p == '%')
+							{
+								putchar('%');
+								continue;
+							}
+							if (arg_idx < arg_count)
+							{
+								XValue arg = args[arg_idx++];
+								if (arg.type == VAL_INT) printf("%ld", (long)arg.as.ival);
+								else if (arg.type == VAL_FLOAT) printf("%f", arg.as.fval);
+								else if (arg.type == VAL_STRING) printf("%s", arg.as.sval ? arg.as.sval : "null");
+								else if (arg.type == VAL_BOOL) printf("%s", arg.as.bval ? "True" : "False");
+								else if (arg.type == VAL_NULL) printf("null");
+								else xval_print(arg);
+							}
+						}
+						else
+						{
+							putchar(*p);
+						}
+					}
+					size_t flen = strlen(fmt);
+					if (flen == 0 || fmt[flen - 1] != '\n')
+					{
+						putchar('\n');
+					}
 				}
-				printf("\n");
+				else
+				{
+					for (int i = 0; i < arg_count; i++)
+					{
+						xval_print(args[i]);
+						if (i < arg_count - 1) printf(" ");
+					}
+					bool ends_newline = false;
+					if (arg_count == 1 && args[0].type == VAL_STRING && args[0].as.sval)
+					{
+						size_t len = strlen(args[0].as.sval);
+						if (len > 0 && args[0].as.sval[len - 1] == '\n') ends_newline = true;
+					}
+					if (!ends_newline)
+					{
+						printf("\n");
+					}
+				}
 				xvm_push(vm, xval_null());
 				break;
 			}

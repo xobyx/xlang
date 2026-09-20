@@ -582,6 +582,17 @@ static AstStmt* parse_statement(AstArena* arena, node** n, node* stop)
 			return ast_stmt_break(arena, line, col);
 		}
 
+		/* IMPORT Statement (Module code already parsed into token stream) */
+		if (curr->value_keyword == _import_)
+		{
+			while (*n != NULL && !is_end(*n, stop) && !((*n)->type_ & endl))
+			{
+				*n = node_advance(*n);
+			}
+			skip_endl(n, stop);
+			return NULL;
+		}
+
 		/* CLASS Declaration */
 		if (curr->value_keyword == _class_)
 		{
