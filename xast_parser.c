@@ -1,3 +1,11 @@
+/*
+ * AST parser implementation.
+ *
+ * This file consumes the node stream produced by the lexer/parser and builds
+ * the arena-owned AST used by later compiler stages.  The parser keeps the
+ * current node in a pointer-to-pointer so every helper can advance the shared
+ * cursor while respecting a caller-provided stopping node.
+ */
 #include "xast_parser.h"
 #include "functions.h"
 #include "parse.h"
@@ -10,6 +18,10 @@ static AstExpr* parse_expr_prec(AstArena* arena, node** n, node* stop, int min_p
 static AstStmt* parse_statement(AstArena* arena, node** n, node* stop);
 static AstStmt* parse_block(AstArena* arena, node** n, node* stop);
 
+/*
+ * Advance through the normal sibling list, falling back to the parser's
+ * stack link when the current node is the last sibling in a nested construct.
+ */
 static inline node* node_advance(node* curr)
 {
 	if (curr == NULL) return NULL;
@@ -17,6 +29,7 @@ static inline node* node_advance(node* curr)
 	return curr->stack_next;
 }
 
+/* Test both the physical end of the stream and a construct-local boundary. */
 static bool is_end(node* n, node* stop)
 {
 	if (n == NULL) return true;
@@ -25,6 +38,7 @@ static bool is_end(node* n, node* stop)
 	return false;
 }
 
+/* Newline nodes are separators, not AST statements. */
 static void skip_endl(node** n, node* stop)
 {
 	while (*n != NULL && !is_end(*n, stop) && ((*n)->type_ & endl))
@@ -33,6 +47,7 @@ static void skip_endl(node** n, node* stop)
 	}
 }
 
+/* Convert one or two lexer nodes into a binary operator. */
 static AstBinaryOp get_binop(node* n, int* out_tokens)
 {
 	if (out_tokens) *out_tokens = 1;
@@ -73,6 +88,7 @@ static AstBinaryOp get_binop(node* n, int* out_tokens)
 	return BINOP_NONE;
 }
 
+/* Larger precedence values bind more tightly. */
 static int get_precedence(AstBinaryOp op)
 {
 	switch (op)
@@ -99,6 +115,7 @@ static int get_precedence(AstBinaryOp op)
 	}
 }
 
+/* Parse literals, grouped expressions, unary expressions, names, and calls. */
 static AstExpr* parse_primary(AstArena* arena, node** n, node* stop)
 {
 	if (is_end(*n, stop)) return NULL;
@@ -287,10 +304,12 @@ static AstExpr* parse_primary(AstArena* arena, node** n, node* stop)
 		return ast_expr_identifier(arena, name ? name : "unknown", line, col);
 	}
 
+	/* Consume an unrecognized node so malformed input cannot stall parsing. */
 	*n = curr->next;
 	return NULL;
 }
 
+/* Parse member access and indexing after a primary expression. */
 static AstExpr* parse_postfix(AstArena* arena, node** n, node* stop)
 {
 	AstExpr* left = parse_primary(arena, n, stop);
@@ -365,6 +384,7 @@ static AstExpr* parse_postfix(AstArena* arena, node** n, node* stop)
 	return left;
 }
 
+/* Precedence-climbing expression parser; this makes operators left-associative. */
 static AstExpr* parse_expr_prec(AstArena* arena, node** n, node* stop, int min_prec)
 {
 	AstExpr* left = parse_postfix(arena, n, stop);
@@ -394,6 +414,7 @@ static AstExpr* parse_expr_prec(AstArena* arena, node** n, node* stop, int min_p
 	return left;
 }
 
+/* Expressions start at the lowest supported precedence level. */
 static AstExpr* parse_expr(AstArena* arena, node** n, node* stop)
 {
 	return parse_expr_prec(arena, n, stop, 1);
@@ -402,6 +423,7 @@ static AstExpr* parse_expr(AstArena* arena, node** n, node* stop)
 /* -------------------------------------------------------------------------
  * Statement Parser
  * ------------------------------------------------------------------------- */
+/* Parse either a braced block or one statement used as an implicit block. */
 static AstStmt* parse_block(AstArena* arena, node** n, node* stop)
 {
 	if (is_end(*n, stop)) return NULL;
@@ -441,6 +463,7 @@ static AstStmt* parse_block(AstArena* arena, node** n, node* stop)
 	return ast_stmt_block(arena, stmt_buf, count, line, col);
 }
 
+/* Parse one statement, including control flow, declarations, and expressions. */
 static AstStmt* parse_statement(AstArena* arena, node** n, node* stop)
 {
 	skip_endl(n, stop);
@@ -804,6 +827,7 @@ static AstStmt* parse_statement(AstArena* arena, node** n, node* stop)
 /* -------------------------------------------------------------------------
  * Public Entry Points
  * ------------------------------------------------------------------------- */
+/* Build a program from an already-tokenized node stream. */
 AstProgram* xast_parse_node_stream(AstArena* arena, node* start_node, node* end_node)
 {
 	if (!arena || !start_node) return NULL;
@@ -827,6 +851,7 @@ AstProgram* xast_parse_node_stream(AstArena* arena, node* start_node, node* end_
 	return prog;
 }
 
+/* Tokenize source text with the existing front end, then build its AST. */
 AstProgram* xast_parse_source(const char* source_code, const char* filename)
 {
 	if (!source_code) return NULL;
@@ -849,6 +874,7 @@ AstProgram* xast_parse_source(const char* source_code, const char* filename)
 	return prog;
 }
 
+/* Read a complete file into memory and delegate to the source entry point. */
 AstProgram* xast_parse_file(const char* filepath)
 {
 	FILE* f = fopen(filepath, "r");
