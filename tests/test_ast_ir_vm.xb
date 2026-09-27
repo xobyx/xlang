@@ -13,6 +13,11 @@ print(diff)
 print(prod)
 print(quot)
 print(rem)
+assert(sum == 19, "sum == 19")
+assert(diff == 11, "diff == 11")
+assert(prod == 60, "prod == 60")
+assert(quot == 3, "quot == 3")
+assert(rem == 3, "rem == 3")
 
 print("=== [2] Comparisons & Boolean Logic ===")
 int x = 20
@@ -22,12 +27,14 @@ if (x < y) {
 } else {
     print("FAIL")
 }
+assert(x < y, "x < y")
 
 if (x == y) {
     print("FAIL")
 } else {
     print("x != y is true")
 }
+assert(x != y, "x != y")
 
 print("=== [3] While Loop & Accumulator ===")
 int count = 0
@@ -37,12 +44,16 @@ while (count < 5) {
     total = total + count
 }
 print(total)
+assert(total == 15, "total == 15")
+assert(count == 5, "count == 5")
 
 print("=== [4] Floating Point Math ===")
 float pi = 3.14159
 float radius = 2.0
 float area = pi * radius * radius
 print(area)
+assert(area > 12.56, "area > 12.56")
+assert(area < 12.57, "area < 12.57")
 
 print("=== [5] Bitwise Operators ===")
 int mask1 = 12
@@ -53,12 +64,16 @@ int bit_xor = mask1 ^ mask2
 print(bit_and)
 print(bit_or)
 print(bit_xor)
+assert(bit_and == 8, "bit_and == 8")
+assert(bit_or == 14, "bit_or == 14")
+assert(bit_xor == 6, "bit_xor == 6")
 
 print("=== [6] String Operations ===")
 string greeting = "Hello, "
 string target = "VM"
 string msg = greeting + target
 print(msg)
+assert(msg == "Hello, VM", "string concatenation")
 
 print("=== [7] Compound Assignments ===")
 int val = 100
@@ -67,5 +82,6 @@ val -= 20
 val *= 2
 val /= 4
 print(val)
+assert(val == 65, "val == 65")
 
 print("=== ALL AST/IR/VM TESTS PASSED ===")

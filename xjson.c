@@ -549,13 +549,9 @@ void x_json_parse(fcall* fc)
 		type_def* map_td = get_type_by_name("Map");
 		if (map_td != NULL && !is_base_type(map_td))
 		{
-			type_instance* inst = (type_instance*)install_memory_with_type(map_td, 1);
-			var* id_prop = get_var_by_name_on_stack("id", &inst->propertys);
-			if (id_prop == NULL)
-			{
-				id_prop = new_var_on_stack(&inst->propertys, "id", T_INT);
-				id_prop->values = install_memory_with_type(T_INT, 1);
-			}
+			type_instance* inst = type_instance_create(map_td);
+			inst->id = map_id;
+			var* id_prop = type_instance_get_field(inst, "id");
 			if (id_prop != NULL && id_prop->value_int != NULL)
 				*id_prop->value_int = map_id;
 			fc->_return.type_define = map_td;
@@ -575,13 +571,9 @@ void x_json_parse(fcall* fc)
 		type_def* list_td = get_type_by_name("List");
 		if (list_td != NULL && !is_base_type(list_td))
 		{
-			type_instance* inst = (type_instance*)install_memory_with_type(list_td, 1);
-			var* id_prop = get_var_by_name_on_stack("id", &inst->propertys);
-			if (id_prop == NULL)
-			{
-				id_prop = new_var_on_stack(&inst->propertys, "id", T_INT);
-				id_prop->values = install_memory_with_type(T_INT, 1);
-			}
+			type_instance* inst = type_instance_create(list_td);
+			inst->id = list_id;
+			var* id_prop = type_instance_get_field(inst, "id");
 			if (id_prop != NULL && id_prop->value_int != NULL)
 				*id_prop->value_int = list_id;
 			fc->_return.type_define = list_td;
@@ -615,10 +607,9 @@ void x_json_stringify(fcall* fc)
 			/* Check if argument is a Map or List object */
 			if (arg->value_type_instsance != NULL)
 			{
-				var* id_prop = get_var_by_name_on_stack("id", &arg->value_type_instsance->propertys);
-				if (id_prop != NULL && id_prop->value_int != NULL)
+				int id = type_instance_get_id(arg->value_type_instsance);
+				if (id > 0)
 				{
-					int id = *id_prop->value_int;
 					if (arg->type_define != NULL && strcmp(arg->type_define->type_name, "List") == 0)
 					{
 						stringify_list(&sb, id);

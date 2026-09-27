@@ -6,10 +6,16 @@ print(json_is_valid("{\"key\": \"value\"}"))
 print(json_is_valid("[1, 2, 3]"))
 print(json_is_valid("invalid json"))
 print(json_is_valid("{unclosed"))
+assert(json_is_valid("{\"key\": \"value\"}") == true, "JSON valid object")
+assert(json_is_valid("[1, 2, 3]") == true, "JSON valid array")
+assert(json_is_valid("invalid json") == false, "JSON invalid")
+assert(json_is_valid("{unclosed") == false, "JSON unclosed")
 
 // 2. Test JSON.is_valid class method
 print(JSON.is_valid("{\"ok\": 1}"))
 print(JSON.is_valid("not json"))
+assert(JSON.is_valid("{\"ok\": 1}") == true, "JSON.is_valid valid")
+assert(JSON.is_valid("not json") == false, "JSON.is_valid invalid")
 
 // 3. Test JSON parsing and reading values
 string json_text = "{\"name\": \"xlang\", \"version\": \"2.0\", \"active\": true, \"count\": 42}"
@@ -17,45 +23,60 @@ Map data = JSON.parse(json_text)
 print(data.get("name"))
 print(data.get("version"))
 print(data.get("count"))
+assert(data.get("name") == "xlang", "data.name should be xlang")
+assert(data.get("version") == "2.0", "data.version should be 2.0")
+assert(data.get("count") == "42", "data.count should be 42")
 
 // 4. Test JSON serialization
 data.put("status", "released")
 string serialized = JSON.stringify(data)
 print(JSON.is_valid(serialized))
 print(data.get("status"))
+assert(JSON.is_valid(serialized) == true, "Serialized JSON should be valid")
+assert(data.get("status") == "released", "data.status should be released")
 data.free()
 
 // 5. Test DateTime raw functions
 int now_ts = datetime_now()
 print(now_ts > 1700000000)
+assert(now_ts > 1700000000, "now_ts should be > 1700000000")
 
 int y = datetime_year(now_ts)
 print(y >= 2024)
+assert(y >= 2024, "year should be >= 2024")
 
 int m = datetime_month(now_ts)
 print(m >= 1)
 print(m <= 12)
+assert(m >= 1 && m <= 12, "month should be between 1 and 12")
 
 int d = datetime_day(now_ts)
 print(d >= 1)
 print(d <= 31)
+assert(d >= 1 && d <= 31, "day should be between 1 and 31")
 
 string fmt_year = datetime_format(now_ts, "%Y")
 print(fmt_year)
 
 int ms = datetime_clock_ms()
 print(ms >= 0)
+assert(ms >= 0, "clock_ms should be >= 0")
 
 // 6. Test DateTime OOP class
 DateTime dt = DateTime.now()
 print(dt.year() >= 2024)
 print(dt.month() >= 1)
 print(dt.day() >= 1)
+assert(dt.year() >= 2024, "dt.year() should be >= 2024")
+assert(dt.month() >= 1 && dt.month() <= 12, "dt.month() should be 1..12")
+assert(dt.day() >= 1 && dt.day() <= 31, "dt.day() should be 1..31")
 
 string dt_str = dt.to_str()
 print(dt_str.len() > 10)
+assert(dt_str.len() > 10, "dt_str len should be > 10")
 
 string custom_fmt = dt.format("%Y/%m/%d")
 print(custom_fmt.len() == 10)
+assert(custom_fmt.len() == 10, "custom_fmt len should be 10")
 
 print("test_json_datetime PASS")

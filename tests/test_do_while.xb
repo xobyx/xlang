@@ -4,12 +4,16 @@ do {
     print(k)
     k = k + 1
 } while (k < 3)
+assert(k == 3, "k should be 3")
 
 # Test 2: Condition initially false (body runs at least once)
 int once = 999
+int ran = 0
 do {
     print(once)
+    ran = ran + 1
 } while (once < 10)
+assert(ran == 1, "once loop should run exactly once")
 
 # Test 3: while on the next line
 int n = 0
@@ -18,6 +22,7 @@ do {
     n = n + 1
 }
 while (n < 2)
+assert(n == 2, "n should be 2")
 
 # Test 4: do-while with break
 int b = 0
@@ -28,6 +33,7 @@ do {
     print(b)
     b = b + 1
 } while (b < 5)
+assert(b == 2, "b should be 2 after break")
 
 # Test 5: do-while inside function with early return
 int find_target(int target) {
@@ -43,5 +49,9 @@ int find_target(int target) {
 
 int res = find_target(30)
 print(res)
+assert(res == 60, "res should be 60")
+
+int res_not_found = find_target(999)
+assert(res_not_found == 0, "res_not_found should be 0")
 
 print("DO_WHILE_PASS")

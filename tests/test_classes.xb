@@ -6,17 +6,65 @@ print(legs)
 }
 
 
-Animal cat
+Animal cat = new Animal()
 cat.legs = 4
 cat.speak()
+assert(cat.legs == 4, "cat.legs should be 4")
 
 
 class Point(){
 int x
 int y
 }
-Point p
+Point p = new Point()
 p.x = 10
 p.y = 20
 print(p.x)
 print(p.y)
+assert(p.x == 10, "p.x should be 10")
+assert(p.y == 20, "p.y should be 20")
+
+# Test implicit 'this' method invocation
+class Calculator() {
+    int factor
+
+    Calculator() {
+        factor = 2
+    }
+
+    int multiply(int x) {
+        return x * factor
+    }
+
+    int double_and_square(int n) {
+        int d = multiply(n)
+        return d * d
+    }
+}
+
+Calculator calc = new Calculator()
+int res = calc.double_and_square(3)
+assert(res == 36, "calc.double_and_square(3) == 36")
+
+# Test embedded class instance initialization
+class Inner() {
+    int code
+    Inner() {
+        code = 777
+    }
+}
+
+class Outer() {
+    Inner sub
+
+    Outer() {
+    }
+
+    int get_code() {
+        return sub.code
+    }
+}
+
+Outer out_obj = new Outer()
+assert(out_obj.get_code() == 777, "out_obj.get_code() == 777")
+

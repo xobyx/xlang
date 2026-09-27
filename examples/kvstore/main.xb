@@ -18,7 +18,7 @@ if (file_exists(snap_path)) {
     file_remove(snap_path)
 }
 
-KVStore db
+KVStore db = new KVStore()
 db.open(wal_path)
 print("[1] Database initialized. WAL file: %s", wal_path)
 
@@ -57,7 +57,7 @@ print("\n[4] Simulating application crash / restart...")
 print("    Closing current in-memory store...")
 
 # Create fresh instance to simulate clean reboot
-KVStore db_recovery
+KVStore db_recovery = new KVStore()
 db_recovery.open(wal_path)
 
 print("    New store instance initial size: %d", db_recovery.size())

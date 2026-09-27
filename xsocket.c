@@ -70,7 +70,9 @@ static int get_fd(fcall* fc, int arg_index)
 {
 	if (fc != NULL && fc->context != NULL && fc->context->value_type_instsance != NULL)
 	{
-		var* fd_var = get_var_by_name_on_stack("fd", &fc->context->value_type_instsance->propertys);
+		type_instance* inst = fc->context->value_type_instsance;
+		if (inst->id > 0) return inst->id;
+		var* fd_var = type_instance_get_field(inst, "fd");
 		if (fd_var != NULL && fd_var->value_int != NULL)
 			return *fd_var->value_int;
 	}

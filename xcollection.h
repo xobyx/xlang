@@ -69,6 +69,9 @@ const char* x_list_item_str(int id, int index);
 int x_list_item_int(int id, int index);
 float x_list_item_float(int id, int index);
 int x_list_item_type(int id, int index);
+int x_list_set_item_int(int id, int index, int val);
+int x_list_set_item_float(int id, int index, float val);
+int x_list_set_item_str(int id, int index, const char* val);
 
 int x_map_alloc(void);
 int x_map_insert_str(int id, const char* key, const char* val);

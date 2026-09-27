@@ -1,29 +1,48 @@
 int m1 = regex_match("hello123world", "\d+")
 int m2 = regex_match("helloworld", "\d+")
 print("Match digits: %d %d", m1, m2)
+assert(m1 == 1, "regex_match should find digits in hello123world")
+assert(m2 == 0, "regex_match should not find digits in helloworld")
 
 string found = regex_find("user: admin, id: 99", "\d+")
 print("Found: %s", found)
+assert(found == "99", "regex_find should find 99")
 
 string replaced = regex_replace("apple banana apple", "apple", "orange")
 print("Replaced: %s", replaced)
+assert(replaced == "orange banana orange", "regex_replace should replace apple with orange")
 
 string sub = substr("0123456789", 2, 4)
 print("Substr: %s", sub)
+assert(sub == "2345", "substr(2, 4) should be 2345")
 
 int idx1 = index_of("abcdef", "cd")
 int idx2 = index_of("abcdef", "zz")
 print("Index: %d %d", idx1, idx2)
+assert(idx1 == 2, "index_of cd in abcdef should be 2")
+assert(idx2 == -1, "index_of zz in abcdef should be -1")
 
 string tr = trim("   padded text   ")
 print("Trim: '%s'", tr)
+assert(tr == "padded text", "trim should strip padding")
 
 string low = to_lower("HeLLo WoRLd")
 print("Lower: %s", low)
+assert(low == "hello world", "to_lower should convert to lower case")
 
 string up = to_upper("HeLLo WoRLd")
 print("Upper: %s", up)
+assert(up == "HELLO WORLD", "to_upper should convert to upper case")
 
 int sw = starts_with("foobar", "foo")
 int ew = ends_with("foobar", "bar")
 print("Starts/Ends: %d %d", sw, ew)
+assert(sw == 1, "starts_with should be 1")
+assert(ew == 1, "ends_with should be 1")
+
+string orig_s = "original"
+string copy_s = orig_s
+copy_s = "mutated"
+assert(orig_s == "original", "String assignment must copy by value without aliasing")
+assert(copy_s == "mutated", "Reassigned string should hold new value")
+

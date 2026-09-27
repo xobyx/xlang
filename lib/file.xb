@@ -63,6 +63,10 @@ class File() {
     static int write_all_text(string p, string content) {
         return file_write_all(p, content)
     }
+
+    static int is_file(string p) {
+        return file_exists(p)
+    }
 }
 
 class Directory() {

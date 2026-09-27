@@ -8,6 +8,7 @@
 
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #ifndef byte
 #define byte unsigned char
@@ -77,7 +78,8 @@ typedef enum node_type_enum //: i16
 	var_name = 0x0004,
 	value = 0x0008,
 	operators_n = 0x0010,
-	equles = 0x0020,
+	equals = 0x0020,
+	equles = equals, /* legacy alias */
 	endl = 0x0040,
 	s_index = 0x0080,
 	parentheses1 = 0x0100,//{
@@ -101,7 +103,8 @@ typedef enum var_name_def
 {
 	function_def = 10,//f
 	function_call,//a
-	fucnction_parm,//p
+	function_param,//p
+	fucnction_parm = function_param, /* legacy alias */
 	var_def,//
 	var_call,//
 	class_def,//k
@@ -225,6 +228,7 @@ typedef struct var
 		int  a;
 		void* values;
 		struct type_instance * value_type_instsance;
+		struct type_instance * value_type_instance;
 		int * value_int;
 		long * value_long;
 		float * value_float;
@@ -244,6 +248,7 @@ typedef struct var
 	struct node* ref;
 	struct var* stack_next;
 	enum var_access access;
+	int slot_idx;
 }var;
 struct type_def;
 typedef struct var_stack
@@ -258,9 +263,21 @@ typedef struct var_stack
 
 typedef struct func_deftion
 {
-	struct type_def* start_func_parmeters[100];
-	char* start_func_parmeters_name[100];
-	int start_parm_count;
+	union
+	{
+		struct type_def* start_func_parmeters[100];
+		struct type_def* start_func_parameters[100];
+	};
+	union
+	{
+		char* start_func_parmeters_name[100];
+		char* start_func_parameters_name[100];
+	};
+	union
+	{
+		int start_parm_count;
+		int start_param_count;
+	};
 	function_node func_code;
 	char* func_name;
 	function_type function_type;
@@ -273,10 +290,22 @@ typedef struct func_deftion
 }func_deftion;
 typedef struct fcall
 {
-	var func_parmeters[100];
+	union
+	{
+		var func_parmeters[100];
+		var func_parameters[100];
+	};
 
-	int parm_count_c;
-	struct func_deftion* deftion;
+	union
+	{
+		int parm_count_c;
+		int param_count;
+	};
+	union
+	{
+		struct func_deftion* deftion;
+		struct func_deftion* definition;
+	};
 	struct var _return;
 	struct var* context;
 	bool has_returned;
@@ -296,11 +325,28 @@ enum w_type { super = 0, child };
 typedef struct type_def
 {
 	char* type_name;
-	var d_propertys[100];
-	func_deftion d_functions[100];
+	union
+	{
+		var d_propertys[100];
+		var properties[100];
+	};
+	union
+	{
+		func_deftion d_functions[100];
+		func_deftion functions[100];
+	};
 
-	int d_propertys_size;
-	int d_function_size;
+	union
+	{
+		int d_propertys_size;
+		int property_count;
+	};
+	int total_field_count;
+	union
+	{
+		int d_function_size;
+		int function_count;
+	};
 	int type_id;
 	
 
@@ -316,11 +362,16 @@ typedef struct type_instance
 {
 	var* context;
 	struct type_def* type;
-	struct var_stack propertys;
+	int id;
 	func_stack functions;
 	struct type_instance* base;
 	int size;
+	uint32_t field_count;
+	var fields[];
 }type_instance;
+
+typedef struct func_deftion func_definition;
+typedef struct type_def type_definition;
 
 #define type_ btype.value
 #define flag_ fflag.value

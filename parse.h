@@ -1,5 +1,8 @@
 #pragma once
+#include "arena.h"
 #include "xlang_main.h"
+extern Arena *g_lex_arena;
+
 
 typedef enum ScopeKind {
 	SCOPE_GLOBAL = 0,

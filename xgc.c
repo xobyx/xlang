@@ -2,6 +2,7 @@
 #include "functions.h"
 #include "xlang_main.h"
 #include "xcollection.h"
+#include "xvm.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -407,29 +408,16 @@ void gc_mark_instance(type_instance* inst)
 		b->mark = 2;              /* Mark as scanned */
 	}
 
-	int count = (inst->size > 0 && inst->size < 1000000) ? inst->size : 1;
-	for (int i = 0; i < count; i++)
+	for (uint32_t f = 0; f < inst->field_count; f++)
 	{
-		type_instance* it = inst + i;
-		for (var* p = it->propertys.root; p != NULL; p = p->stack_next)
-		{
-			if (p->name != NULL && strcmp(p->name, "this") == 0)
-			{
-				/* "this" property points back to the instance itself.
-				   Mark the property variable itself, but do not recurse into inst. */
-				if (gc_is_managed(p))
-				{
-					gc_block_t* pb = ((gc_block_t*)p) - 1;
-					pb->mark = 2;
-				}
-				continue;
-			}
-			gc_mark_var(p);
-		}
-		if (it->base != NULL)
-		{
-			gc_mark_instance(it->base);
-		}
+		var* p = &inst->fields[f];
+		if (p->name != NULL && strcmp(p->name, "this") == 0)
+			continue;
+		gc_mark_var(p);
+	}
+	if (inst->base != NULL)
+	{
+		gc_mark_instance(inst->base);
 	}
 }
 
@@ -482,23 +470,19 @@ void gc_mark_var(var* v)
 		{
 			if (strcmp(v->type_define->type_name, "List") == 0)
 			{
-				var* id_prop = NULL;
-				if (inst != NULL)
-					id_prop = get_var_by_name_on_stack((char*)"id", &inst->propertys);
-				if (id_prop != NULL && id_prop->value_int != NULL)
+				int list_id = type_instance_get_id(inst);
+				if (list_id > 0)
 				{
-					x_collection_gc_mark_list(*id_prop->value_int);
+					x_collection_gc_mark_list(list_id);
 				}
 			}
 			else if (strcmp(v->type_define->type_name, "Map") == 0 ||
 			         strcmp(v->type_define->type_name, "HashMap") == 0)
 			{
-				var* id_prop = NULL;
-				if (inst != NULL)
-					id_prop = get_var_by_name_on_stack((char*)"id", &inst->propertys);
-				if (id_prop != NULL && id_prop->value_int != NULL)
+				int map_id = type_instance_get_id(inst);
+				if (map_id > 0)
 				{
-					x_collection_gc_mark_map(*id_prop->value_int);
+					x_collection_gc_mark_map(map_id);
 				}
 			}
 		}
@@ -570,6 +554,51 @@ void gc_sweep_temp_vars(void)
 			gc_free_any(cur);
 		}
 		cur = next;
+	}
+}
+
+static void gc_mark_vm_value(XValue val)
+{
+	if (val.type == VAL_STRING && val.as.sval != NULL)
+	{
+		gc_mark_ptr((void*)val.as.sval);
+	}
+	else if (val.type == VAL_OBJECT && val.as.oval != NULL)
+	{
+		XInstance* inst = (XInstance*)val.as.oval;
+		const char* cname = (inst->klass && inst->klass->name) ? inst->klass->name : "";
+		if (strcmp(cname, "List") == 0) x_collection_gc_mark_list(inst->id);
+		else if (strcmp(cname, "Map") == 0 || strcmp(cname, "HashMap") == 0) x_collection_gc_mark_map(inst->id);
+	}
+}
+
+static void gc_mark_vm(XVm* vm)
+{
+	if (!vm) return;
+
+	/* Mark all values on the VM evaluation stack */
+	for (XValue* slot = vm->stack; slot < vm->stack_top; slot++)
+	{
+		gc_mark_vm_value(*slot);
+	}
+
+	/* Mark all VM global variables */
+	for (int i = 0; i < vm->global_count; i++)
+	{
+		gc_mark_vm_value(vm->globals[i].value);
+	}
+
+	/* Mark all VM instances and their fields */
+	for (XInstance* inst = vm->all_instances; inst != NULL; inst = inst->next)
+	{
+		const char* cname = (inst->klass && inst->klass->name) ? inst->klass->name : "";
+		if (strcmp(cname, "List") == 0) x_collection_gc_mark_list(inst->id);
+		else if (strcmp(cname, "Map") == 0 || strcmp(cname, "HashMap") == 0) x_collection_gc_mark_map(inst->id);
+
+		for (uint32_t f = 0; f < inst->field_count; f++)
+		{
+			gc_mark_vm_value(inst->fields[f]);
+		}
 	}
 }
 
@@ -651,6 +680,12 @@ size_t gc_collect(void)
 				gc_mark_var((var*)root_ptr);
 			}
 		}
+	}
+
+	/* 2e. VM Roots (when executing in bytecode VM) */
+	if (g_current_vm != NULL)
+	{
+		gc_mark_vm(g_current_vm);
 	}
 
 	/* 3. Sweep unreferenced collections */
@@ -778,30 +813,35 @@ void gc_dump(void)
 void x_gc_collect(fcall* fc)
 {
 	size_t collected = gc_collect();
+	fc->_return.type_define = T_INT;
 	fc->_return.value_int = new_int(1, (int)collected);
 }
 
 void x_gc_allocated_bytes(fcall* fc)
 {
 	size_t bytes = gc_allocated_bytes();
+	fc->_return.type_define = T_INT;
 	fc->_return.value_int = new_int(1, (int)bytes);
 }
 
 void x_gc_total_objects(fcall* fc)
 {
 	size_t objs = gc_total_objects();
+	fc->_return.type_define = T_INT;
 	fc->_return.value_int = new_int(1, (int)objs);
 }
 
 void x_gc_enable(fcall* fc)
 {
 	gc_enable();
+	fc->_return.type_define = T_INT;
 	fc->_return.value_int = new_int(1, 1);
 }
 
 void x_gc_disable(fcall* fc)
 {
 	gc_disable();
+	fc->_return.type_define = T_INT;
 	fc->_return.value_int = new_int(1, 0);
 }
 
@@ -816,11 +856,13 @@ void x_gc_set_threshold(fcall* fc)
 	{
 		gc_set_threshold((size_t)bytes);
 	}
+	fc->_return.type_define = T_INT;
 	fc->_return.value_int = new_int(1, bytes);
 }
 
 void x_gc_dump(fcall* fc)
 {
 	gc_dump();
+	fc->_return.type_define = T_INT;
 	fc->_return.value_int = new_int(1, 0);
 }

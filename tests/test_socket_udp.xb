@@ -1,11 +1,16 @@
 int s_recv = socket_create("udp")
+assert(s_recv >= 0, "udp s_recv socket created")
 int b = socket_bind(s_recv, "127.0.0.1", 19877)
+assert(b == 0, "udp socket bind succeeded")
 
 int s_send = socket_create("udp")
+assert(s_send >= 0, "udp s_send socket created")
 int sent = socket_sendto(s_send, "Hello UDP Server", "127.0.0.1", 19877)
+assert(sent > 0, "socket_sendto sent bytes")
 
 string msg = socket_recvfrom(s_recv, 1024)
 print("UDP received: %s", msg)
+assert(msg == "Hello UDP Server", "UDP received msg")
 
 socket_close(s_recv)
 socket_close(s_send)

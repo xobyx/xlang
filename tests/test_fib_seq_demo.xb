@@ -1,7 +1,7 @@
 import "list.xb"
 
 List get_fibonacci_sequence(int n) {
-    List sequence
+    List sequence = new List()
     if (n <= 0) {
         return sequence
     }
@@ -37,3 +37,12 @@ print(fib2.to_str())
 
 List fib10 = get_fibonacci_sequence(10)
 print(fib10.to_str())
+
+assert(fib0.size() == 0, "fib0.size() should be 0")
+assert(fib1.size() == 1, "fib1.size() should be 1")
+assert(fib1.get_int(0) == 0, "fib1[0] should be 0")
+assert(fib2.size() == 2, "fib2.size() should be 2")
+assert(fib2.get_int(0) == 0 && fib2.get_int(1) == 1, "fib2 should be [0, 1]")
+assert(fib10.size() == 10, "fib10.size() should be 10")
+assert(fib10.get_int(9) == 34, "fib10[9] should be 34")
+

@@ -1,27 +1,39 @@
 float sq = sqrt(16.0)
 print("sqrt(16.0) = %f", sq)
+assert(sq == 4.0, "sqrt(16.0) should be 4.0")
 
 float pw = pow(2.0, 3.0)
 print("pow(2.0, 3.0) = %f", pw)
+assert(pw == 8.0, "pow(2.0, 3.0) should be 8.0")
 
 int a_int = abs(0 - 42)
 print("abs(-42) = %d", a_int)
+assert(a_int == 42, "abs(-42) should be 42")
 
 float a_flt = abs(0.0 - 3.5)
 print("abs(-3.5) = %f", a_flt)
+assert(a_flt == 3.5, "abs(-3.5) should be 3.5")
 
 int mn = min(15, 25)
 int mx = max(15, 25)
 print("min/max = %d %d", mn, mx)
+assert(mn == 15, "min(15, 25) should be 15")
+assert(mx == 25, "max(15, 25) should be 25")
 
 float fl = floor(3.7)
 float cl = ceil(3.2)
 float rd = round(3.6)
 print("floor/ceil/round = %f %f %f", fl, cl, rd)
+assert(fl == 3.0, "floor(3.7) should be 3.0")
+assert(cl == 4.0, "ceil(3.2) should be 4.0")
+assert(rd == 4.0, "round(3.6) should be 4.0")
 
 float s = sin(0.0)
 float c = cos(0.0)
 print("sin/cos(0) = %f %f", s, c)
+assert(s == 0.0, "sin(0.0) should be 0.0")
+assert(c == 1.0, "cos(0.0) should be 1.0")
 
 float lg = log(1.0)
 print("log(1.0) = %f", lg)
+assert(lg == 0.0, "log(1.0) should be 0.0")

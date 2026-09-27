@@ -7,8 +7,8 @@ class MiniDB() {
     }
 
     List hash_join(Table left_tbl, string left_col, Table right_tbl, string right_col) {
-        List joined_results
-        Map hash_map
+        List joined_results = new List()
+        Map hash_map = new Map()
 
         # Phase 1: Build Phase on left table
         int left_sz = left_tbl.count()
@@ -69,8 +69,8 @@ class MiniDB() {
     }
 
     Map group_by_sum(Table tbl, string group_col, string sum_col, List out_groups) {
-        Map group_sums
-        Map group_counts
+        Map group_sums = new Map()
+        Map group_counts = new Map()
         int sz = tbl.count()
         int i = 0
         string r = ""

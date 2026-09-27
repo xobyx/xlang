@@ -5,41 +5,56 @@ import "lib/sys.xb"
 // 1. Test Process.capture
 string out = Process.capture("echo hello_world")
 print(out.trim())
+assert(out.trim() == "hello_world", "Process.capture output")
 
 // 2. Test Process.run (with ProcessResult)
 ProcessResult pr = Process.run("echo process_success")
 print(pr.stdout.trim())
 print(pr.exit_code)
 print(pr.is_success())
+assert(pr.stdout.trim() == "process_success", "ProcessResult stdout")
+assert(pr.exit_code == 0, "ProcessResult exit code")
+assert(pr.is_success() == 1, "ProcessResult is_success")
 
 // 3. Test System get_env & set_env
 System.set_env("XLANG_TEST_VAR", "xlang_val_123")
 string env_val = System.get_env("XLANG_TEST_VAR")
 print(env_val)
+assert(env_val == "xlang_val_123", "Environment variable value")
 
 // 4. Test Directory create, exists, list, remove
 string test_dir = "test_temp_dir"
+string temp_file = "test_temp_dir/sample.txt"
 if (Directory.exists(test_dir)) {
+    if (File.is_file(temp_file)) {
+        File f_del = new File(temp_file)
+        f_del.remove()
+    }
     Directory.remove(test_dir)
 }
 
 int created = Directory.create(test_dir)
-print(created == 0)
+print("created = %d\n", created)
 print(Directory.exists(test_dir))
+assert(created == 0, "Directory.create return code")
+assert(Directory.exists(test_dir) == 1, "Directory should exist")
 
 // Create dummy file inside test_dir
-string temp_file = "test_temp_dir/sample.txt"
 File.write_all_text(temp_file, "content inside sample")
-print(File.file_exists(temp_file))
+print(File.is_file(temp_file))
+assert(File.is_file(temp_file) == 1, "Temp file should exist")
 
 List files = Directory.list(test_dir)
 print(files.size())
 print(files.get(0))
+assert(files.size() == 1, "Directory file count should be 1")
+assert(files.get(0) == "sample.txt", "Directory listed file")
 
 // Cleanup
-File f = File(temp_file)
+File f = new File(temp_file)
 f.remove()
 Directory.remove(test_dir)
 print(Directory.exists(test_dir) == 0)
+assert(Directory.exists(test_dir) == 0, "Directory should be cleaned up")
 
 print("test_process_dir PASS")

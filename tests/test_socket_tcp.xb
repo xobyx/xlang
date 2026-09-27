@@ -1,20 +1,29 @@
 int server = socket_create("tcp")
+assert(server >= 0, "server socket created")
 int rb = socket_set_reuseaddr(server, 1)
+assert(rb == 0, "set_reuseaddr succeeded")
 int b = socket_bind(server, "127.0.0.1", 19876)
+assert(b == 0, "bind succeeded")
 int l = socket_listen(server, 5)
+assert(l == 0, "listen succeeded")
 
 int client = socket_create("tcp")
+assert(client >= 0, "client socket created")
 int c = socket_connect(client, "127.0.0.1", 19876)
+assert(c == 0, "connect succeeded")
 
 int peer = socket_accept(server)
+assert(peer >= 0, "accept succeeded")
 
 int s1 = socket_send(client, "Hello TCP Server")
 string msg = socket_recv(peer, 1024)
 print("Server received: %s", msg)
+assert(msg == "Hello TCP Server", "msg == Hello TCP Server")
 
 int s2 = socket_send(peer, "Hello TCP Client")
 string reply = socket_recv(client, 1024)
 print("Client received: %s", reply)
+assert(reply == "Hello TCP Client", "reply == Hello TCP Client")
 
 socket_close(client)
 socket_close(peer)

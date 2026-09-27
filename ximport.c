@@ -1,6 +1,7 @@
 #include "ximport.h"
 #include "functions.h"
 #include "parse.h"
+#include "xdiag.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -86,7 +87,7 @@ static FILE* try_open(const char* path, char* resolved_out, size_t resolved_size
 
 static FILE* resolve_module_file(const char* name, char* resolved_path, size_t resolved_size)
 {
-	char test_path[PATH_MAX * 2];
+	char test_path[PATH_MAX * 4];
 	FILE* f = NULL;
 
 	/* 1. As provided */
@@ -99,6 +100,30 @@ static FILE* resolve_module_file(const char* name, char* resolved_path, size_t r
 		snprintf(test_path, sizeof(test_path), "%s.xb", name);
 		f = try_open(test_path, resolved_path, resolved_size);
 		if (f != NULL) return f;
+	}
+
+	/* 2b. Relative to directory of current source file */
+	const char* cur_file = xdiag_get_current_file();
+	if (cur_file != NULL && *cur_file != '\0' && strcmp(cur_file, "<stdin>") != 0)
+	{
+		char dir[PATH_MAX];
+		snprintf(dir, sizeof(dir), "%s", cur_file);
+		char* slash = strrchr(dir, '/');
+		if (slash == NULL) slash = strrchr(dir, '\\');
+		if (slash != NULL)
+		{
+			*slash = '\0';
+			snprintf(test_path, sizeof(test_path), "%s/%s", dir, name);
+			f = try_open(test_path, resolved_path, resolved_size);
+			if (f != NULL) return f;
+
+			if (strstr(name, ".xb") == NULL)
+			{
+				snprintf(test_path, sizeof(test_path), "%s/%s.xb", dir, name);
+				f = try_open(test_path, resolved_path, resolved_size);
+				if (f != NULL) return f;
+			}
+		}
 	}
 
 	/* 3. Relative to initial working directory */

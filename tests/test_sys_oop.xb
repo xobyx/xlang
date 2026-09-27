@@ -1,9 +1,15 @@
 import("sys.xb")
 
-System sys
+System sys = new System()
 print("Argc: %d", sys.argc())
+assert(sys.argc() >= 0, "sys.argc() should be >= 0")
+
 sys.setenv("XLANG_OOP_SYS", "works")
-print("Getenv: %s", sys.getenv("XLANG_OOP_SYS"))
+string env_val = sys.getenv("XLANG_OOP_SYS")
+print("Getenv: %s", env_val)
+assert(env_val == "works", "getenv should return works")
+
 int rc = sys.exec("echo oop_exec > oop_exec_temp.txt")
 print("Exec rc: %d", rc)
+assert(rc == 0, "exec should return 0")
 file_remove("oop_exec_temp.txt")

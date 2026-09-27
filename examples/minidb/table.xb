@@ -3,7 +3,7 @@ import "list.xb"
 import "file.xb"
 
 int str_to_int(string s) {
-    List _c
+    List _c = new List()
     _c.add(s)
     return _c.get_int(0)
 }
@@ -90,7 +90,7 @@ class Table() {
     }
 
     List select_where_eq(string col_name, string target_val) {
-        List results
+        List results = new List()
         int sz = rows.size()
 
         # Fast path: use secondary index if available
@@ -134,7 +134,7 @@ class Table() {
     }
 
     List select_where_gt(string col_name, int threshold) {
-        List results
+        List results = new List()
         int sz = rows.size()
         int i = 0
         string r = ""

@@ -14,3 +14,7 @@
 /obj
 *.lnk
 *.xbc
+*.o
+*.ir.html
+*:Zone.Identifier
+.zed/

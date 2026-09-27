@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -149,10 +149,10 @@
     <ClCompile Include="http.c" />
     <ClCompile Include="md5.c" />
     <ClCompile Include="parse.c" />
-    <ClCompile Include="save.c" />
     <ClCompile Include="stack.c" />
     <ClCompile Include="type_stack.c" />
     <ClCompile Include="var_stack.c" />
+    <ClCompile Include="xdis_html.c" />
     <ClCompile Include="xlang.c" />
   </ItemGroup>
   <ItemGroup>

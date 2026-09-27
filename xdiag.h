@@ -31,6 +31,9 @@ void xdiag_error(const char* code, const char* file, int line, int col, int toke
 void xdiag_warning(const char* code, const char* file, int line, int col, int token_len,
                    const char* line_text, const char* fmt, ...);
 
+int xdiag_get_error_count(void);
+void xdiag_reset_error_count(void);
+
 #ifdef __cplusplus
 }
 #endif

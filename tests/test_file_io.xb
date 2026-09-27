@@ -1,21 +1,29 @@
 int written = file_write_all("temp_test.txt", "Hello xlang File I/O!")
 print("Bytes written: %d", written)
+assert(written > 0, "file_write_all should return bytes written")
 
 int exists = file_exists("temp_test.txt")
 print("File exists: %d", exists)
+assert(exists == 1, "temp_test.txt should exist")
 
 string content = file_read_all("temp_test.txt")
 print("File Content: %s", content)
+assert(content == "Hello xlang File I/O!", "file_read_all should match written content")
 
 int appended = file_append("temp_test.txt", " Appended text.")
 int sz = file_size("temp_test.txt")
 print("File Size: %d", sz)
+assert(sz > written, "size after append should be greater")
 
 int fd = file_open("temp_test.txt", "r")
+assert(fd >= 0, "file_open should return valid fd")
 string partial = file_read(fd, 5)
 print("Partial read: %s", partial)
+assert(partial == "Hello", "file_read should read 5 bytes")
 file_close(fd)
 
 int del_rc = file_remove("temp_test.txt")
+assert(del_rc == 0, "file_remove should succeed")
 int exists_after = file_exists("temp_test.txt")
 print("Exists after delete: %d", exists_after)
+assert(exists_after == 0, "file should not exist after remove")

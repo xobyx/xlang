@@ -9,7 +9,8 @@ int bark(){
 print(111)
 }
 }
-Dog d
+Dog d = new Dog()
 d.legs = 4
 d.speak()
 d.bark()
+assert(d.legs == 4, "d.legs should be 4")

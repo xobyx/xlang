@@ -36,18 +36,51 @@ struct XClosure {
 	struct XClosure* next;
 };
 
-struct XInstance {
-	char* class_name;
+typedef struct XMethod {
+	char* name;
+	int arity;
+	struct XClosure* closure;
+} XMethod;
+
+typedef struct XFieldDesc {
+	char* name;
+	uint16_t slot_idx;
+	char* type_name;
+} XFieldDesc;
+
+typedef struct XClass {
+	char* name;
+	struct XClass* base;
+	uint32_t field_count;
+	uint32_t field_capacity;
+	XFieldDesc* fields;
+	uint32_t method_count;
+	uint32_t method_capacity;
+	XMethod* methods;
+	struct XClass* next;
+} XClass;
+
+typedef struct XInstance {
+	XClass* klass;
 	int id;
-	int field_count;
-	char** field_names;
-	XValue* field_values;
 	struct XInstance* next;
-};
+	uint32_t field_count;
+	XValue fields[];
+} XInstance;
 
 struct XVm;
 XClosure* xclosure_create(struct XVm* vm, XFunction* function);
 void xclosure_free(XClosure* closure);
+
+XClass* xclass_create(struct XVm* vm, const char* name, XClass* base);
+void xclass_add_field(XClass* klass, const char* name, const char* type_name);
+int xclass_find_field_slot(const XClass* klass, const char* name);
+void xclass_add_method(XClass* klass, const char* name, int arity, struct XClosure* closure);
+struct XClosure* xclass_find_method(const XClass* klass, const char* name, int arity);
+void xclass_free(XClass* klass);
+XClass* xvm_find_class(struct XVm* vm, const char* name);
+
+XInstance* xinstance_create_class(struct XVm* vm, XClass* klass, int id);
 XInstance* xinstance_create(struct XVm* vm, const char* class_name);
 XInstance* xinstance_create_with_id(struct XVm* vm, const char* class_name, int id);
 void xinstance_free(XInstance* inst);
@@ -70,6 +103,11 @@ typedef struct XVm {
 	XUpvalue* all_upvalues;
 	XClosure* all_closures;
 	XInstance* all_instances;
+	XClass* all_classes;
+	XClass* class_list;
+	XClass* class_map;
+	XClass* class_datetime;
+	XClass* class_object;
 
 	XVmGlobal globals[VM_GLOBALS_MAX];
 	int global_count;
@@ -81,6 +119,8 @@ void xvm_init(XVm* vm);
 void xvm_free(XVm* vm);
 
 XVmResult xvm_run(XVm* vm, XIrChunk* chunk);
+
+extern XVm* g_current_vm;
 
 /* Global variable management */
 void xvm_set_global(XVm* vm, const char* name, XValue val);

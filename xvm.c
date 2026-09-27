@@ -4,20 +4,193 @@
 #include <inttypes.h>
 #include <time.h>
 
+XVm* g_current_vm = NULL;
+
 /* -------------------------------------------------------------------------
- * Instance Lifecycle
+ * Class & VTable Lifecycle
  * ------------------------------------------------------------------------- */
-XInstance* xinstance_create_with_id(XVm* vm, const char* class_name, int id)
+XClass* xclass_create(XVm* vm, const char* name, XClass* base)
 {
-	XInstance* inst = (XInstance*)calloc(1, sizeof(XInstance));
-	inst->class_name = strdup(class_name ? class_name : "Object");
+	XClass* klass = (XClass*)calloc(1, sizeof(XClass));
+	klass->name = strdup(name ? name : "Object");
+	klass->base = base;
+	if (base)
+	{
+		klass->field_count = base->field_count;
+		klass->field_capacity = base->field_count > 0 ? base->field_count : 8;
+		klass->fields = (XFieldDesc*)calloc(klass->field_capacity, sizeof(XFieldDesc));
+		for (uint32_t i = 0; i < base->field_count; i++)
+		{
+			klass->fields[i].name = strdup(base->fields[i].name);
+			klass->fields[i].slot_idx = base->fields[i].slot_idx;
+			klass->fields[i].type_name = base->fields[i].type_name ? strdup(base->fields[i].type_name) : NULL;
+		}
+	}
+	if (vm)
+	{
+		klass->next = vm->all_classes;
+		vm->all_classes = klass;
+	}
+	return klass;
+}
+
+void xclass_add_field(XClass* klass, const char* name, const char* type_name)
+{
+	if (!klass || !name) return;
+	for (uint32_t i = 0; i < klass->field_count; i++)
+	{
+		if (klass->fields[i].name && strcmp(klass->fields[i].name, name) == 0)
+			return;
+	}
+	if (klass->field_count >= klass->field_capacity)
+	{
+		klass->field_capacity = klass->field_capacity > 0 ? klass->field_capacity * 2 : 8;
+		klass->fields = (XFieldDesc*)realloc(klass->fields, klass->field_capacity * sizeof(XFieldDesc));
+	}
+	uint32_t idx = klass->field_count++;
+	klass->fields[idx].name = strdup(name);
+	klass->fields[idx].slot_idx = (uint16_t)idx;
+	klass->fields[idx].type_name = type_name ? strdup(type_name) : NULL;
+}
+
+int xclass_find_field_slot(const XClass* klass, const char* name)
+{
+	if (!klass || !name) return -1;
+	for (uint32_t i = 0; i < klass->field_count; i++)
+	{
+		if (klass->fields[i].name && strcmp(klass->fields[i].name, name) == 0)
+		{
+			return (int)klass->fields[i].slot_idx;
+		}
+	}
+	if (klass->base)
+	{
+		return xclass_find_field_slot(klass->base, name);
+	}
+	return -1;
+}
+
+void xclass_add_method(XClass* klass, const char* name, int arity, XClosure* closure)
+{
+	if (!klass || !name) return;
+	for (uint32_t i = 0; i < klass->method_count; i++)
+	{
+		if (klass->methods[i].name && strcmp(klass->methods[i].name, name) == 0 &&
+		    (arity == -1 || klass->methods[i].arity == arity))
+		{
+			klass->methods[i].closure = closure;
+			klass->methods[i].arity = arity;
+			return;
+		}
+	}
+	if (klass->method_count >= klass->method_capacity)
+	{
+		klass->method_capacity = klass->method_capacity > 0 ? klass->method_capacity * 2 : 8;
+		klass->methods = (XMethod*)realloc(klass->methods, klass->method_capacity * sizeof(XMethod));
+	}
+	uint32_t idx = klass->method_count++;
+	klass->methods[idx].name = strdup(name);
+	klass->methods[idx].arity = arity;
+	klass->methods[idx].closure = closure;
+}
+
+XClosure* xclass_find_method(const XClass* klass, const char* name, int arity)
+{
+	if (!klass || !name) return NULL;
+	for (uint32_t i = 0; i < klass->method_count; i++)
+	{
+		if (klass->methods[i].name && strcmp(klass->methods[i].name, name) == 0 &&
+		    (arity == -1 || klass->methods[i].arity == arity))
+		{
+			return klass->methods[i].closure;
+		}
+	}
+	for (uint32_t i = 0; i < klass->method_count; i++)
+	{
+		if (klass->methods[i].name && strcmp(klass->methods[i].name, name) == 0)
+		{
+			return klass->methods[i].closure;
+		}
+	}
+	if (klass->base)
+	{
+		return xclass_find_method(klass->base, name, arity);
+	}
+	return NULL;
+}
+
+void xclass_free(XClass* klass)
+{
+	if (!klass) return;
+	if (klass->name) free(klass->name);
+	for (uint32_t i = 0; i < klass->field_count; i++)
+	{
+		if (klass->fields[i].name) free(klass->fields[i].name);
+		if (klass->fields[i].type_name) free(klass->fields[i].type_name);
+	}
+	if (klass->fields) free(klass->fields);
+	for (uint32_t i = 0; i < klass->method_count; i++)
+	{
+		if (klass->methods[i].name) free(klass->methods[i].name);
+	}
+	if (klass->methods) free(klass->methods);
+	free(klass);
+}
+
+XClass* xvm_find_class(XVm* vm, const char* name)
+{
+	if (!vm || !name) return NULL;
+	for (XClass* k = vm->all_classes; k != NULL; k = k->next)
+	{
+		if (k->name && strcmp(k->name, name) == 0)
+			return k;
+	}
+	return NULL;
+}
+
+/* -------------------------------------------------------------------------
+ * Instance Lifecycle (Shape / Flexible-Array Contiguous Allocation)
+ * ------------------------------------------------------------------------- */
+XInstance* xinstance_create_class(XVm* vm, XClass* klass, int id)
+{
+	uint32_t num_fields = klass ? klass->field_count : 0;
+	size_t total_size = sizeof(XInstance) + num_fields * sizeof(XValue);
+	XInstance* inst = (XInstance*)calloc(1, total_size);
+	inst->klass = klass;
 	inst->id = id;
+	inst->field_count = num_fields;
+	for (uint32_t i = 0; i < num_fields; i++)
+	{
+		inst->fields[i] = xval_null();
+	}
+	if (klass)
+	{
+		int id_slot = xclass_find_field_slot(klass, "id");
+		if (id_slot >= 0 && (uint32_t)id_slot < num_fields)
+		{
+			inst->fields[id_slot] = xval_int(id);
+		}
+	}
 	if (vm)
 	{
 		inst->next = vm->all_instances;
 		vm->all_instances = inst;
 	}
 	return inst;
+}
+
+XInstance* xinstance_create_with_id(XVm* vm, const char* class_name, int id)
+{
+	XClass* klass = NULL;
+	if (vm)
+	{
+		klass = xvm_find_class(vm, class_name);
+		if (!klass && class_name)
+		{
+			klass = xclass_create(vm, class_name, vm->class_object);
+		}
+	}
+	return xinstance_create_class(vm, klass, id);
 }
 
 XInstance* xinstance_create(XVm* vm, const char* class_name)
@@ -44,13 +217,6 @@ XInstance* xinstance_create(XVm* vm, const char* class_name)
 void xinstance_free(XInstance* inst)
 {
 	if (!inst) return;
-	if (inst->class_name) free(inst->class_name);
-	for (int i = 0; i < inst->field_count; i++)
-	{
-		if (inst->field_names[i]) free(inst->field_names[i]);
-	}
-	if (inst->field_names) free(inst->field_names);
-	if (inst->field_values) free(inst->field_values);
 	free(inst);
 }
 
@@ -148,6 +314,11 @@ void xvm_init(XVm* vm)
 	vm->all_upvalues = NULL;
 	vm->all_closures = NULL;
 	vm->all_instances = NULL;
+	vm->all_classes = NULL;
+	vm->class_object = xclass_create(vm, "Object", NULL);
+	vm->class_list = xclass_create(vm, "List", vm->class_object);
+	vm->class_map = xclass_create(vm, "Map", vm->class_object);
+	vm->class_datetime = xclass_create(vm, "DateTime", vm->class_object);
 	vm->global_count = 0;
 	vm->print_trace = false;
 }
@@ -188,6 +359,20 @@ void xvm_free(XVm* vm)
 		inst = next;
 	}
 	vm->all_instances = NULL;
+
+	/* Free all classes */
+	XClass* k = vm->all_classes;
+	while (k != NULL)
+	{
+		XClass* next = k->next;
+		xclass_free(k);
+		k = next;
+	}
+	vm->all_classes = NULL;
+	vm->class_list = NULL;
+	vm->class_map = NULL;
+	vm->class_datetime = NULL;
+	vm->class_object = NULL;
 
 	/* Free global variables */
 	for (int i = 0; i < vm->global_count; i++)
@@ -301,10 +486,15 @@ static inline int32_t read_int(XCallFrame* frame)
 	return val;
 }
 
+static inline const char* xinstance_class_name(const XInstance* inst)
+{
+	return (inst && inst->klass && inst->klass->name) ? inst->klass->name : "Object";
+}
+
 /* -------------------------------------------------------------------------
  * Virtual Machine Dispatch Loop
  * ------------------------------------------------------------------------- */
-XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
+static XVmResult xvm_run_loop(XVm* vm, XIrChunk* chunk)
 {
 	if (!vm || !chunk) return VM_RUNTIME_ERROR;
 
@@ -431,7 +621,7 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 		case OP_STORE_LOCAL:
 			{
 				uint16_t slot = read_short(frame);
-				frame->slots[slot] = xvm_peek(vm, 0);
+				frame->slots[slot] = xvm_pop(vm);
 				break;
 			}
 
@@ -454,7 +644,7 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 				uint8_t slot = *frame->ip++;
 				if (frame->closure && slot < frame->closure->upvalue_count && frame->closure->upvalues[slot])
 				{
-					*frame->closure->upvalues[slot]->location = xvm_peek(vm, 0);
+					*frame->closure->upvalues[slot]->location = xvm_pop(vm);
 				}
 				break;
 			}
@@ -492,6 +682,69 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 				else
 				{
 					xvm_push(vm, xval_null());
+				}
+				break;
+			}
+
+		case OP_CLASS:
+			{
+				uint16_t s_cls = read_short(frame);
+				uint16_t s_base = read_short(frame);
+				uint16_t fcount = read_short(frame);
+				const char* cname = (s_cls < current_chunk->symbols.count) ? current_chunk->symbols.symbols[s_cls] : "";
+				const char* bname = (s_base != 0xFFFF && s_base < current_chunk->symbols.count) ? current_chunk->symbols.symbols[s_base] : NULL;
+
+				XClass* base_klass = bname ? xvm_find_class(vm, bname) : vm->class_object;
+				if (!base_klass) base_klass = vm->class_object;
+
+				XClass* klass = xvm_find_class(vm, cname);
+				if (!klass)
+				{
+					klass = xclass_create(vm, cname, base_klass);
+				}
+				else
+				{
+					klass->base = base_klass;
+					if (base_klass && base_klass->field_count > 0 && klass->field_count == 0)
+					{
+						klass->field_count = base_klass->field_count;
+						klass->field_capacity = base_klass->field_count > 0 ? base_klass->field_count : 8;
+						klass->fields = (XFieldDesc*)calloc(klass->field_capacity, sizeof(XFieldDesc));
+						for (uint32_t i = 0; i < base_klass->field_count; i++)
+						{
+							klass->fields[i].name = strdup(base_klass->fields[i].name);
+							klass->fields[i].slot_idx = base_klass->fields[i].slot_idx;
+							klass->fields[i].type_name = base_klass->fields[i].type_name ? strdup(base_klass->fields[i].type_name) : NULL;
+						}
+					}
+				}
+
+				for (uint16_t i = 0; i < fcount; i++)
+				{
+					uint16_t s_f = read_short(frame);
+					const char* fname = (s_f < current_chunk->symbols.count) ? current_chunk->symbols.symbols[s_f] : "";
+					xclass_add_field(klass, fname, NULL);
+				}
+				break;
+			}
+
+		case OP_METHOD:
+			{
+				uint16_t s_cls = read_short(frame);
+				uint16_t s_m = read_short(frame);
+				uint8_t arity = *frame->ip++;
+				const char* cname = (s_cls < current_chunk->symbols.count) ? current_chunk->symbols.symbols[s_cls] : "";
+				const char* mname = (s_m < current_chunk->symbols.count) ? current_chunk->symbols.symbols[s_m] : "";
+
+				XValue closure_val = xvm_pop(vm);
+				if (closure_val.type == VAL_CLOSURE && closure_val.as.closureval)
+				{
+					XClass* klass = xvm_find_class(vm, cname);
+					if (!klass)
+					{
+						klass = xclass_create(vm, cname, vm->class_object);
+					}
+					xclass_add_method(klass, mname, (int)arity, closure_val.as.closureval);
 				}
 				break;
 			}
@@ -548,6 +801,46 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 				break;
 			}
 
+		case OP_LOAD_FIELD_SLOT:
+			{
+				uint16_t slot = read_short(frame);
+				XValue obj = xvm_pop(vm);
+				if (obj.type == VAL_OBJECT && obj.as.oval != NULL)
+				{
+					XInstance* inst = (XInstance*)obj.as.oval;
+					if (slot < inst->field_count)
+					{
+						xvm_push(vm, inst->fields[slot]);
+						break;
+					}
+				}
+				xvm_push(vm, xval_null());
+				break;
+			}
+
+		case OP_STORE_FIELD_SLOT:
+			{
+				uint16_t slot = read_short(frame);
+				XValue val = xvm_pop(vm);
+				XValue obj = xvm_pop(vm);
+				if (obj.type == VAL_OBJECT && obj.as.oval != NULL)
+				{
+					XInstance* inst = (XInstance*)obj.as.oval;
+					if (slot < inst->field_count)
+					{
+						inst->fields[slot] = val;
+						if (inst->klass && slot < inst->klass->field_count &&
+						    inst->klass->fields[slot].name && strcmp(inst->klass->fields[slot].name, "id") == 0 &&
+						    val.type == VAL_INT)
+						{
+							inst->id = (int)val.as.ival;
+						}
+					}
+				}
+				xvm_push(vm, val);
+				break;
+			}
+
 		case OP_LOAD_FIELD:
 			{
 				uint16_t s_idx = read_short(frame);
@@ -556,23 +849,22 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 				if (obj.type == VAL_OBJECT && obj.as.oval != NULL)
 				{
 					XInstance* inst = (XInstance*)obj.as.oval;
+					const char* cname = xinstance_class_name(inst);
 					if (strcmp(field_name, "id") == 0 ||
-					    (strcmp(inst->class_name, "DateTime") == 0 && strcmp(field_name, "timestamp") == 0))
+					    (strcmp(cname, "DateTime") == 0 && strcmp(field_name, "timestamp") == 0))
 					{
 						xvm_push(vm, xval_int(inst->id));
 						break;
 					}
-					bool found = false;
-					for (int i = 0; i < inst->field_count; i++)
+					if (inst->klass)
 					{
-						if (strcmp(inst->field_names[i], field_name) == 0)
+						int slot = xclass_find_field_slot(inst->klass, field_name);
+						if (slot >= 0 && (uint32_t)slot < inst->field_count)
 						{
-							xvm_push(vm, inst->field_values[i]);
-							found = true;
+							xvm_push(vm, inst->fields[slot]);
 							break;
 						}
 					}
-					if (found) break;
 				}
 				xvm_push(vm, xval_null());
 				break;
@@ -587,32 +879,23 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 				if (obj.type == VAL_OBJECT && obj.as.oval != NULL)
 				{
 					XInstance* inst = (XInstance*)obj.as.oval;
+					const char* cname = xinstance_class_name(inst);
 					if ((strcmp(field_name, "id") == 0 ||
-					     (strcmp(inst->class_name, "DateTime") == 0 && strcmp(field_name, "timestamp") == 0)) &&
+					     (strcmp(cname, "DateTime") == 0 && strcmp(field_name, "timestamp") == 0)) &&
 					    val.type == VAL_INT)
 					{
 						inst->id = (int)val.as.ival;
 						xvm_push(vm, val);
 						break;
 					}
-					int idx = -1;
-					for (int i = 0; i < inst->field_count; i++)
+					if (inst->klass)
 					{
-						if (strcmp(inst->field_names[i], field_name) == 0)
+						int slot = xclass_find_field_slot(inst->klass, field_name);
+						if (slot >= 0 && (uint32_t)slot < inst->field_count)
 						{
-							idx = i;
-							break;
+							inst->fields[slot] = val;
 						}
 					}
-					if (idx == -1)
-					{
-						inst->field_count++;
-						inst->field_names = (char**)realloc(inst->field_names, inst->field_count * sizeof(char*));
-						inst->field_values = (XValue*)realloc(inst->field_values, inst->field_count * sizeof(XValue));
-						idx = inst->field_count - 1;
-						inst->field_names[idx] = strdup(field_name);
-					}
-					inst->field_values[idx] = val;
 				}
 				xvm_push(vm, val);
 				break;
@@ -625,7 +908,8 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 				if (target.type == VAL_OBJECT && target.as.oval != NULL)
 				{
 					XInstance* inst = (XInstance*)target.as.oval;
-					if (strcmp(inst->class_name, "List") == 0 && idx_val.type == VAL_INT)
+					const char* cname = xinstance_class_name(inst);
+					if ((inst->klass == vm->class_list || strcmp(cname, "List") == 0) && idx_val.type == VAL_INT)
 					{
 						int idx = (int)idx_val.as.ival;
 						int itype = x_list_item_type(inst->id, idx);
@@ -634,7 +918,7 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 						else xvm_push(vm, xval_str(x_list_item_str(inst->id, idx)));
 						break;
 					}
-					else if ((strcmp(inst->class_name, "Map") == 0 || strcmp(inst->class_name, "HashMap") == 0) && idx_val.type == VAL_STRING)
+					else if ((inst->klass == vm->class_map || strcmp(cname, "Map") == 0 || strcmp(cname, "HashMap") == 0) && idx_val.type == VAL_STRING)
 					{
 						const char* key = idx_val.as.sval ? idx_val.as.sval : "";
 						int mtype = x_map_fetch_type(inst->id, key);
@@ -656,7 +940,15 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 				if (target.type == VAL_OBJECT && target.as.oval != NULL)
 				{
 					XInstance* inst = (XInstance*)target.as.oval;
-					if ((strcmp(inst->class_name, "Map") == 0 || strcmp(inst->class_name, "HashMap") == 0) && idx_val.type == VAL_STRING)
+					const char* cname = xinstance_class_name(inst);
+					if ((inst->klass == vm->class_list || strcmp(cname, "List") == 0) && idx_val.type == VAL_INT)
+					{
+						int idx = (int)idx_val.as.ival;
+						if (val.type == VAL_INT) x_list_set_item_int(inst->id, idx, (int)val.as.ival);
+						else if (val.type == VAL_FLOAT) x_list_set_item_float(inst->id, idx, (float)val.as.fval);
+						else if (val.type == VAL_STRING) x_list_set_item_str(inst->id, idx, val.as.sval ? val.as.sval : "");
+					}
+					else if ((inst->klass == vm->class_map || strcmp(cname, "Map") == 0 || strcmp(cname, "HashMap") == 0) && idx_val.type == VAL_STRING)
 					{
 						const char* key = idx_val.as.sval ? idx_val.as.sval : "";
 						if (val.type == VAL_INT) x_map_insert_int(inst->id, key, (int)val.as.ival);
@@ -1013,7 +1305,9 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 				{
 					const char* name = (s_idx < current_chunk->symbols.count) ? current_chunk->symbols.symbols[s_idx] : "";
 					XValue fn_val = xval_null();
-					if (!xvm_get_global(vm, name, &fn_val))
+					char arity_name[256];
+					snprintf(arity_name, sizeof(arity_name), "%s#%d", name, arg_count);
+					if (!xvm_get_global(vm, arity_name, &fn_val) && !xvm_get_global(vm, name, &fn_val))
 					{
 						func_deftion* native_fn = get_func_by_name((char*)name);
 						if (native_fn != NULL && native_fn->func_code != NULL)
@@ -1065,7 +1359,8 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 								{
 									XInstance* inst = (XInstance*)n_args[i].as.oval;
 									i_buf[i] = inst->id;
-									type_def* td = get_type_by_name(inst->class_name ? inst->class_name : "");
+									const char* cname = xinstance_class_name(inst);
+									type_def* td = get_type_by_name((char*)cname);
 									fc.func_parmeters[i].type_define = td ? td : T_INT;
 									fc.func_parmeters[i].value_int = &i_buf[i];
 									fc.func_parmeters[i].values = &i_buf[i];
@@ -1081,9 +1376,7 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 									type_instance* ti = fc._return.value_type_instsance ? fc._return.value_type_instsance : (type_instance*)fc._return.values;
 									if (ti != NULL)
 									{
-										var* id_prop = get_var_by_name_on_stack("id", &ti->propertys);
-										if (id_prop != NULL && id_prop->value_int != NULL)
-											obj_id = *id_prop->value_int;
+										obj_id = type_instance_get_id(ti);
 									}
 								}
 								else if (fc._return.value_int != NULL)
@@ -1117,11 +1410,32 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 								type_instance* ti = fc._return.value_type_instsance ? fc._return.value_type_instsance : (type_instance*)fc._return.values;
 								if (ti != NULL)
 								{
-									var* id_prop = get_var_by_name_on_stack("id", &ti->propertys);
-									if (id_prop != NULL && id_prop->value_int != NULL)
-										obj_id = *id_prop->value_int;
+									obj_id = type_instance_get_id(ti);
 								}
 								XInstance* inst = xinstance_create_with_id(vm, tname, obj_id);
+								if (ti != NULL && inst != NULL)
+								{
+									for (uint32_t f = 0; f < ti->field_count; f++)
+									{
+										var* fld = &ti->fields[f];
+										int slot = -1;
+										if (fld->name && inst->klass)
+											slot = xclass_find_field_slot(inst->klass, fld->name);
+										if (slot < 0 && f < inst->field_count)
+											slot = (int)f;
+										if (slot >= 0 && (uint32_t)slot < inst->field_count)
+										{
+											if (fld->type_define == T_INT && fld->value_int)
+												inst->fields[slot] = xval_int(*fld->value_int);
+											else if (fld->type_define == T_FLOAT && fld->value_float)
+												inst->fields[slot] = xval_float(*fld->value_float);
+											else if (fld->type_define == T_STRING && fld->value_str_ptr && *fld->value_str_ptr)
+												inst->fields[slot] = xval_str(*fld->value_str_ptr);
+											else if (fld->type_define == T_BOOL && fld->value_bool)
+												inst->fields[slot] = xval_bool(*fld->value_bool);
+										}
+									}
+								}
 								xvm_push(vm, xval_obj(inst));
 							}
 							else
@@ -1186,7 +1500,8 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 				if (receiver.type == VAL_OBJECT && receiver.as.oval != NULL)
 				{
 					XInstance* inst = (XInstance*)receiver.as.oval;
-					if (strcmp(inst->class_name, "List") == 0)
+					const char* cname = xinstance_class_name(inst);
+					if (inst->klass == vm->class_list || strcmp(cname, "List") == 0)
 					{
 						if (strcmp(method_name, "add") == 0 || strcmp(method_name, "add_int") == 0 || strcmp(method_name, "add_float") == 0)
 						{
@@ -1208,6 +1523,18 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 							else xvm_push(vm, xval_str(x_list_item_str(inst->id, idx)));
 							break;
 						}
+						else if (strcmp(method_name, "set") == 0 || strcmp(method_name, "set_int") == 0 || strcmp(method_name, "set_float") == 0)
+						{
+							int idx = (arg_count >= 1 && args[0].type == VAL_INT) ? (int)args[0].as.ival : 0;
+							if (arg_count >= 2)
+							{
+								if (args[1].type == VAL_INT) x_list_set_item_int(inst->id, idx, (int)args[1].as.ival);
+								else if (args[1].type == VAL_FLOAT) x_list_set_item_float(inst->id, idx, (float)args[1].as.fval);
+								else x_list_set_item_str(inst->id, idx, args[1].as.sval ? args[1].as.sval : "");
+							}
+							xvm_push(vm, xval_int(1));
+							break;
+						}
 						else if (strcmp(method_name, "size") == 0 || strcmp(method_name, "length") == 0)
 						{
 							xvm_push(vm, xval_int(x_list_count(inst->id)));
@@ -1220,7 +1547,7 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 							break;
 						}
 					}
-					else if (strcmp(inst->class_name, "Map") == 0 || strcmp(inst->class_name, "HashMap") == 0)
+					else if (inst->klass == vm->class_map || strcmp(cname, "Map") == 0 || strcmp(cname, "HashMap") == 0)
 					{
 						if (strcmp(method_name, "put") == 0 || strcmp(method_name, "set") == 0 ||
 						    strcmp(method_name, "put_int") == 0 || strcmp(method_name, "put_float") == 0)
@@ -1262,7 +1589,7 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 							break;
 						}
 					}
-					else if (strcmp(inst->class_name, "DateTime") == 0)
+					else if (inst->klass == vm->class_datetime || strcmp(cname, "DateTime") == 0)
 					{
 						time_t t = (time_t)inst->id;
 						if (t <= 0) t = time(NULL);
@@ -1315,45 +1642,162 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 							break;
 						}
 					}
-					else
+
+					/* User / imported script class method: lookup method in klass vtable first */
+					XClosure* cl = NULL;
+					if (inst->klass)
 					{
-						/* User class method: lookup "ClassName.methodName" */
-						char user_mname[256];
-						snprintf(user_mname, sizeof(user_mname), "%s.%s", inst->class_name, method_name);
-						XValue mfn = xval_null();
-						if (xvm_get_global(vm, user_mname, &mfn))
+						cl = xclass_find_method(inst->klass, method_name, arg_count);
+					}
+						if (!cl)
 						{
-							XClosure* cl = NULL;
+							/* Fallback: lookup "ClassName.methodName#arity" then "ClassName.methodName" */
+							char user_mname[256];
+							snprintf(user_mname, sizeof(user_mname), "%s.%s#%d", cname, method_name, arg_count);
+							XValue mfn = xval_null();
+							if (!xvm_get_global(vm, user_mname, &mfn))
+							{
+								snprintf(user_mname, sizeof(user_mname), "%s.%s", cname, method_name);
+								xvm_get_global(vm, user_mname, &mfn);
+							}
 							if (mfn.type == VAL_CLOSURE) cl = mfn.as.closureval;
 							else if (mfn.type == VAL_FUNCTION && mfn.as.fnval) cl = xclosure_create(vm, mfn.as.fnval);
-							if (cl != NULL)
-							{
-								if (vm->frame_count >= VM_FRAMES_MAX)
-								{
-									fprintf(stderr, "VM Stack Overflow\n");
-									return VM_RUNTIME_ERROR;
-								}
-								xvm_push(vm, receiver);
-								for (int i = 0; i < arg_count; i++)
-								{
-									xvm_push(vm, args[i]);
-								}
-								XCallFrame* new_frame = &vm->frames[vm->frame_count++];
-								new_frame->closure = cl;
-								new_frame->ip = cl->function->chunk.code;
-								new_frame->slots = vm->stack_top - (arg_count + 1);
-								new_frame->return_slot = vm->stack_top - (arg_count + 1);
-								frame = new_frame;
-								break;
-							}
 						}
-					}
+
+						if (cl != NULL)
+						{
+							if (vm->frame_count >= VM_FRAMES_MAX)
+							{
+								fprintf(stderr, "VM Stack Overflow\n");
+								return VM_RUNTIME_ERROR;
+							}
+							xvm_push(vm, receiver);
+							for (int i = 0; i < arg_count; i++)
+							{
+								xvm_push(vm, args[i]);
+							}
+							XCallFrame* new_frame = &vm->frames[vm->frame_count++];
+							new_frame->closure = cl;
+							new_frame->ip = cl->function->chunk.code;
+							new_frame->slots = vm->stack_top - (arg_count + 1);
+							new_frame->return_slot = vm->stack_top - (arg_count + 1);
+							frame = new_frame;
+							break;
+						}
 				}
 				else if (receiver.type == VAL_STRING)
 				{
 					if (strcmp(method_name, "length") == 0 || strcmp(method_name, "size") == 0 || strcmp(method_name, "len") == 0)
 					{
 						xvm_push(vm, xval_int(receiver.as.sval ? (int64_t)strlen(receiver.as.sval) : 0));
+						break;
+					}
+					else if (strcmp(method_name, "get") == 0 && arg_count >= 1 && args[0].type == VAL_INT)
+					{
+						int idx = (int)args[0].as.ival;
+						const char* s = receiver.as.sval ? receiver.as.sval : "";
+						size_t slen = strlen(s);
+						if (idx >= 0 && (size_t)idx < slen)
+						{
+							char ch[2] = { s[idx], '\0' };
+							xvm_push(vm, xval_str(ch));
+						}
+						else
+						{
+							xvm_push(vm, xval_str(""));
+						}
+						break;
+					}
+
+					func_deftion* str_fn = NULL;
+					for (int fi = 0; fi < 30; fi++)
+					{
+						if (T_STRING->d_functions[fi].func_name != NULL &&
+						    strcmp(T_STRING->d_functions[fi].func_name, method_name) == 0)
+						{
+							str_fn = &T_STRING->d_functions[fi];
+							break;
+						}
+					}
+					if (str_fn != NULL && str_fn->func_code != NULL)
+					{
+						fcall fc;
+						memset(&fc, 0, sizeof(fcall));
+						fc.deftion = str_fn;
+						fc.parm_count_c = arg_count;
+
+						var ctx;
+						memset(&ctx, 0, sizeof(var));
+						ctx.type_define = T_STRING;
+						char* s_ctx = (char*)(receiver.as.sval ? receiver.as.sval : "");
+						ctx.value_str_ptr = &s_ctx;
+						ctx.values = &s_ctx;
+						fc.context = &ctx;
+
+						int i_buf[32];
+						float f_buf[32];
+						char* s_buf[32];
+						bool b_buf[32];
+						for (int i = 0; i < arg_count; i++)
+						{
+							if (args[i].type == VAL_INT)
+							{
+								i_buf[i] = (int)args[i].as.ival;
+								fc.func_parmeters[i].type_define = T_INT;
+								fc.func_parmeters[i].value_int = &i_buf[i];
+								fc.func_parmeters[i].values = &i_buf[i];
+							}
+							else if (args[i].type == VAL_FLOAT)
+							{
+								f_buf[i] = (float)args[i].as.fval;
+								fc.func_parmeters[i].type_define = T_FLOAT;
+								fc.func_parmeters[i].value_float = &f_buf[i];
+								fc.func_parmeters[i].values = &f_buf[i];
+							}
+							else if (args[i].type == VAL_STRING)
+							{
+								s_buf[i] = (char*)(args[i].as.sval ? args[i].as.sval : "");
+								fc.func_parmeters[i].type_define = T_STRING;
+								fc.func_parmeters[i].value_str_ptr = &s_buf[i];
+								fc.func_parmeters[i].values = &s_buf[i];
+							}
+							else if (args[i].type == VAL_BOOL)
+							{
+								b_buf[i] = args[i].as.bval;
+								fc.func_parmeters[i].type_define = T_BOOL;
+								fc.func_parmeters[i].value_bool = &b_buf[i];
+								fc.func_parmeters[i].values = &b_buf[i];
+							}
+						}
+
+						str_fn->func_code(&fc);
+
+						if (fc._return.type_define == T_INT && fc._return.value_int)
+							xvm_push(vm, xval_int(*fc._return.value_int));
+						else if (fc._return.type_define == T_FLOAT && fc._return.value_float)
+							xvm_push(vm, xval_float(*fc._return.value_float));
+						else if (fc._return.type_define == T_STRING && fc._return.value_str_ptr && *fc._return.value_str_ptr)
+							xvm_push(vm, xval_str(*fc._return.value_str_ptr));
+						else if (fc._return.type_define == T_BOOL && fc._return.value_bool)
+							xvm_push(vm, xval_bool(*fc._return.value_bool));
+						else if (fc._return.type_define != NULL && !is_base_type(fc._return.type_define))
+						{
+							const char* tname = fc._return.type_define->type_name ? fc._return.type_define->type_name : "Object";
+							int obj_id = 0;
+							type_instance* ti = fc._return.value_type_instsance ? fc._return.value_type_instsance : (type_instance*)fc._return.values;
+							if (ti != NULL)
+							{
+								obj_id = type_instance_get_id(ti);
+							}
+							else if (fc._return.value_int != NULL)
+							{
+								obj_id = *fc._return.value_int;
+							}
+							XInstance* inst = xinstance_create_with_id(vm, tname, obj_id);
+							xvm_push(vm, xval_obj(inst));
+						}
+						else
+							xvm_push(vm, xval_null());
 						break;
 					}
 				}
@@ -1468,4 +1912,14 @@ XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
 	}
 
 	return VM_OK;
+}
+
+XVmResult xvm_run(XVm* vm, XIrChunk* chunk)
+{
+	if (!vm || !chunk) return VM_RUNTIME_ERROR;
+	XVm* prev_vm = g_current_vm;
+	g_current_vm = vm;
+	XVmResult res = xvm_run_loop(vm, chunk);
+	g_current_vm = prev_vm;
+	return res;
 }

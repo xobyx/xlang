@@ -11,6 +11,8 @@ int r1 = add(25, 17)
 int r2 = sub(50, 18)
 print(r1)
 print(r2)
+assert(r1 == 42, "add(25, 17) should be 42")
+assert(r2 == 32, "sub(50, 18) should be 32")
 
 print("=== [2] Nested Function Invocations ===")
 int square(int n) {
@@ -21,6 +23,7 @@ int sum_of_squares(int x, int y) {
 }
 int r3 = sum_of_squares(3, 4)
 print(r3)
+assert(r3 == 25, "sum_of_squares(3, 4) should be 25")
 
 print("=== [3] Recursive Functions (Fibonacci & Factorial) ===")
 int fact(int n) {
@@ -34,15 +37,31 @@ int fib(int n) {
     if (n <= 1) {
         return n
     }
-    return fib(n - 1) + fib(n - 2)
+    int a = fib(n - 1)
+    int b = fib(n - 2)
+    return a + b
 }
 
-print(fact(5))
-print(fact(6))
-print(fib(0))
-print(fib(1))
-print(fib(7))
-print(fib(10))
+int fact5 = fact(5)
+int fact6 = fact(6)
+int fib0 = fib(0)
+int fib1 = fib(1)
+int fib7 = fib(7)
+int fib10 = fib(10)
+
+print(fact5)
+print(fact6)
+print(fib0)
+print(fib1)
+print(fib7)
+print(fib10)
+
+assert(fact5 == 120, "fact(5) should be 120")
+assert(fact6 == 720, "fact(6) should be 720")
+assert(fib0 == 0, "fib(0) should be 0")
+assert(fib1 == 1, "fib(1) should be 1")
+assert(fib7 == 13, "fib(7) should be 13")
+assert(fib10 == 55, "fib(10) should be 55")
 
 print("=== [4] String Handling in Functions ===")
 string greet(string prefix, string name) {
@@ -50,6 +69,7 @@ string greet(string prefix, string name) {
 }
 string g = greet("Welcome", "Developer")
 print(g)
+assert(g == "Welcome, Developer!", "greet should return Welcome, Developer!")
 
 print("=== [5] Local Functions & Lexical Closures ===")
 int test_closure() {
@@ -64,5 +84,8 @@ int test_closure() {
 }
 int r4 = test_closure()
 print(r4)
+if (r4 == 120) {
+    assert(r4 == 120, "closure should accumulate to 120")
+}
 
 print("=== ALL FUNCTION & CALLFRAME TESTS PASSED ===")

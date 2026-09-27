@@ -10,10 +10,6 @@ void var_stack_init(var_stack* s)
 	s->stack_holder = NULL;
 }
 
-void int_var(var* n)
-{
-}
-
 var* new_var_on_stack(var_stack* stack, char* vname, type_def* vtype)
 {
 	var* f = (var*)gc_calloc(1, sizeof(var), GC_KIND_VAR);

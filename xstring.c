@@ -441,8 +441,9 @@ void x_string_split(fcall* fc)
 	type_def* list_td = get_type_by_name("List");
 	if (is_str_method_call(fc) && list_td != NULL && !is_base_type(list_td))
 	{
-		type_instance* inst = (type_instance*)install_memory_with_type(list_td, 1);
-		var* id_prop = get_var_by_name_on_stack("id", &inst->propertys);
+		type_instance* inst = type_instance_create(list_td);
+		inst->id = list_id;
+		var* id_prop = type_instance_get_field(inst, "id");
 		if (id_prop != NULL && id_prop->value_int != NULL)
 		{
 			*id_prop->value_int = list_id;

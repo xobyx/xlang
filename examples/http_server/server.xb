@@ -22,6 +22,9 @@ class HttpServer() {
         is_running = 0
         request_count = 0
         items_list.id = list_new()
+        req.headers.id = map_new()
+        req.params.id = map_new()
+        resp.custom_headers.id = map_new()
     }
 
     int init(string host_ip, int listen_port) {

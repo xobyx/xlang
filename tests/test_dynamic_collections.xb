@@ -4,7 +4,7 @@ import "map.xb"
 print("=== Testing Dynamic Collections (List & Map) ===\n")
 
 // Test 1: List creation and adding elements
-List numbers
+List numbers = new List()
 numbers.add_int(10)
 numbers.add_int(20)
 numbers.add_int(30)
@@ -13,22 +13,31 @@ print("List size: %d\n", numbers.size())
 print("Element 0: %d\n", numbers.get_int(0))
 print("Element 1: %d\n", numbers.get_int(1))
 print("Element 2: %d\n", numbers.get_int(2))
+assert(numbers.size() == 3, "List size should be 3")
+assert(numbers.get_int(0) == 10, "Element 0 should be 10")
+assert(numbers.get_int(1) == 20, "Element 1 should be 20")
+assert(numbers.get_int(2) == 30, "Element 2 should be 30")
 
 // Test 2: List set and remove
 numbers.set_int(1, 99)
 print("Updated element 1: %d\n", numbers.get_int(1))
+assert(numbers.get_int(1) == 99, "Updated element 1 should be 99")
 
 numbers.remove_at(0)
 print("Size after remove: %d\n", numbers.size())
 print("New element 0: %d\n", numbers.get_int(0))
+assert(numbers.size() == 2, "Size after remove should be 2")
+assert(numbers.get_int(0) == 99, "New element 0 should be 99")
 
 // Test 3: List contains and index_of
 int has_99 = numbers.contains_int(99)
 int idx_99 = numbers.index_of_int(99)
 print("Contains 99: %d, Index: %d\n", has_99, idx_99)
+assert(has_99 == 1, "Should contain 99")
+assert(idx_99 == 0, "Index of 99 should be 0")
 
 // Test 4: String List and join
-List fruits
+List fruits = new List()
 fruits.add("apple")
 fruits.add("banana")
 fruits.add("cherry")
@@ -36,14 +45,18 @@ fruits.add("cherry")
 print("Fruits size: %d\n", fruits.size())
 print("Joined fruits: %s\n", fruits.join(", "))
 print("Fruits to_str: %s\n", fruits.to_str())
+assert(fruits.size() == 3, "Fruits size should be 3")
+assert(fruits.join(", ") == "apple, banana, cherry", "Joined fruits mismatch")
 
 // Test 5: List pop
 string popped = fruits.pop()
 print("Popped fruit: %s\n", popped)
 print("Size after pop: %d\n", fruits.size())
+assert(popped == "cherry", "Popped fruit should be cherry")
+assert(fruits.size() == 2, "Size after pop should be 2")
 
 // Test 6: List Subscript Indexing
-List arr
+List arr = new List()
 arr.add_int(100)
 arr.add_int(200)
 arr.add_int(300)
@@ -51,13 +64,16 @@ arr.add_int(300)
 int item0 = arr[0]
 int item1 = arr[1]
 print("arr[0] = %d, arr[1] = %d\n", item0, item1)
+assert(item0 == 100, "arr[0] should be 100")
+assert(item1 == 200, "arr[1] should be 200")
 
 arr[1] = 555
 int updated_item1 = arr[1]
 print("Updated arr[1] = %d\n", updated_item1)
+assert(updated_item1 == 555, "Updated arr[1] should be 555")
 
 // Test 7: Hash Map creation, put, and get
-Map config
+Map config = new Map()
 config.put("host", "localhost")
 config.put_int("port", 8080)
 config.put("env", "production")
@@ -66,24 +82,33 @@ print("Map size: %d\n", config.size())
 print("config['host'] = %s\n", config.get("host"))
 print("config['port'] = %d\n", config.get_int("port"))
 print("config['env'] = %s\n", config.get("env"))
+assert(config.size() == 3, "Map size should be 3")
+assert(config.get("host") == "localhost", "config['host'] should be localhost")
+assert(config.get_int("port") == 8080, "config['port'] should be 8080")
+assert(config.get("env") == "production", "config['env'] should be production")
 
 // Test 8: Map has and remove
 int has_port = config.has("port")
 print("Has port: %d\n", has_port)
+assert(has_port == 1, "Should have port")
 
 config.remove("env")
 print("Size after remove env: %d\n", config.size())
 int has_env = config.has("env")
 print("Has env after remove: %d\n", has_env)
+assert(config.size() == 2, "Size after remove should be 2")
+assert(has_env == 0, "Has env after remove should be 0")
 
 // Test 9: Map keys and to_string
 print("Map keys: %s\n", config.keys())
 print("Map to_str: %s\n", config.to_str())
 
 // Test 10: HashMap subclass test
-HashMap hm
+HashMap hm = new HashMap()
 hm.put("name", "Antigravity")
 hm.put("lang", "xlang")
 print("HashMap name: %s, lang: %s\n", hm.get("name"), hm.get("lang"))
+assert(hm.get("name") == "Antigravity", "HashMap name should be Antigravity")
+assert(hm.get("lang") == "xlang", "HashMap lang should be xlang")
 
 print("=== Dynamic Collections Tests Completed ===\n")

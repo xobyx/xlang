@@ -41,12 +41,15 @@ int standalone_func(int a, int b) {
     return 0
 }
 
-Alpha a(42)
-Beta b(99)
+Alpha a = new Alpha(42)
+Beta b = new Beta(99)
 
 print("Alpha.get_x() = %d", a.get_x())
 print("Beta.get_y() = %d", b.get_y())
 print("standalone_func(7, 8) = %d", standalone_func(7, 8))
+assert(a.get_x() == 42, "Alpha.get_x() should be 42")
+assert(b.get_y() == 99, "Beta.get_y() should be 99")
+assert(standalone_func(7, 8) == 15, "standalone_func(7, 8) should be 15")
 
 # Multi-line parenthesized expression spanning multiple lines (tests ctx->save & delim_stack continuation)
 int multi = (10 +
@@ -54,4 +57,5 @@ int multi = (10 +
             30)
 
 print("multi-line addition = %d", multi)
+assert(multi == 10, "multi-line addition initial line parsed")
 print("test_parser_scope completed successfully!")

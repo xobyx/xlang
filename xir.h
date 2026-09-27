@@ -32,12 +32,18 @@ typedef enum XIrOpCode {
 	OP_STORE_LOCAL,   /* operand: uint16 local slot index */
 
 	/* Members & Collections */
-	OP_LOAD_FIELD,    /* operand: uint16 symbol index */
-	OP_STORE_FIELD,   /* operand: uint16 symbol index */
+	OP_LOAD_FIELD,       /* operand: uint16 symbol index */
+	OP_STORE_FIELD,      /* operand: uint16 symbol index */
+	OP_GET_FIELD_INDEX,  /* operand: uint16 slot index */
+	OP_SET_FIELD_INDEX,  /* operand: uint16 slot index */
+	OP_LOAD_FIELD_SLOT = OP_GET_FIELD_INDEX,
+	OP_STORE_FIELD_SLOT = OP_SET_FIELD_INDEX,
 	OP_LOAD_INDEX,
 	OP_STORE_INDEX,
-	OP_BUILD_LIST,    /* operand: uint16 element count */
-	OP_NEW_INSTANCE,  /* operand: uint16 symbol index (class name), uint8 arg_count */
+	OP_BUILD_LIST,       /* operand: uint16 element count */
+	OP_NEW_INSTANCE,     /* operand: uint16 symbol index (class name), uint8 arg_count */
+	OP_CLASS,            /* operand: uint16 class_name sym, uint16 base_name sym, uint16 field_count, uint16 fields... */
+	OP_METHOD,           /* operand: uint16 class_name sym, uint16 method_name sym, uint8 arity */
 
 	/* Stack Operations */
 	OP_POP,
@@ -108,6 +114,7 @@ typedef enum XValueType {
 
 typedef struct XFunction XFunction;
 typedef struct XClosure XClosure;
+typedef struct XClass XClass;
 typedef struct XInstance XInstance;
 
 typedef struct XValue {

@@ -42,18 +42,20 @@ class Socket() {
     }
 }
 
-Socket server
+Socket server = new Socket()
 server.set_reuseaddr(1)
 server.bind("127.0.0.1", 19878)
 server.listen(5)
 
-Socket client
+Socket client = new Socket()
 client.connect("127.0.0.1", 19878)
 
 int peer_fd = server.accept()
+assert(peer_fd >= 0, "server.accept returned valid peer_fd")
 client.send("OOP Socket works!")
 string msg = socket_recv(peer_fd, 1024)
 print("OOP Server received: %s", msg)
+assert(msg == "OOP Socket works!", "msg == OOP Socket works!")
 
 client.close()
 socket_close(peer_fd)

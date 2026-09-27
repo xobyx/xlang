@@ -1,6 +1,15 @@
 import("regex.xb")
 
-Regex r("\d+")
-print("Match: %d", r.match("user_42"))
-print("Find: %s", r.find("user_42"))
-print("Replace: %s", r.replace("order 10 and 20", "NUM"))
+Regex r = new Regex("\d+")
+int m = r.match("user_42")
+string f = r.find("user_42")
+string rep = r.replace("order 10 and 20", "NUM")
+
+print("Match: %d", m)
+print("Find: %s", f)
+print("Replace: %s", rep)
+
+assert(m == 1, "regex match")
+assert(f == "42", "regex find")
+assert(rep == "order NUM and NUM", "regex replace")
+

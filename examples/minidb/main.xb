@@ -9,9 +9,9 @@ print("  In-Memory RDBMS with Hash Joins & Aggregations  ")
 print("==================================================")
 
 # Step 1: Database & Table Setup
-MiniDB db
-Table customers
-Table orders
+MiniDB db = new MiniDB()
+Table customers = new Table()
+Table orders = new Table()
 
 customers.init("customers", "id")
 customers.create_index("tier")
@@ -121,7 +121,7 @@ print("    Gross Merchandise Value (GMV): $%d", total_gmv)
 print("    Average Order Value (AOV):      $%d", avg_order)
 
 # Group-By Category Aggregation
-List cat_groups
+List cat_groups = new List()
 Map cat_sums = db.group_by_sum(orders, "category", "amount", cat_groups)
 print("\n    Revenue Breakdown by Product Category:")
 int cgi = 0

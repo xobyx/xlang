@@ -41,9 +41,6 @@ __pragma(warning(disable: 4996));
  */
 
 
-#define dont_compile 1
-extern void save_file(char* r,node_stack* a,unsigned int MD5_hash[4]);
-extern void read_file_parse( FILE* f,node_stack* nodes);
 extern  node_stack * nodes;
 extern   var_stack * varss;
 extern var_stack * t_varss;

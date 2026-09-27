@@ -32,25 +32,6 @@ char* getchar_x(const char f)
 
 
 
-/*if(op=='+') return FCAST(ac.,ac.value)+*(type*)y;
-else if(op=='-') return (*(type*)x)-(*(type*)y);
-else if(op=='*') return (*(type*)x)*(*(type*)y);
-else if(op=='/') return (*(type*)x)/(*(type*)y);*/
-
-
-#define MOP(type1,x,op,type2,y) if(op=='+') return *(type*)x+*(type*)y;\
-					else if(op=='-') return (*(type*)x)-(*(type*)y);\
-					else if(op=='*') return (*(type*)x)*(*(type*)y);\
-					else if(op=='/') return (*(type*)x)/(*(type*)y);
-
-
-#define VP(T) ((T*)(x[l].value))
-#define V(T)  *(T*)x[INDEX].value
-//#define VVP(INDEX)     x[INDEX].value
-
-
-#define size_index TYPE::size|TYPE::index
-//enum base_type {	INT,CHAR,STRING,LONG};
 
 void inherit_parent_flag(node* current_node, node* next_node)
 {
@@ -1233,20 +1214,8 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 				}
 
 				n_node->value_raw = mfind->bn;
-
-
-				//v2//var m =var();
-				//v2//m.value=new int(atoi(mfind->bn));
-				//v2//m.ref=&d;
-				//v2//strcpy_s(m.name,"INPUT");
-				//v2//var * on_it= getVar(&d);
-				//v2//strcpy_s(m.var_type,on_it->var_type);
-
 				n_node->next = next;
 				next->parent = n_node;
-				//v2//d->opt=&m;
-
-				//setVar(&d);
 				parse_line_ctx(ctx, buff + strlen(mfind->bn), next, line);
 				return;
 			}
@@ -1277,7 +1246,6 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 			n_node->type_ = var_name;
 			next->parent = n_node;
 			n_node->next = next;
-			//v2//d->opt=&rv;
 
 			if (n_node->opt_name_type == fucnction_parm)
 			{
@@ -1437,10 +1405,6 @@ void parse_line_ctx(ParserContext* ctx, char* buff, node* n_node, const int line
 
 					if (n_node->parent != NULL)
 						next->opt_raw = n_node->parent->opt_raw;
-
-					//v2//var temps ;var* main=(var*)d->parent->opt;
-					//v2//strcpy_s(temps.var_type ,main->var_type);
-					//v2//temps.value = new int(1);
 
 					parse_line_ctx(ctx, i + 1, next, line);
 					return;

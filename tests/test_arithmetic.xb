@@ -10,7 +10,14 @@ print(sub)
 print(mul)
 print(div)
 print(mod)
+assert(add == 13, "add should be 13")
+assert(sub == 7, "sub should be 7")
+assert(mul == 30, "mul should be 30")
+assert(div == 3, "div should be 3")
+assert(mod == 1, "mod should be 1")
+
 float f1 = 5.5
 float f2 = 2.0
 float f3 = f1 + f2
 print(f3)
+assert(f3 == 7.5, "f3 should be 7.5")

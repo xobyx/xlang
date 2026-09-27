@@ -6,7 +6,7 @@
 	S->size = 0;
 	S->top = NULL;
 	S->root = NULL;
-	S->max_a=0;	
+	S->max_a=0;
 	S->nlist=NULL;
 
 
@@ -14,7 +14,7 @@
 
  node * new_node(node_stack* n)
  {
-      
+
         node * f;
         f = (node *)malloc(sizeof(node));
         memset(f, 0, sizeof(node));
@@ -23,30 +23,21 @@
 		return f;
  }
 
- node* get_node_id(node_stack* s,int id)
- {
- int index = id -1;
- if(id > s->max_a  ) //1,[2-max_a],..[for-loop-fill]....[id-new-max-a]
- {
-    s->nlist =(node**) ( realloc(s->nlist,sizeof(node*) * (id)));
-
-
-    for(int m = s->max_a ;m<= index ; m++)  //
-    {
-        s->nlist[m] = new_node(s);
-        s->nlist[m]->id= m+1;
-    }
-    s->max_a = id;
-
-
- }
-
-   // s->pos_id= id;
-return s->nlist[index];
-
-
-
- }
+	node* get_node_id(node_stack* s, int id)
+	{
+		int index = id - 1;
+		if (id > s->max_a)
+		{
+			s->nlist = (node**)realloc(s->nlist, sizeof(node*) * id);
+			for (int m = s->max_a; m <= index; m++)
+			{
+				s->nlist[m] = new_node(s);
+				s->nlist[m]->id = m + 1;
+			}
+			s->max_a = id;
+		}
+		return s->nlist[index];
+	}
 
 
 
@@ -77,7 +68,7 @@ return s->nlist[index];
 	while (bi != NULL)
 	{
 		node* next = bi->stack_next;
-		if ((bi->btype.value & a) != 0)
+		if (!g_lex_arena && (bi->btype.value & a) != 0)
 		{
 			free(bi->value_raw);
 		}

@@ -76,11 +76,13 @@ static var* lookup_var(const node* n, fcall* calling_function, var* calling_obje
 
 	if (v == NULL && calling_object != NULL)
 	{
+		if (strcmp(n->value_char_ptr, "this") == 0)
+			return calling_object;
 		type_instance* inst = calling_object->value_type_instsance;
 		if (inst == NULL && calling_object->values != NULL && !is_base_type(calling_object->type_define))
 			inst = (type_instance*)calling_object->values;
 		if (inst != NULL)
-			v = get_var_by_name_on_stack(n->value_char_ptr, &inst->propertys);
+			v = type_instance_get_field(inst, n->value_char_ptr);
 	}
 
 	if (v == NULL)
@@ -101,7 +103,7 @@ static var* lookup_member(const node* n, var* object)
 	if (inst == NULL)
 		return NULL;
 
-	return get_var_by_name_on_stack(n->value_char_ptr, &inst->propertys);
+	return type_instance_get_field(inst, n->value_char_ptr);
 }
 
 /*
@@ -111,7 +113,7 @@ static var* lookup_member(const node* n, var* object)
  * so the caller can never loop forever on the same node.
  */
 static bool eval_name(node** nod, fcall* calling_function, var* calling_object,
-                      var** pmvar, bool* after_dot, type_def** pstatic_class)
+                      var** pmvar, bool* after_dot, type_def** pstatic_class, bool has_new)
 {
 	node* n = *nod;
 	var* mvar = *pmvar;
@@ -212,6 +214,12 @@ static bool eval_name(node** nod, fcall* calling_function, var* calling_object,
 				type_def* td = get_type_by_name(n->value_char_ptr);
 				if (td != NULL && !is_base_type(td))
 				{
+					if (!has_new)
+					{
+						XERROR(n->line, "cannot instantiate class '%s' without 'new'; use 'new %s(...)'",
+						       td->type_name, td->type_name);
+						exit(1);
+					}
 					int arg_count = 0;
 					node* p4 = n->next;
 					if (p4 != NULL && p4->type_ == parentheses4)
@@ -324,7 +332,7 @@ fail:
 	return false;
 }
 
-var* name_exp(node** nod, fcall* calling_function, var* calling_object, node_type stop_in_type, node* stop_in_node)
+var* name_exp(node** nod, fcall* calling_function, var* calling_object, node_type stop_in_type, node* stop_in_node, bool has_new)
 {
 	var* mvar = NULL;
 	bool after_dot = false;
@@ -340,7 +348,7 @@ var* name_exp(node** nod, fcall* calling_function, var* calling_object, node_typ
 			break;
 
 		case var_name:
-			if (!eval_name(nod, calling_function, calling_object, &mvar, &after_dot, &static_class))
+			if (!eval_name(nod, calling_function, calling_object, &mvar, &after_dot, &static_class, has_new))
 				return NULL;
 			break;
 
@@ -394,7 +402,8 @@ var* name_exp(node** nod, fcall* calling_function, var* calling_object, node_typ
 					mvar->size = 1;
 					mvar->values = install_memory_with_type(list_td, 1);
 					mvar->value_type_instsance = (type_instance*)mvar->values;
-					var* id_prop = get_var_by_name_on_stack("id", &mvar->value_type_instsance->propertys);
+					mvar->value_type_instsance->id = list_id;
+					var* id_prop = type_instance_get_field(mvar->value_type_instsance, "id");
 					if (id_prop != NULL && id_prop->value_int != NULL)
 						*id_prop->value_int = list_id;
 				}
@@ -424,6 +433,11 @@ var* name_exp(node** nod, fcall* calling_function, var* calling_object, node_typ
 
 		case value:
 		{
+			if (has_new)
+			{
+				XERROR((*nod)->line, "'new' must be followed by a class name");
+				exit(1);
+			}
 			mvar = new_temp_var((*nod)->opt_type_ptr);
 			mvar->values = install_memory_with_type((*nod)->opt_type_ptr, 1);
 			set_value_copy_node(mvar, *nod);
@@ -464,15 +478,15 @@ void move(var* calc_result, void* memory, int* i, var* name_var)
 	}
 
 	if (t == T_INT)
-		((int*)memory)[(*i)++] = *name_var->value_int;
+		((int*)memory)[(*i)++] = name_var->value_int != NULL ? *name_var->value_int : 0;
 	else if (t == T_FLOAT)
-		((float*)memory)[(*i)++] = *name_var->value_float;
+		((float*)memory)[(*i)++] = name_var->value_float != NULL ? *name_var->value_float : 0.0f;
 	else if (t == T_LONG)
-		((long*)memory)[(*i)++] = *name_var->value_long;
+		((long*)memory)[(*i)++] = name_var->value_long != NULL ? *name_var->value_long : 0L;
 	else if (t == T_CHAR)
-		((char*)memory)[(*i)++] = *name_var->value_char_ptr;
+		((char*)memory)[(*i)++] = name_var->value_char_ptr != NULL ? *name_var->value_char_ptr : '\0';
 	else if (t == T_BOOL)
-		((bool*)memory)[(*i)++] = *name_var->value_bool;
+		((bool*)memory)[(*i)++] = name_var->value_bool != NULL ? *name_var->value_bool : false;
 	else if (t == T_STRING)
 	{
 		const char* src = "";
@@ -495,7 +509,12 @@ void move(var* calc_result, void* memory, int* i, var* name_var)
 		if (src == NULL && name_var->values != NULL)
 			src = (type_instance*)name_var->values;
 		if (src != NULL)
-			copy_object(src, (type_instance*)memory + (*i)++, 1);
+		{
+			calc_result->value_type_instsance = src;
+			calc_result->values = src;
+			if (memory != NULL)
+				((type_instance**)memory)[(*i)++] = src;
+		}
 	}
 }
 
@@ -866,6 +885,7 @@ node* calc(node* cnode, fcall* calling_function, var* calling_object, node_type 
 		calc_result = new_temp_var(NULL); /* evaluate for side effects only */
 
 	type_def* saved_return_type = calc_result->type_define;
+	bool has_new = false;
 
 	while (!is_expression_end(mnode))
 	{
@@ -874,6 +894,7 @@ node* calc(node* cnode, fcall* calling_function, var* calling_object, node_type 
 
 		if (expect_operand && mnode->type_ == keyword && mnode->value_keyword == _new_)
 		{
+			has_new = true;
 			step(&mnode);
 			continue;
 		}
@@ -903,7 +924,8 @@ node* calc(node* cnode, fcall* calling_function, var* calling_object, node_type 
 		{
 			const bool by_ref = (val_top == 0 && mnode->type_ == var_name && mnode->opt_name_type == var_call_ref);
 			node* before = mnode;
-			var* operand = name_exp(&mnode, calling_function, calling_object, stop_in_type, stop_in_node);
+			var* operand = name_exp(&mnode, calling_function, calling_object, stop_in_type, stop_in_node, has_new);
+			has_new = false;
 
 			if (operand == NULL)
 			{
@@ -1051,6 +1073,14 @@ node* calc(node* cnode, fcall* calling_function, var* calling_object, node_type 
 					*bmem = bval;
 				calc_result->values = bmem;
 				calc_result->type_define = T_BOOL;
+			}
+			else if (final_val->type_define != NULL && is_base_type(final_val->type_define))
+			{
+				calc_result->type_define = final_val->type_define;
+				calc_result->size = final_val->size > 0 ? final_val->size : 1;
+				calc_result->values = install_memory_with_type(calc_result->type_define, calc_result->size);
+				int count = 0;
+				move(calc_result, calc_result->values, &count, final_val);
 			}
 			else
 			{

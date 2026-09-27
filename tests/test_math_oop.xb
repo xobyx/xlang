@@ -1,27 +1,38 @@
 import("math.xb")
 
-Math m
+Math m = new Math()
 float sq = m.sqrt(25.0)
 print("Math.sqrt(25.0) = %f", sq)
+assert(sq == 5.0, "Math.sqrt(25.0) should be 5.0")
 
 float p = m.pow(2.0, 4.0)
 print("Math.pow(2, 4) = %f", p)
+assert(p == 16.0, "Math.pow(2, 4) should be 16.0")
 
 int a = m.abs(0 - 99)
 print("Math.abs(-99) = %d", a)
+assert(a == 99, "Math.abs(-99) should be 99")
 
 int mn = m.min(30, 40)
 int mx = m.max(30, 40)
 print("Math.min/max = %d %d", mn, mx)
+assert(mn == 30, "Math.min(30, 40) should be 30")
+assert(mx == 40, "Math.max(30, 40) should be 40")
 
 float fl = m.floor(5.8)
 float cl = m.ceil(5.2)
 float rd = m.round(5.5)
 print("Math.floor/ceil/round = %f %f %f", fl, cl, rd)
+assert(fl == 5.0, "Math.floor(5.8) should be 5.0")
+assert(cl == 6.0, "Math.ceil(5.2) should be 6.0")
+assert(rd == 6.0, "Math.round(5.5) should be 6.0")
 
 float s = m.sin(0.0)
 float c = m.cos(0.0)
 print("Math.sin/cos(0) = %f %f", s, c)
+assert(s == 0.0, "Math.sin(0.0) should be 0.0")
+assert(c == 1.0, "Math.cos(0.0) should be 1.0")
 
 float l = m.log(1.0)
 print("Math.log(1.0) = %f", l)
+assert(l == 0.0, "Math.log(1.0) should be 0.0")

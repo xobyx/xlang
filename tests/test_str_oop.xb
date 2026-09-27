@@ -1,17 +1,35 @@
 import("str.xb")
 
-Str st("  Hello OOP Str 789  ")
+Str st = new Str("  Hello OOP Str 789  ")
 print("Length: %d", st.len())
+assert(st.len() == 21, "st.len() should be 21")
 
 string tr = st.trim()
 print("Trim: '%s'", tr)
+assert(tr == "Hello OOP Str 789", "trim should remove leading and trailing spaces")
 
-Str st2(tr)
+Str st2 = new Str(tr)
 print("Lower: %s", st2.to_lower())
+assert(st2.to_lower() == "hello oop str 789", "to_lower should convert to lowercase")
+
 print("Upper: %s", st2.to_upper())
+assert(st2.to_upper() == "HELLO OOP STR 789", "to_upper should convert to uppercase")
+
 print("Substr: %s", st2.substr(0, 5))
+assert(st2.substr(0, 5) == "Hello", "substr(0, 5) should be Hello")
+
 print("IndexOf: %d", st2.index_of("OOP"))
+assert(st2.index_of("OOP") == 6, "index_of OOP should be 6")
+
 print("Starts/Ends: %d %d", st2.starts_with("Hello"), st2.ends_with("789"))
+assert(st2.starts_with("Hello") == 1, "starts_with Hello should be 1")
+assert(st2.ends_with("789") == 1, "ends_with 789 should be 1")
+
 print("Regex match: %d", st2.regex_match("\d+"))
+assert(st2.regex_match("\d+") == 1, "regex_match digits should be 1")
+
 print("Regex find: %s", st2.regex_find("\d+"))
+assert(st2.regex_find("\d+") == "789", "regex_find digits should be 789")
+
 print("Regex replace: %s", st2.regex_replace("\d+", "000"))
+assert(st2.regex_replace("\d+", "000") == "Hello OOP Str 000", "regex_replace should replace 789 with 000")

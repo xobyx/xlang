@@ -3,3 +3,4 @@ return a + b
 }
 int res = add(10, 25)
 print(res)
+assert(res == 35, "add(10, 25) should be 35")

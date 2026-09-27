@@ -1,47 +1,27 @@
 #include "type_stack.h"
 
-
-
- void type_stack_init(type_stack * S) {
+void type_stack_init(type_stack* S)
+{
 	S->size = 0;
 	S->top = NULL;
 	S->root = NULL;
-	
-	
 }
- void int_type(type_def * n)
+
+type_def* new_type_stack(type_stack* n)
 {
-	
-	
-
-
-	
-	
-	
-
-
+	type_def* f = (type_def*)calloc(1, sizeof(type_def));
+	type_stack_push(n, f);
+	return f;
 }
-type_def * new_type_stack(type_stack* n)
- {
-        type_def* f= (type_def*)calloc(1,sizeof(type_def));
-		//f-.type_id=n->size;
-		int_type(f);
-		type_stack_push(n,f);
-		return f;
 
- }
- void type_stack_push(type_stack * stk, type_def * el) {
-    // Increment number of elements.
+void type_stack_push(type_stack* stk, type_def* el)
+{
 	stk->size++;
-	if(stk->root==NULL) stk->root=el;
-    // Set el to point to current stack top as its next element.
-	
-	if(stk->top!=NULL)
-		stk->top->stack_next=el;
-    // Set el to be the top element of S.
-    stk->top = el;
-
-	
+	if (stk->root == NULL)
+		stk->root = el;
+	if (stk->top != NULL)
+		stk->top->stack_next = el;
+	stk->top = el;
 }
 
 extern type_def SIMPLE_TYPE[];

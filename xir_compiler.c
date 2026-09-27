@@ -4,6 +4,7 @@
 typedef struct XIrLocal {
 	char* name;
 	int depth;
+	char* type_name;
 } XIrLocal;
 
 typedef struct XIrLoop {
@@ -28,9 +29,11 @@ typedef struct XCompiler {
 	XCompilerUpvalue upvalues[64];
 	int upvalue_count;
 	XIrLoop* current_loop;
+	const AstProgram* program;
+	const AstStmt* current_class;
 } XCompiler;
 
-static void compiler_init(XCompiler* c, XIrChunk* chunk)
+static void compiler_init(XCompiler* c, XIrChunk* chunk, const AstProgram* program)
 {
 	c->enclosing = NULL;
 	c->function = NULL;
@@ -39,6 +42,8 @@ static void compiler_init(XCompiler* c, XIrChunk* chunk)
 	c->scope_depth = 0;
 	c->upvalue_count = 0;
 	c->current_loop = NULL;
+	c->program = program;
+	c->current_class = NULL;
 }
 
 static void enter_scope(XCompiler* c)
@@ -55,6 +60,10 @@ static void exit_scope(XCompiler* c, int line)
 		if (c->locals[c->local_count - 1].name)
 		{
 			free(c->locals[c->local_count - 1].name);
+		}
+		if (c->locals[c->local_count - 1].type_name)
+		{
+			free(c->locals[c->local_count - 1].type_name);
 		}
 		c->local_count--;
 	}
@@ -73,12 +82,147 @@ static int resolve_local(XCompiler* c, const char* name)
 	return -1;
 }
 
-static void add_local(XCompiler* c, const char* name)
+static void add_local(XCompiler* c, const char* name, const char* type_name)
 {
 	if (c->local_count >= 256) return;
 	c->locals[c->local_count].name = strdup(name ? name : "");
 	c->locals[c->local_count].depth = c->scope_depth;
+	c->locals[c->local_count].type_name = type_name ? strdup(type_name) : NULL;
 	c->local_count++;
+}
+
+static const char* resolve_var_type(XCompiler* c, const char* name)
+{
+	if (!c || !name) return NULL;
+	if (strcmp(name, "this") == 0 && c->current_class != NULL)
+	{
+		return c->current_class->as.class_decl.name;
+	}
+	for (XCompiler* cur = c; cur != NULL; cur = cur->enclosing)
+	{
+		for (int i = cur->local_count - 1; i >= 0; i--)
+		{
+			if (cur->locals[i].name && strcmp(cur->locals[i].name, name) == 0)
+			{
+				if (cur->locals[i].type_name) return cur->locals[i].type_name;
+			}
+		}
+	}
+	/* Check top-level statements */
+	if (c->program)
+	{
+		for (int i = 0; i < c->program->statement_count; i++)
+		{
+			const AstStmt* s = c->program->statements[i];
+			if (s && s->type == AST_STMT_VAR_DECL && s->as.var_decl.var_name &&
+			    strcmp(s->as.var_decl.var_name, name) == 0)
+			{
+				return s->as.var_decl.type_name;
+			}
+		}
+	}
+	/* Check if it's a field on current class */
+	if (c->current_class)
+	{
+		for (int i = 0; i < c->current_class->as.class_decl.member_count; i++)
+		{
+			const AstStmt* m = c->current_class->as.class_decl.members[i];
+			if (m && m->type == AST_STMT_VAR_DECL && m->as.var_decl.var_name &&
+			    strcmp(m->as.var_decl.var_name, name) == 0)
+			{
+				return m->as.var_decl.type_name;
+			}
+		}
+	}
+	return NULL;
+}
+
+static const AstStmt* find_class_in_program(const AstProgram* prog, const char* name)
+{
+	if (!prog || !name) return NULL;
+	for (int i = 0; i < prog->statement_count; i++)
+	{
+		const AstStmt* s = prog->statements[i];
+		if (s && s->type == AST_STMT_CLASS_DECL && s->as.class_decl.name &&
+		    strcmp(s->as.class_decl.name, name) == 0)
+		{
+			return s;
+		}
+	}
+	return NULL;
+}
+
+static int get_class_field_count(const AstProgram* prog, const AstStmt* cls)
+{
+	if (!cls || cls->type != AST_STMT_CLASS_DECL) return 0;
+	int count = 0;
+	if (cls->as.class_decl.base_name)
+	{
+		const AstStmt* base = find_class_in_program(prog, cls->as.class_decl.base_name);
+		if (base) count += get_class_field_count(prog, base);
+	}
+	for (int i = 0; i < cls->as.class_decl.member_count; i++)
+	{
+		const AstStmt* m = cls->as.class_decl.members[i];
+		if (m && m->type == AST_STMT_VAR_DECL && !m->as.var_decl.is_static)
+		{
+			count++;
+		}
+	}
+	return count;
+}
+
+static int get_class_field_slot(const AstProgram* prog, const AstStmt* cls, const char* field_name)
+{
+	if (!cls || !field_name || cls->type != AST_STMT_CLASS_DECL) return -1;
+	int base_count = 0;
+	if (cls->as.class_decl.base_name)
+	{
+		const AstStmt* base = find_class_in_program(prog, cls->as.class_decl.base_name);
+		if (base)
+		{
+			int base_slot = get_class_field_slot(prog, base, field_name);
+			if (base_slot >= 0) return base_slot;
+			base_count = get_class_field_count(prog, base);
+		}
+	}
+	int cur_idx = 0;
+	for (int i = 0; i < cls->as.class_decl.member_count; i++)
+	{
+		const AstStmt* m = cls->as.class_decl.members[i];
+		if (m && m->type == AST_STMT_VAR_DECL && !m->as.var_decl.is_static)
+		{
+			if (m->as.var_decl.var_name && strcmp(m->as.var_decl.var_name, field_name) == 0)
+			{
+				return base_count + cur_idx;
+			}
+			cur_idx++;
+		}
+	}
+	return -1;
+}
+
+static const AstStmt* find_class_method(const AstProgram* prog, const AstStmt* cls, const char* method_name, int arity)
+{
+	if (!cls || !method_name || cls->type != AST_STMT_CLASS_DECL) return NULL;
+	for (int i = 0; i < cls->as.class_decl.member_count; i++)
+	{
+		const AstStmt* m = cls->as.class_decl.members[i];
+		if (m && m->type == AST_STMT_FUNC_DECL && m->as.func_decl.name &&
+		    strcmp(m->as.func_decl.name, method_name) == 0)
+		{
+			if (arity == -1 || m->as.func_decl.param_count == arity)
+			{
+				return m;
+			}
+		}
+	}
+	if (cls->as.class_decl.base_name)
+	{
+		const AstStmt* base = find_class_in_program(prog, cls->as.class_decl.base_name);
+		if (base) return find_class_method(prog, base, method_name, arity);
+	}
+	return NULL;
 }
 
 static int add_upvalue(XCompiler* c, uint8_t index, bool is_local)
@@ -113,6 +257,26 @@ static int resolve_upvalue(XCompiler* c, const char* name)
 	}
 
 	return -1;
+}
+
+/* Returns true for built-in primitive type names (int, float, string, bool, …).
+ * Any name that is NOT in this list is treated as a potential user-defined class.
+ * We cannot rely on get_type_by_name() here because in --vm mode the interpreter
+ * type-registry is never populated (g_parse_only = true skips compile()), so user
+ * class types would always appear as NULL and OP_NEW_INSTANCE would never be emitted. */
+static bool is_primitive_type_name(const char* name)
+{
+	if (!name) return true;
+	return (strcmp(name, "int")    == 0 ||
+	        strcmp(name, "float")  == 0 ||
+	        strcmp(name, "string") == 0 ||
+	        strcmp(name, "bool")   == 0 ||
+	        strcmp(name, "long")   == 0 ||
+	        strcmp(name, "void")   == 0 ||
+	        strcmp(name, "byte")   == 0 ||
+	        strcmp(name, "char")   == 0 ||
+	        strcmp(name, "null")   == 0 ||
+	        strcmp(name, "auto")   == 0);
 }
 
 /* Forward declarations */
@@ -157,27 +321,46 @@ static void compile_expr_node(XCompiler* c, const AstExpr* expr)
 
 	case AST_EXPR_IDENTIFIER:
 		{
-			int local_slot = resolve_local(c, expr->as.identifier_name);
+			const char* name = expr->as.identifier_name;
+			int local_slot = resolve_local(c, name);
 			if (local_slot != -1)
 			{
 				xir_emit_op(c->chunk, OP_LOAD_LOCAL, line);
 				xir_emit_short(c->chunk, (uint16_t)local_slot, line);
+				break;
 			}
-			else
+
+			int upvalue_slot = resolve_upvalue(c, name);
+			if (upvalue_slot != -1)
 			{
-				int upvalue_slot = resolve_upvalue(c, expr->as.identifier_name);
-				if (upvalue_slot != -1)
+				xir_emit_op(c->chunk, OP_GET_UPVALUE, line);
+				xir_emit_byte(c->chunk, (uint8_t)upvalue_slot, line);
+				break;
+			}
+
+			if (c->current_class != NULL && strcmp(name, "this") == 0)
+			{
+				xir_emit_op(c->chunk, OP_LOAD_LOCAL, line);
+				xir_emit_short(c->chunk, 0, line);
+				break;
+			}
+
+			if (c->current_class != NULL)
+			{
+				int fslot = get_class_field_slot(c->program, c->current_class, name);
+				if (fslot >= 0)
 				{
-					xir_emit_op(c->chunk, OP_GET_UPVALUE, line);
-					xir_emit_byte(c->chunk, (uint8_t)upvalue_slot, line);
-				}
-				else
-				{
-					int s_idx = xir_add_symbol(c->chunk, expr->as.identifier_name);
-					xir_emit_op(c->chunk, OP_LOAD_GLOBAL, line);
-					xir_emit_short(c->chunk, (uint16_t)s_idx, line);
+					xir_emit_op(c->chunk, OP_LOAD_LOCAL, line);
+					xir_emit_short(c->chunk, 0, line);
+					xir_emit_op(c->chunk, OP_GET_FIELD_INDEX, line);
+					xir_emit_short(c->chunk, (uint16_t)fslot, line);
+					break;
 				}
 			}
+
+			int s_idx = xir_add_symbol(c->chunk, name);
+			xir_emit_op(c->chunk, OP_LOAD_GLOBAL, line);
+			xir_emit_short(c->chunk, (uint16_t)s_idx, line);
 			break;
 		}
 
@@ -280,27 +463,23 @@ static void compile_expr_node(XCompiler* c, const AstExpr* expr)
 				xir_emit_short(c->chunk, 0xFFFF, line);
 				xir_emit_byte(c->chunk, (uint8_t)expr->as.call.arg_count, line);
 			}
+			else if (c->current_class != NULL &&
+			         find_class_method(c->program, c->current_class, expr->as.call.name, expr->as.call.arg_count) != NULL)
+			{
+				/* Implicit 'this' method invocation */
+				xir_emit_op(c->chunk, OP_LOAD_LOCAL, line);
+				xir_emit_short(c->chunk, 0, line);
+				for (int i = 0; i < expr->as.call.arg_count; i++)
+				{
+					compile_expr_node(c, expr->as.call.args[i]);
+				}
+				int s_idx = xir_add_symbol(c->chunk, expr->as.call.name);
+				xir_emit_op(c->chunk, OP_CALL_METHOD, line);
+				xir_emit_short(c->chunk, (uint16_t)s_idx, line);
+				xir_emit_byte(c->chunk, (uint8_t)expr->as.call.arg_count, line);
+			}
 			else
 			{
-				/* Check if calling a ClassName(...) constructor */
-				type_def* class_td = get_type_by_name((char*)expr->as.call.name);
-				if ((class_td != NULL && !is_base_type(class_td)) ||
-				    strcmp(expr->as.call.name, "List") == 0 ||
-				    strcmp(expr->as.call.name, "Map") == 0 ||
-				    strcmp(expr->as.call.name, "HashMap") == 0 ||
-				    strcmp(expr->as.call.name, "DateTime") == 0)
-				{
-					for (int i = 0; i < expr->as.call.arg_count; i++)
-					{
-						compile_expr_node(c, expr->as.call.args[i]);
-					}
-					int s_idx = xir_add_symbol(c->chunk, expr->as.call.name);
-					xir_emit_op(c->chunk, OP_NEW_INSTANCE, line);
-					xir_emit_short(c->chunk, (uint16_t)s_idx, line);
-					xir_emit_byte(c->chunk, (uint8_t)expr->as.call.arg_count, line);
-					break;
-				}
-
 				/* Named global call */
 				for (int i = 0; i < expr->as.call.arg_count; i++)
 				{
@@ -321,7 +500,7 @@ static void compile_expr_node(XCompiler* c, const AstExpr* expr)
 			{
 				const char* obj_name = expr->as.method_call.object->as.identifier_name;
 				if (resolve_local(c, obj_name) == -1 && resolve_upvalue(c, obj_name) == -1 &&
-				    get_type_by_name((char*)obj_name) != NULL)
+				    (get_type_by_name((char*)obj_name) != NULL || find_class_in_program(c->program, obj_name) != NULL))
 				{
 					char static_full_name[256];
 					snprintf(static_full_name, sizeof(static_full_name), "%s.%s", obj_name, expr->as.method_call.method_name);
@@ -351,10 +530,52 @@ static void compile_expr_node(XCompiler* c, const AstExpr* expr)
 
 	case AST_EXPR_MEMBER:
 		{
+			/* Check for static field access: ClassName.static_var */
+			if (expr->as.member.object->type == AST_EXPR_IDENTIFIER)
+			{
+				const char* obj_name = expr->as.member.object->as.identifier_name;
+				if (resolve_local(c, obj_name) == -1 && resolve_upvalue(c, obj_name) == -1)
+				{
+					const AstStmt* cls = find_class_in_program(c->program, obj_name);
+					if (cls != NULL)
+					{
+						char static_full_name[256];
+						snprintf(static_full_name, sizeof(static_full_name), "%s.%s", obj_name, expr->as.member.member_name);
+						int s_idx = xir_add_symbol(c->chunk, static_full_name);
+						xir_emit_op(c->chunk, OP_LOAD_GLOBAL, line);
+						xir_emit_short(c->chunk, (uint16_t)s_idx, line);
+						break;
+					}
+				}
+			}
+
+			int slot = -1;
+			if (expr->as.member.object->type == AST_EXPR_IDENTIFIER)
+			{
+				const char* obj_name = expr->as.member.object->as.identifier_name;
+				const char* tname = resolve_var_type(c, obj_name);
+				if (tname != NULL)
+				{
+					const AstStmt* cls = find_class_in_program(c->program, tname);
+					if (cls != NULL)
+					{
+						slot = get_class_field_slot(c->program, cls, expr->as.member.member_name);
+					}
+				}
+			}
+
 			compile_expr_node(c, expr->as.member.object);
-			int s_idx = xir_add_symbol(c->chunk, expr->as.member.member_name);
-			xir_emit_op(c->chunk, OP_LOAD_FIELD, line);
-			xir_emit_short(c->chunk, (uint16_t)s_idx, line);
+			if (slot >= 0)
+			{
+				xir_emit_op(c->chunk, OP_GET_FIELD_INDEX, line);
+				xir_emit_short(c->chunk, (uint16_t)slot, line);
+			}
+			else
+			{
+				int s_idx = xir_add_symbol(c->chunk, expr->as.member.member_name);
+				xir_emit_op(c->chunk, OP_LOAD_FIELD, line);
+				xir_emit_short(c->chunk, (uint16_t)s_idx, line);
+			}
 			break;
 		}
 
@@ -377,47 +598,77 @@ static void compile_expr_node(XCompiler* c, const AstExpr* expr)
 		{
 			const AstExpr* target = expr->as.assign.target;
 			const char* op = expr->as.assign.op;
-
-			/* Handle compound assignment: target += val -> target = target + val */
 			bool is_compound = (op && strcmp(op, "=") != 0);
-
-			if (is_compound)
-			{
-				compile_expr_node(c, target);
-				compile_expr_node(c, expr->as.assign.value);
-				if (strcmp(op, "+=") == 0) xir_emit_op(c->chunk, OP_ADD, line);
-				else if (strcmp(op, "-=") == 0) xir_emit_op(c->chunk, OP_SUB, line);
-				else if (strcmp(op, "*=") == 0) xir_emit_op(c->chunk, OP_MUL, line);
-				else if (strcmp(op, "/=") == 0) xir_emit_op(c->chunk, OP_DIV, line);
-				else if (strcmp(op, "%=") == 0) xir_emit_op(c->chunk, OP_MOD, line);
-			}
-			else
-			{
-				compile_expr_node(c, expr->as.assign.value);
-			}
-
-			/* Duplicate value on stack if assignment is an expression */
-			xir_emit_op(c->chunk, OP_DUP, line);
 
 			if (target->type == AST_EXPR_IDENTIFIER)
 			{
-				int slot = resolve_local(c, target->as.identifier_name);
-				if (slot != -1)
+				const char* id_name = target->as.identifier_name;
+				int slot = resolve_local(c, id_name);
+				int upvalue_slot = (slot == -1) ? resolve_upvalue(c, id_name) : -1;
+				int class_field_slot = -1;
+				if (slot == -1 && upvalue_slot == -1 && c->current_class != NULL)
 				{
-					xir_emit_op(c->chunk, OP_STORE_LOCAL, line);
-					xir_emit_short(c->chunk, (uint16_t)slot, line);
+					class_field_slot = get_class_field_slot(c->program, c->current_class, id_name);
+				}
+
+				if (class_field_slot >= 0)
+				{
+					/* Implicit this.field = val */
+					xir_emit_op(c->chunk, OP_LOAD_LOCAL, line);
+					xir_emit_short(c->chunk, 0, line);
+
+					if (is_compound)
+					{
+						xir_emit_op(c->chunk, OP_DUP, line);
+						xir_emit_op(c->chunk, OP_GET_FIELD_INDEX, line);
+						xir_emit_short(c->chunk, (uint16_t)class_field_slot, line);
+						compile_expr_node(c, expr->as.assign.value);
+						if (strcmp(op, "+=") == 0) xir_emit_op(c->chunk, OP_ADD, line);
+						else if (strcmp(op, "-=") == 0) xir_emit_op(c->chunk, OP_SUB, line);
+						else if (strcmp(op, "*=") == 0) xir_emit_op(c->chunk, OP_MUL, line);
+						else if (strcmp(op, "/=") == 0) xir_emit_op(c->chunk, OP_DIV, line);
+						else if (strcmp(op, "%=") == 0) xir_emit_op(c->chunk, OP_MOD, line);
+					}
+					else
+					{
+						compile_expr_node(c, expr->as.assign.value);
+					}
+
+					xir_emit_op(c->chunk, OP_SET_FIELD_INDEX, line);
+					xir_emit_short(c->chunk, (uint16_t)class_field_slot, line);
 				}
 				else
 				{
-					int upvalue_slot = resolve_upvalue(c, target->as.identifier_name);
-					if (upvalue_slot != -1)
+					if (is_compound)
+					{
+						compile_expr_node(c, target);
+						compile_expr_node(c, expr->as.assign.value);
+						if (strcmp(op, "+=") == 0) xir_emit_op(c->chunk, OP_ADD, line);
+						else if (strcmp(op, "-=") == 0) xir_emit_op(c->chunk, OP_SUB, line);
+						else if (strcmp(op, "*=") == 0) xir_emit_op(c->chunk, OP_MUL, line);
+						else if (strcmp(op, "/=") == 0) xir_emit_op(c->chunk, OP_DIV, line);
+						else if (strcmp(op, "%=") == 0) xir_emit_op(c->chunk, OP_MOD, line);
+					}
+					else
+					{
+						compile_expr_node(c, expr->as.assign.value);
+					}
+
+					xir_emit_op(c->chunk, OP_DUP, line);
+
+					if (slot != -1)
+					{
+						xir_emit_op(c->chunk, OP_STORE_LOCAL, line);
+						xir_emit_short(c->chunk, (uint16_t)slot, line);
+					}
+					else if (upvalue_slot != -1)
 					{
 						xir_emit_op(c->chunk, OP_SET_UPVALUE, line);
 						xir_emit_byte(c->chunk, (uint8_t)upvalue_slot, line);
 					}
 					else
 					{
-						int s_idx = xir_add_symbol(c->chunk, target->as.identifier_name);
+						int s_idx = xir_add_symbol(c->chunk, id_name);
 						xir_emit_op(c->chunk, OP_STORE_GLOBAL, line);
 						xir_emit_short(c->chunk, (uint16_t)s_idx, line);
 					}
@@ -425,16 +676,177 @@ static void compile_expr_node(XCompiler* c, const AstExpr* expr)
 			}
 			else if (target->type == AST_EXPR_MEMBER)
 			{
+				if (target->as.member.object->type == AST_EXPR_IDENTIFIER)
+				{
+					const char* obj_name = target->as.member.object->as.identifier_name;
+					if (resolve_local(c, obj_name) == -1 && resolve_upvalue(c, obj_name) == -1)
+					{
+						const AstStmt* cls = find_class_in_program(c->program, obj_name);
+						if (cls != NULL)
+						{
+							char static_full_name[256];
+							snprintf(static_full_name, sizeof(static_full_name), "%s.%s", obj_name, target->as.member.member_name);
+							if (is_compound)
+							{
+								compile_expr_node(c, target);
+								compile_expr_node(c, expr->as.assign.value);
+								if (strcmp(op, "+=") == 0) xir_emit_op(c->chunk, OP_ADD, line);
+								else if (strcmp(op, "-=") == 0) xir_emit_op(c->chunk, OP_SUB, line);
+								else if (strcmp(op, "*=") == 0) xir_emit_op(c->chunk, OP_MUL, line);
+								else if (strcmp(op, "/=") == 0) xir_emit_op(c->chunk, OP_DIV, line);
+								else if (strcmp(op, "%=") == 0) xir_emit_op(c->chunk, OP_MOD, line);
+							}
+							else
+							{
+								compile_expr_node(c, expr->as.assign.value);
+							}
+							xir_emit_op(c->chunk, OP_DUP, line);
+							int s_idx = xir_add_symbol(c->chunk, static_full_name);
+							xir_emit_op(c->chunk, OP_STORE_GLOBAL, line);
+							xir_emit_short(c->chunk, (uint16_t)s_idx, line);
+							break;
+						}
+					}
+				}
+
+				int slot = -1;
+				if (target->as.member.object->type == AST_EXPR_IDENTIFIER)
+				{
+					const char* obj_name = target->as.member.object->as.identifier_name;
+					const char* tname = resolve_var_type(c, obj_name);
+					if (tname != NULL)
+					{
+						const AstStmt* cls = find_class_in_program(c->program, tname);
+						if (cls != NULL)
+						{
+							slot = get_class_field_slot(c->program, cls, target->as.member.member_name);
+						}
+					}
+				}
+
 				compile_expr_node(c, target->as.member.object);
-				int s_idx = xir_add_symbol(c->chunk, target->as.member.member_name);
-				xir_emit_op(c->chunk, OP_STORE_FIELD, line);
-				xir_emit_short(c->chunk, (uint16_t)s_idx, line);
+				if (is_compound)
+				{
+					xir_emit_op(c->chunk, OP_DUP, line);
+					if (slot >= 0)
+					{
+						xir_emit_op(c->chunk, OP_GET_FIELD_INDEX, line);
+						xir_emit_short(c->chunk, (uint16_t)slot, line);
+					}
+					else
+					{
+						int s_idx = xir_add_symbol(c->chunk, target->as.member.member_name);
+						xir_emit_op(c->chunk, OP_LOAD_FIELD, line);
+						xir_emit_short(c->chunk, (uint16_t)s_idx, line);
+					}
+					compile_expr_node(c, expr->as.assign.value);
+					if (strcmp(op, "+=") == 0) xir_emit_op(c->chunk, OP_ADD, line);
+					else if (strcmp(op, "-=") == 0) xir_emit_op(c->chunk, OP_SUB, line);
+					else if (strcmp(op, "*=") == 0) xir_emit_op(c->chunk, OP_MUL, line);
+					else if (strcmp(op, "/=") == 0) xir_emit_op(c->chunk, OP_DIV, line);
+					else if (strcmp(op, "%=") == 0) xir_emit_op(c->chunk, OP_MOD, line);
+				}
+				else
+				{
+					compile_expr_node(c, expr->as.assign.value);
+				}
+
+				if (slot >= 0)
+				{
+					xir_emit_op(c->chunk, OP_SET_FIELD_INDEX, line);
+					xir_emit_short(c->chunk, (uint16_t)slot, line);
+				}
+				else
+				{
+					int s_idx = xir_add_symbol(c->chunk, target->as.member.member_name);
+					xir_emit_op(c->chunk, OP_STORE_FIELD, line);
+					xir_emit_short(c->chunk, (uint16_t)s_idx, line);
+				}
 			}
 			else if (target->type == AST_EXPR_INDEX)
 			{
 				compile_expr_node(c, target->as.index.target);
 				compile_expr_node(c, target->as.index.index);
+				compile_expr_node(c, expr->as.assign.value);
 				xir_emit_op(c->chunk, OP_STORE_INDEX, line);
+			}
+			break;
+		}
+
+	case AST_EXPR_NEW:
+		{
+			const char* class_name = expr->as.new_expr.class_name;
+			int arg_count = expr->as.new_expr.arg_count;
+			const AstStmt* cls = find_class_in_program(c->program, class_name);
+
+			if (cls != NULL)
+			{
+				int s_cls = xir_add_symbol(c->chunk, class_name);
+				xir_emit_op(c->chunk, OP_NEW_INSTANCE, line);
+				xir_emit_short(c->chunk, (uint16_t)s_cls, line);
+				xir_emit_byte(c->chunk, 0, line);
+
+				for (int i = 0; i < cls->as.class_decl.member_count; i++)
+				{
+					const AstStmt* m = cls->as.class_decl.members[i];
+					if (m && m->type == AST_STMT_VAR_DECL && !m->as.var_decl.is_static)
+					{
+						int slot = get_class_field_slot(c->program, cls, m->as.var_decl.var_name);
+						if (m->as.var_decl.init_expr != NULL)
+						{
+							xir_emit_op(c->chunk, OP_DUP, line);
+							compile_expr_node(c, m->as.var_decl.init_expr);
+							xir_emit_op(c->chunk, OP_SET_FIELD_INDEX, line);
+							xir_emit_short(c->chunk, (uint16_t)slot, line);
+							xir_emit_op(c->chunk, OP_POP, line);
+						}
+						else if (m->as.var_decl.type_name && !is_primitive_type_name(m->as.var_decl.type_name))
+						{
+							const AstStmt* nested_cls = find_class_in_program(c->program, m->as.var_decl.type_name);
+							if (nested_cls != NULL)
+							{
+								xir_emit_op(c->chunk, OP_DUP, line);
+								AstExpr dummy_new;
+								dummy_new.type = AST_EXPR_NEW;
+								dummy_new.line = line;
+								dummy_new.col = 0;
+								dummy_new.as.new_expr.class_name = m->as.var_decl.type_name;
+								dummy_new.as.new_expr.args = NULL;
+								dummy_new.as.new_expr.arg_count = 0;
+								compile_expr_node(c, &dummy_new);
+								xir_emit_op(c->chunk, OP_SET_FIELD_INDEX, line);
+								xir_emit_short(c->chunk, (uint16_t)slot, line);
+								xir_emit_op(c->chunk, OP_POP, line);
+							}
+						}
+					}
+				}
+
+				const AstStmt* ctor = find_class_method(c->program, cls, class_name, arg_count);
+				if (ctor != NULL)
+				{
+					xir_emit_op(c->chunk, OP_DUP, line);
+					for (int i = 0; i < arg_count; i++)
+					{
+						compile_expr_node(c, expr->as.new_expr.args[i]);
+					}
+					int s_ctor = xir_add_symbol(c->chunk, class_name);
+					xir_emit_op(c->chunk, OP_CALL_METHOD, line);
+					xir_emit_short(c->chunk, (uint16_t)s_ctor, line);
+					xir_emit_byte(c->chunk, (uint8_t)arg_count, line);
+					xir_emit_op(c->chunk, OP_POP, line);
+				}
+			}
+			else
+			{
+				for (int i = 0; i < arg_count; i++)
+				{
+					compile_expr_node(c, expr->as.new_expr.args[i]);
+				}
+				int s_idx = xir_add_symbol(c->chunk, class_name);
+				xir_emit_op(c->chunk, OP_NEW_INSTANCE, line);
+				xir_emit_short(c->chunk, (uint16_t)s_idx, line);
+				xir_emit_byte(c->chunk, (uint8_t)arg_count, line);
 			}
 			break;
 		}
@@ -461,17 +873,6 @@ static void compile_stmt_node(XCompiler* c, const AstStmt* stmt)
 		{
 			compile_expr_node(c, stmt->as.var_decl.init_expr);
 		}
-		else if (stmt->as.var_decl.type_name &&
-		         (strcmp(stmt->as.var_decl.type_name, "List") == 0 ||
-		          strcmp(stmt->as.var_decl.type_name, "Map") == 0 ||
-		          strcmp(stmt->as.var_decl.type_name, "HashMap") == 0 ||
-		          (get_type_by_name((char*)stmt->as.var_decl.type_name) != NULL && !is_base_type(get_type_by_name((char*)stmt->as.var_decl.type_name)))))
-		{
-			int s_idx = xir_add_symbol(c->chunk, stmt->as.var_decl.type_name);
-			xir_emit_op(c->chunk, OP_NEW_INSTANCE, line);
-			xir_emit_short(c->chunk, (uint16_t)s_idx, line);
-			xir_emit_byte(c->chunk, 0, line);
-		}
 		else
 		{
 			xir_emit_op(c->chunk, OP_CONST_NULL, line);
@@ -480,7 +881,7 @@ static void compile_stmt_node(XCompiler* c, const AstStmt* stmt)
 		if (c->scope_depth > 0)
 		{
 			/* Local variable in stack frame */
-			add_local(c, stmt->as.var_decl.var_name);
+			add_local(c, stmt->as.var_decl.var_name, stmt->as.var_decl.type_name);
 		}
 		else
 		{
@@ -627,14 +1028,19 @@ static void compile_stmt_node(XCompiler* c, const AstStmt* stmt)
 			enter_scope(c);
 			compile_expr_node(c, stmt->as.for_in.collection);
 			/* We have collection on stack */
-			add_local(c, "__coll__");
+			add_local(c, "__coll__", NULL);
 			int coll_slot = resolve_local(c, "__coll__");
 
 			/* index counter = 0 */
 			xir_emit_op(c->chunk, OP_CONST_INT, line);
 			xir_emit_int(c->chunk, 0, line);
-			add_local(c, "__idx__");
+			add_local(c, "__idx__", "int");
 			int idx_slot = resolve_local(c, "__idx__");
+
+			/* item_var placeholder on stack */
+			xir_emit_op(c->chunk, OP_CONST_NULL, line);
+			add_local(c, stmt->as.for_in.item_var, NULL);
+			int item_slot = resolve_local(c, stmt->as.for_in.item_var);
 
 			/* loop start */
 			XIrLoop loop;
@@ -645,14 +1051,14 @@ static void compile_stmt_node(XCompiler* c, const AstStmt* stmt)
 
 			/* condition: __idx__ < __coll__.size() */
 			xir_emit_op(c->chunk, OP_LOAD_LOCAL, line);
+			xir_emit_short(c->chunk, (uint16_t)idx_slot, line);
+
+			xir_emit_op(c->chunk, OP_LOAD_LOCAL, line);
 			xir_emit_short(c->chunk, (uint16_t)coll_slot, line);
 			int s_size = xir_add_symbol(c->chunk, "size");
 			xir_emit_op(c->chunk, OP_CALL_METHOD, line);
 			xir_emit_short(c->chunk, (uint16_t)s_size, line);
 			xir_emit_byte(c->chunk, 0, line); /* 0 args */
-
-			xir_emit_op(c->chunk, OP_LOAD_LOCAL, line);
-			xir_emit_short(c->chunk, (uint16_t)idx_slot, line);
 
 			xir_emit_op(c->chunk, OP_LT, line);
 			int exit_jump = xir_emit_jump(c->chunk, OP_JUMP_IF_FALSE, line);
@@ -667,8 +1073,8 @@ static void compile_stmt_node(XCompiler* c, const AstStmt* stmt)
 			xir_emit_op(c->chunk, OP_CALL_METHOD, line);
 			xir_emit_short(c->chunk, (uint16_t)s_get, line);
 			xir_emit_byte(c->chunk, 1, line); /* 1 arg */
-
-			add_local(c, stmt->as.for_in.item_var);
+			xir_emit_op(c->chunk, OP_STORE_LOCAL, line);
+			xir_emit_short(c->chunk, (uint16_t)item_slot, line);
 
 			/* body */
 			compile_stmt_node(c, stmt->as.for_in.body);
@@ -681,7 +1087,6 @@ static void compile_stmt_node(XCompiler* c, const AstStmt* stmt)
 			xir_emit_op(c->chunk, OP_ADD, line);
 			xir_emit_op(c->chunk, OP_STORE_LOCAL, line);
 			xir_emit_short(c->chunk, (uint16_t)idx_slot, line);
-			xir_emit_op(c->chunk, OP_POP, line);
 
 			xir_emit_loop(c->chunk, loop.loop_start, line);
 			xir_patch_jump(c->chunk, exit_jump);
@@ -738,19 +1143,19 @@ static void compile_stmt_node(XCompiler* c, const AstStmt* stmt)
 
 			XFunction* fn = xfunc_create(full_name, stmt->as.func_decl.param_count);
 			XCompiler fn_compiler;
-			compiler_init(&fn_compiler, &fn->chunk);
+			compiler_init(&fn_compiler, &fn->chunk, c->program);
 			fn_compiler.enclosing = c;
 			fn_compiler.function = fn;
 
 			if (c->scope_depth > 0)
 			{
-				add_local(c, fname);
+				add_local(c, fname, NULL);
 			}
 
 			/* Parameters are initial local variables of the function (slots 0..param_count-1) */
 			for (int p = 0; p < stmt->as.func_decl.param_count; p++)
 			{
-				add_local(&fn_compiler, stmt->as.func_decl.params[p].name);
+				add_local(&fn_compiler, stmt->as.func_decl.params[p].name, stmt->as.func_decl.params[p].type_name);
 			}
 
 			if (stmt->as.func_decl.body)
@@ -768,6 +1173,7 @@ static void compile_stmt_node(XCompiler* c, const AstStmt* stmt)
 			for (int l = 0; l < fn_compiler.local_count; l++)
 			{
 				if (fn_compiler.locals[l].name) free(fn_compiler.locals[l].name);
+				if (fn_compiler.locals[l].type_name) free(fn_compiler.locals[l].type_name);
 			}
 
 			/* Add function to enclosing chunk's constant pool */
@@ -794,20 +1200,116 @@ static void compile_stmt_node(XCompiler* c, const AstStmt* stmt)
 		}
 
 	case AST_STMT_CLASS_DECL:
-		/* Class decls compile their member methods */
-		for (int i = 0; i < stmt->as.class_decl.member_count; i++)
 		{
-			AstStmt* m = stmt->as.class_decl.members[i];
-			if (m && m->type == AST_STMT_FUNC_DECL)
+			const char* cname = stmt->as.class_decl.name;
+			const char* bname = stmt->as.class_decl.base_name;
+			int s_cls = xir_add_symbol(c->chunk, cname);
+			int s_base = bname ? xir_add_symbol(c->chunk, bname) : 0xFFFF;
+
+			uint16_t fcount = 0;
+			for (int i = 0; i < stmt->as.class_decl.member_count; i++)
 			{
-				if (!m->as.func_decl.class_name)
+				AstStmt* m = stmt->as.class_decl.members[i];
+				if (m && m->type == AST_STMT_VAR_DECL && !m->as.var_decl.is_static)
 				{
-					m->as.func_decl.class_name = stmt->as.class_decl.name;
+					fcount++;
 				}
-				compile_stmt_node(c, m);
 			}
+
+			/* Emit OP_CLASS */
+			xir_emit_op(c->chunk, OP_CLASS, line);
+			xir_emit_short(c->chunk, (uint16_t)s_cls, line);
+			xir_emit_short(c->chunk, (uint16_t)s_base, line);
+			xir_emit_short(c->chunk, fcount, line);
+			for (int i = 0; i < stmt->as.class_decl.member_count; i++)
+			{
+				AstStmt* m = stmt->as.class_decl.members[i];
+				if (m && m->type == AST_STMT_VAR_DECL && !m->as.var_decl.is_static)
+				{
+					int s_f = xir_add_symbol(c->chunk, m->as.var_decl.var_name);
+					xir_emit_short(c->chunk, (uint16_t)s_f, line);
+				}
+			}
+
+			/* Compile methods */
+			for (int i = 0; i < stmt->as.class_decl.member_count; i++)
+			{
+				AstStmt* m = stmt->as.class_decl.members[i];
+				if (m && m->type == AST_STMT_FUNC_DECL)
+				{
+					if (!m->as.func_decl.class_name)
+					{
+						m->as.func_decl.class_name = (char*)cname;
+					}
+
+					if (m->as.func_decl.is_static)
+					{
+						compile_stmt_node(c, m);
+					}
+					else
+					{
+						const char* mname = m->as.func_decl.name ? m->as.func_decl.name : "fn";
+						char full_name[256];
+						snprintf(full_name, sizeof(full_name), "%s.%s", cname, mname);
+
+						XFunction* fn = xfunc_create(full_name, m->as.func_decl.param_count);
+						XCompiler fn_compiler;
+						compiler_init(&fn_compiler, &fn->chunk, c->program);
+						fn_compiler.enclosing = c;
+						fn_compiler.function = fn;
+						fn_compiler.current_class = stmt;
+
+						/* Slot 0 is receiver 'this' */
+						add_local(&fn_compiler, "this", cname);
+
+						/* Slots 1..N are parameters */
+						for (int p = 0; p < m->as.func_decl.param_count; p++)
+						{
+							add_local(&fn_compiler, m->as.func_decl.params[p].name, m->as.func_decl.params[p].type_name);
+						}
+
+						if (m->as.func_decl.body)
+						{
+							compile_stmt_node(&fn_compiler, m->as.func_decl.body);
+						}
+
+						/* Implicit return null and halt */
+						xir_emit_op(&fn->chunk, OP_CONST_NULL, line);
+						xir_emit_op(&fn->chunk, OP_RETURN, line);
+						fn->upvalue_count = fn_compiler.upvalue_count;
+
+						for (int l = 0; l < fn_compiler.local_count; l++)
+						{
+							if (fn_compiler.locals[l].name) free(fn_compiler.locals[l].name);
+							if (fn_compiler.locals[l].type_name) free(fn_compiler.locals[l].type_name);
+						}
+
+						int c_idx = xir_add_constant(c->chunk, xval_func(fn));
+						xir_emit_op(c->chunk, OP_CLOSURE, line);
+						xir_emit_short(c->chunk, (uint16_t)c_idx, line);
+						for (int u = 0; u < fn->upvalue_count; u++)
+						{
+							xir_emit_byte(c->chunk, fn_compiler.upvalues[u].is_local ? 1 : 0, line);
+							xir_emit_byte(c->chunk, fn_compiler.upvalues[u].index, line);
+						}
+
+						/* Store in global for fallback access */
+						xir_emit_op(c->chunk, OP_DUP, line);
+						int s_full = xir_add_symbol(c->chunk, full_name);
+						xir_emit_op(c->chunk, OP_STORE_GLOBAL, line);
+						xir_emit_short(c->chunk, (uint16_t)s_full, line);
+
+						/* Register method in class: OP_METHOD <class_sym> <method_sym> <arity> */
+						int s_m = xir_add_symbol(c->chunk, mname);
+						xir_emit_op(c->chunk, OP_METHOD, line);
+						xir_emit_short(c->chunk, (uint16_t)s_cls, line);
+						xir_emit_short(c->chunk, (uint16_t)s_m, line);
+						xir_emit_byte(c->chunk, (uint8_t)m->as.func_decl.param_count, line);
+					}
+				}
+			}
+			break;
 		}
-		break;
 
 	default:
 		break;
@@ -822,7 +1324,7 @@ bool xir_compile_program(const AstProgram* prog, XIrChunk* out_chunk)
 	if (!prog || !out_chunk) return false;
 
 	XCompiler compiler;
-	compiler_init(&compiler, out_chunk);
+	compiler_init(&compiler, out_chunk, prog);
 
 	for (int i = 0; i < prog->statement_count; i++)
 	{
@@ -838,7 +1340,7 @@ bool xir_compile_stmt(const AstStmt* stmt, XIrChunk* out_chunk)
 	if (!stmt || !out_chunk) return false;
 
 	XCompiler compiler;
-	compiler_init(&compiler, out_chunk);
+	compiler_init(&compiler, out_chunk, NULL);
 	compile_stmt_node(&compiler, stmt);
 	xir_emit_op(out_chunk, OP_HALT, stmt->line);
 	return true;
@@ -849,7 +1351,7 @@ bool xir_compile_expr(const AstExpr* expr, XIrChunk* out_chunk)
 	if (!expr || !out_chunk) return false;
 
 	XCompiler compiler;
-	compiler_init(&compiler, out_chunk);
+	compiler_init(&compiler, out_chunk, NULL);
 	compile_expr_node(&compiler, expr);
 	xir_emit_op(out_chunk, OP_HALT, expr->line);
 	return true;

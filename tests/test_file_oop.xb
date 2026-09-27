@@ -1,12 +1,15 @@
 import("file.xb")
 
-File f("oop_test.txt")
+File f = new File("oop_test.txt")
 f.write_all("OOP File I/O works!")
 print("Exists: %d", f.exists())
+assert(f.exists() == 1, "File should exist after write_all")
 print("Size: %d", f.size())
+assert(f.size() > 0, "File size should be > 0")
 
 string content = f.read_all()
 print("Read all: %s", content)
+assert(content == "OOP File I/O works!", "read_all should match written text")
 
 f.append(" Plus more.")
 print("New size: %d", f.size())
@@ -14,7 +17,9 @@ print("New size: %d", f.size())
 f.open("r")
 string partial = f.read(8)
 print("Read 8 bytes: %s", partial)
+assert(partial == "OOP File", "partial read should match first 8 bytes")
 f.close()
 
 f.remove()
 print("Exists after remove: %d", f.exists())
+assert(f.exists() == 0, "File should not exist after remove")

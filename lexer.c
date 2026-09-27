@@ -1,8 +1,32 @@
 #include "lexer.h"
+#include "arena.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+
+static inline void* lex_alloc(size_t size)
+{
+	if (g_lex_arena)
+		return arena_calloc(g_lex_arena, 1, size);
+	return calloc(1, size);
+}
+
+static inline char* lex_alloc_string(const char* src, size_t len)
+{
+	char* s = NULL;
+	if (g_lex_arena)
+		s = (char*)arena_alloc(g_lex_arena, len + 1);
+	else
+		s = (char*)malloc(len + 1);
+
+	if (s)
+	{
+		memcpy(s, src, len);
+		s[len] = '\0';
+	}
+	return s;
+}
 
 /* ========================================================================= */
 /* Phase 1: High-performance drop-in replacements for PCRE match() in parse.c */
@@ -10,7 +34,7 @@
 
 find* lex_match_word(const char* buff)
 {
-	find* res = (find*)calloc(1, sizeof(find));
+	find* res = (find*)lex_alloc(sizeof(find));
 	if (buff == NULL || *buff == '\0')
 	{
 		res->isFind = false;
@@ -31,9 +55,7 @@ find* lex_match_word(const char* buff)
 		len++;
 	}
 
-	char* s = (char*)malloc(len + 1);
-	memcpy(s, buff, len);
-	s[len] = '\0';
+	char* s = lex_alloc_string(buff, len);
 
 	res->isFind = true;
 	res->bn = s;
@@ -43,7 +65,7 @@ find* lex_match_word(const char* buff)
 
 find* lex_match_string(const char* buff)
 {
-	find* res = (find*)calloc(1, sizeof(find));
+	find* res = (find*)lex_alloc(sizeof(find));
 	if (buff == NULL || *buff != '"')
 	{
 		res->isFind = false;
@@ -62,11 +84,8 @@ find* lex_match_string(const char* buff)
 		}
 		else if (*p == '"')
 		{
-			/* Found matching end quote */
 			int content_len = (int)(p - (buff + 1));
-			char* s = (char*)malloc(content_len + 1);
-			memcpy(s, buff + 1, content_len);
-			s[content_len] = '\0';
+			char* s = lex_alloc_string(buff + 1, content_len);
 
 			res->isFind = true;
 			res->bn = s;
@@ -86,7 +105,7 @@ find* lex_match_string(const char* buff)
 
 find* lex_match_char(const char* buff)
 {
-	find* res = (find*)calloc(1, sizeof(find));
+	find* res = (find*)lex_alloc(sizeof(find));
 	if (buff == NULL || *buff != '\'')
 	{
 		res->isFind = false;
@@ -111,9 +130,7 @@ find* lex_match_char(const char* buff)
 		int content_len = (int)(p - (buff + 1));
 		if (content_len >= 1 && content_len <= 2)
 		{
-			char* s = (char*)malloc(content_len + 1);
-			memcpy(s, buff + 1, content_len);
-			s[content_len] = '\0';
+			char* s = lex_alloc_string(buff + 1, content_len);
 
 			res->isFind = true;
 			res->bn = s;
@@ -129,7 +146,7 @@ find* lex_match_char(const char* buff)
 
 find* lex_match_bool(const char* buff)
 {
-	find* res = (find*)calloc(1, sizeof(find));
+	find* res = (find*)lex_alloc(sizeof(find));
 	if (buff == NULL)
 	{
 		res->isFind = false;
@@ -139,8 +156,7 @@ find* lex_match_bool(const char* buff)
 
 	if (strncmp(buff, "true", 4) == 0 && !isalnum((unsigned char)buff[4]) && buff[4] != '_')
 	{
-		char* s = (char*)malloc(5);
-		strcpy(s, "true");
+		char* s = lex_alloc_string("true", 4);
 		res->isFind = true;
 		res->bn = s;
 		res->size = 4;
@@ -149,8 +165,7 @@ find* lex_match_bool(const char* buff)
 
 	if (strncmp(buff, "false", 5) == 0 && !isalnum((unsigned char)buff[5]) && buff[5] != '_')
 	{
-		char* s = (char*)malloc(6);
-		strcpy(s, "false");
+		char* s = lex_alloc_string("false", 5);
 		res->isFind = true;
 		res->bn = s;
 		res->size = 5;
@@ -164,7 +179,7 @@ find* lex_match_bool(const char* buff)
 
 find* lex_match_number(const char* buff)
 {
-	find* res = (find*)calloc(1, sizeof(find));
+	find* res = (find*)lex_alloc(sizeof(find));
 	if (buff == NULL)
 	{
 		res->isFind = false;
@@ -219,9 +234,7 @@ find* lex_match_number(const char* buff)
 	}
 
 	int total_len = (int)(p - buff);
-	char* s = (char*)malloc(total_len + 1);
-	memcpy(s, buff, total_len);
-	s[total_len] = '\0';
+	char* s = lex_alloc_string(buff, total_len);
 
 	res->isFind = true;
 	res->bn = s;
@@ -231,7 +244,7 @@ find* lex_match_number(const char* buff)
 
 find* lex_match_var_name(const char* buff)
 {
-	find* res = (find*)calloc(1, sizeof(find));
+	find* res = (find*)lex_alloc(sizeof(find));
 	if (buff == NULL || *buff == '\0')
 	{
 		res->isFind = false;
@@ -258,9 +271,7 @@ find* lex_match_var_name(const char* buff)
 	}
 
 	int len = (int)(p - buff);
-	char* s = (char*)malloc(len + 1);
-	memcpy(s, buff, len);
-	s[len] = '\0';
+	char* s = lex_alloc_string(buff, len);
 
 	res->isFind = true;
 	res->bn = s;
@@ -299,7 +310,6 @@ static void skip_whitespace_and_comments(lexer_t* lexer)
 		}
 		else if (*lexer->cursor == '#' || (*lexer->cursor == '/' && *(lexer->cursor + 1) == '/'))
 		{
-			/* Single-line comment */
 			while (*lexer->cursor != '\0' && *lexer->cursor != '\n')
 			{
 				lexer->cursor++;
@@ -307,7 +317,6 @@ static void skip_whitespace_and_comments(lexer_t* lexer)
 		}
 		else if (*lexer->cursor == '/' && *(lexer->cursor + 1) == '*')
 		{
-			/* Multi-line comment */
 			lexer->cursor += 2;
 			lexer->col += 2;
 			while (*lexer->cursor != '\0')
@@ -345,11 +354,7 @@ static token_t make_simple_token(lexer_t* lexer, token_type_t type, int len)
 	tok.length = len;
 	tok.line = lexer->line;
 	tok.col = lexer->col;
-
-	char* text = (char*)malloc(len + 1);
-	memcpy(text, lexer->cursor, len);
-	text[len] = '\0';
-	tok.text = text;
+	tok.text = lex_alloc_string(lexer->cursor, len);
 
 	lexer->cursor += len;
 	lexer->col += len;
@@ -407,7 +412,7 @@ token_t lexer_next_token(lexer_t* lexer)
 		tok.type = TOK_EOF;
 		tok.start = lexer->cursor;
 		tok.length = 0;
-		tok.text = strdup("");
+		tok.text = lex_alloc_string("", 0);
 		tok.line = lexer->line;
 		tok.col = lexer->col;
 		return tok;
@@ -476,10 +481,10 @@ token_t lexer_next_token(lexer_t* lexer)
 
 			lexer->cursor += tok.length;
 			lexer->col += tok.length;
-			free(mf);
+			if (!g_lex_arena) free(mf);
 			return tok;
 		}
-		free(mf);
+		if (!g_lex_arena) free(mf);
 	}
 
 	/* Char literal */
@@ -498,10 +503,10 @@ token_t lexer_next_token(lexer_t* lexer)
 
 			lexer->cursor += tok.length;
 			lexer->col += tok.length;
-			free(mf);
+			if (!g_lex_arena) free(mf);
 			return tok;
 		}
-		free(mf);
+		if (!g_lex_arena) free(mf);
 	}
 
 	/* Number literal */
@@ -520,10 +525,10 @@ token_t lexer_next_token(lexer_t* lexer)
 
 			lexer->cursor += tok.length;
 			lexer->col += tok.length;
-			free(mf);
+			if (!g_lex_arena) free(mf);
 			return tok;
 		}
-		free(mf);
+		if (!g_lex_arena) free(mf);
 	}
 
 	/* Identifier or Keyword */
@@ -534,9 +539,7 @@ token_t lexer_next_token(lexer_t* lexer)
 		{
 			len++;
 		}
-		char* text = (char*)malloc(len + 1);
-		memcpy(text, lexer->cursor, len);
-		text[len] = '\0';
+		char* text = lex_alloc_string(lexer->cursor, len);
 
 		token_type_t tt = check_keyword_or_type(text, len);
 		token_t tok;
@@ -626,7 +629,7 @@ const char* token_type_name(token_type_t type)
 
 void token_free(token_t* tok)
 {
-	if (tok != NULL && tok->text != NULL)
+	if (!g_lex_arena && tok != NULL && tok->text != NULL)
 	{
 		free(tok->text);
 		tok->text = NULL;

@@ -1,2 +1,9 @@
-string resp = http_get("http://127.0.0.1:19879/test")
+int i(){
+return 4;
+}
+int x = i();
+assert(x == 4, "x == 4")
+string resp = http_get("http://google.com")
 print("Response: %s", resp)
+assert(starts_with(resp, "HTTP/1.1") == 1, "starts_with HTTP/1.1")
+

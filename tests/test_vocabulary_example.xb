@@ -17,8 +17,11 @@ class Vector2D() {
     }
 }
 
-Vector2D v1(3, 4)
+Vector2D v1 = new Vector2D(3, 4)
 print("Magnitude squared: %d", v1.magnitude_squared())
+assert(v1.x == 3, "v1.x should be 3")
+assert(v1.y == 4, "v1.y should be 4")
+assert(v1.magnitude_squared() == 25, "v1.magnitude_squared() should be 25")
 
 if (v1.magnitude_squared() == 25) {
     print("Vector is 3-4-5 triangle")

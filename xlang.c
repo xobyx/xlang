@@ -19,11 +19,14 @@ __  __   ___   | |__    _   _  __  __
 #include "xgc.h"
 #include "parse.h"
 #include "xast.h"
+#include "xmath.h"
+#include "xdis_html.h"
 #include "xast_parser.h"
 #include "xir.h"
 #include "xir_compiler.h"
 #include "xvm.h"
 #include <ctype.h>
+#include "arena.h"
 clock_t t;
 //C:\Tests\t.xb
 bool load_saved_code = false;
@@ -36,8 +39,9 @@ func_stack* t_funcs;
 Debug * debuge;
 bool read_file = true;
 bool save_code = false;
-int print_parse_log = 1;
-
+int print_parse_log = 0;
+bool flag_stats = false;
+extern Arena *g_lex_arena;
 #define STR_VALUE(val) #val
 
 
@@ -99,6 +103,8 @@ extern type_stack simple_type_stack;
 
 void int_xlang()
 {
+    if (g_lex_arena == NULL)
+		g_lex_arena = arena_create(128 * 1024);
 	nodes = (node_stack*)malloc(sizeof(node_stack));
 	varss = &var_start_stack;
 	funcs = &base_function;
@@ -448,6 +454,7 @@ int main(const int argc, char** argv)
 	bool flag_dump_ir = false;
 	bool flag_vm = false;
 	bool flag_trace_vm = false;
+	bool flag_view = false;
 	const char* script_path = NULL;
 	int script_idx = -1;
 
@@ -479,18 +486,33 @@ int main(const int argc, char** argv)
 			flag_vm = true;
 			flag_trace_vm = true;
 		}
+		else if (strcmp(argv[i], "--view") == 0)
+		{
+			flag_view = true;
+		}
+		else if (strcmp(argv[i], "--trace-parser") == 0)
+		{
+			print_parse_log = 1;
+		}
+		else if (strcmp(argv[i], "--stats") == 0)
+		{
+			flag_stats = true;
+		}
 		else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0)
 		{
 			printf("xlang 0.4.0 - Language & Runtime\n");
 			printf("Usage: xlang [options] <script.xb | bytecode.xbc> [args...]\n\n");
 			printf("Options:\n");
-			printf("  -c, --compile  Compile script to bytecode (.xbc)\n");
-			printf("  -o <file>      Specify output bytecode file path\n");
-			printf("  --dump-ast     Parse script and display Structured AST\n");
-			printf("  --dump-ir      Compile/load bytecode and disassemble\n");
-			printf("  --vm           Execute script using the Bytecode Virtual Machine\n");
-			printf("  --trace-vm     Execute in VM with instruction execution tracing\n");
-			printf("  -h, --help     Show this help message\n\n");
+			printf("  -c, --compile   Compile script to bytecode (.xbc)\n");
+			printf("  -o <file>       Specify output bytecode file path\n");
+			printf("  --dump-ast      Parse script and display Structured AST\n");
+			printf("  --dump-ir       Compile/load bytecode and disassemble\n");
+			printf("  --vm            Execute script using the Bytecode Virtual Machine\n");
+			printf("  --trace-vm      Execute in VM with instruction execution tracing\n");
+			printf("  --trace-parser  Trace lexer/parser token stream\n");
+			printf("  --stats         Display execution timing and memory statistics\n");
+			printf("  --view          Generate side-by-side source/IR HTML viewer\n");
+			printf("  -h, --help      Show this help message\n\n");
 			clean_memory();
 			return 0;
 		}
@@ -562,7 +584,7 @@ int main(const int argc, char** argv)
 	xdiag_set_current_file(script_path);
 	xdiag_set_source_code(buff);
 
-	if (flag_dump_ast || flag_dump_ir || flag_vm || flag_compile)
+	if (flag_dump_ast || flag_dump_ir || flag_vm || flag_compile || flag_view)
 	{
 		g_parse_only = true;
 		print_parse_log = 0;
@@ -570,9 +592,17 @@ int main(const int argc, char** argv)
 
 	if (flag_compile)
 	{
+		xdiag_reset_error_count();
 		AstArena* arena = ast_arena_create(64 * 1024);
 		start_parse_lines(buff, false);
 		AstProgram* prog = xast_parse_node_stream(arena, nodes->root, NULL);
+		if (xdiag_get_error_count() > 0 || prog == NULL)
+		{
+			ast_arena_destroy(arena);
+			free(buff);
+			clean_memory();
+			return 1;
+		}
 		XIrChunk chunk;
 		xir_chunk_init(&chunk);
 		xir_compile_program(prog, &chunk);
@@ -606,9 +636,17 @@ int main(const int argc, char** argv)
 
 	if (flag_dump_ast)
 	{
+		xdiag_reset_error_count();
 		AstArena* arena = ast_arena_create(64 * 1024);
 		start_parse_lines(buff, false);
 		AstProgram* prog = xast_parse_node_stream(arena, nodes->root, NULL);
+		if (xdiag_get_error_count() > 0 || prog == NULL)
+		{
+			ast_arena_destroy(arena);
+			free(buff);
+			clean_memory();
+			return 1;
+		}
 		xast_dump_program(prog);
 		ast_arena_destroy(arena);
 		free(buff);
@@ -618,9 +656,17 @@ int main(const int argc, char** argv)
 
 	if (flag_dump_ir)
 	{
+		xdiag_reset_error_count();
 		AstArena* arena = ast_arena_create(64 * 1024);
 		start_parse_lines(buff, false);
 		AstProgram* prog = xast_parse_node_stream(arena, nodes->root, NULL);
+		if (xdiag_get_error_count() > 0 || prog == NULL)
+		{
+			ast_arena_destroy(arena);
+			free(buff);
+			clean_memory();
+			return 1;
+		}
 		XIrChunk chunk;
 		xir_chunk_init(&chunk);
 		xir_compile_program(prog, &chunk);
@@ -634,9 +680,17 @@ int main(const int argc, char** argv)
 
 	if (flag_vm)
 	{
+		xdiag_reset_error_count();
 		AstArena* arena = ast_arena_create(64 * 1024);
 		start_parse_lines(buff, false);
 		AstProgram* prog = xast_parse_node_stream(arena, nodes->root, NULL);
+		if (xdiag_get_error_count() > 0 || prog == NULL)
+		{
+			ast_arena_destroy(arena);
+			free(buff);
+			clean_memory();
+			return 1;
+		}
 		XIrChunk chunk;
 		xir_chunk_init(&chunk);
 		xir_compile_program(prog, &chunk);
@@ -652,14 +706,71 @@ int main(const int argc, char** argv)
 		return (res == VM_OK) ? 0 : 1;
 	}
 
+	if (flag_view)
+	{
+		xdiag_reset_error_count();
+		AstArena* arena = ast_arena_create(64 * 1024);
+		start_parse_lines(buff, false);
+		AstProgram* prog = xast_parse_node_stream(arena, nodes->root, NULL);
+		if (xdiag_get_error_count() > 0 || prog == NULL)
+		{
+			ast_arena_destroy(arena);
+			free(buff);
+			clean_memory();
+			return 1;
+		}
+		XIrChunk chunk;
+		xir_chunk_init(&chunk);
+		xir_compile_program(prog, &chunk);
+
+		/* Build output HTML path: replace .xb extension with .ir.html */
+		char html_path[1024] = {0};
+		snprintf(html_path, sizeof(html_path), "%s", script_path);
+		char* dot = strrchr(html_path, '.');
+		if (dot) strcpy(dot, ".ir.html");
+		else strcat(html_path, ".ir.html");
+
+		bool ok = xdis_html_write(&chunk, script_path, html_path);
+		if (ok)
+		{
+			printf("IR viewer written to: %s\n", html_path);
+#if defined(_WIN32) || defined(_MSC_VER)
+			char open_cmd[1280];
+			snprintf(open_cmd, sizeof(open_cmd), "start \"\" \"%s\"", html_path);
+			system(open_cmd);
+#elif defined(__APPLE__)
+			char open_cmd[1280];
+			snprintf(open_cmd, sizeof(open_cmd), "open \"%s\"", html_path);
+			system(open_cmd);
+#else
+			char open_cmd[1280];
+			snprintf(open_cmd, sizeof(open_cmd), "xdg-open \"%s\" &", html_path);
+			system(open_cmd);
+#endif
+		}
+		else
+		{
+			fprintf(stderr, "Failed to write IR viewer HTML to '%s'\n", html_path);
+		}
+
+		xir_chunk_free(&chunk);
+		ast_arena_destroy(arena);
+		free(buff);
+		clean_memory();
+		return ok ? 0 : 1;
+	}
+
 	change_dir(argv + script_idx - 1);
+
 	start_compile();
 
 	t = clock() - t;
-	const double time_taken = ((double)t) / CLOCKS_PER_SEC; // in seconds
-
-	printf("\ntook %f seconds to execute \n", time_taken);
-	printf("\nvar num: %d , temp var num: %d\n", varss->size, t_varss->size);
+	if (flag_stats)
+	{
+		const double time_taken = ((double)t) / CLOCKS_PER_SEC; // in seconds
+		printf("\ntook %f seconds to execute \n", time_taken);
+		printf("\nvar num: %d , temp var num: %d\n", varss->size, t_varss->size);
+	}
 
 	free(saved_code_file_path);
 	free(buff);
@@ -692,6 +803,12 @@ void clean_memory(void)
 	gc_cleanup();
 	parser_interactive_cleanup();
 	xdiag_set_source_code(NULL);
+	xdiag_reset_error_count();
+	if (g_lex_arena != NULL)
+		{
+			arena_destroy(g_lex_arena);
+			g_lex_arena = NULL;
+		}
 }
 
 void start_compile(void)
@@ -699,16 +816,11 @@ void start_compile(void)
 	clock_t t2 = clock();
 	start_parse_lines(buff, false);
 	t2 = clock() - t2;
-	double time_taken = ((double)t2) / CLOCKS_PER_SEC; // in seconds
-
-	printf("\nstart_parse_lines took %f seconds to execute \n", time_taken);
-
-
-
-
-
-
-	//	free(buff);
+	if (flag_stats)
+	{
+		double time_taken = ((double)t2) / CLOCKS_PER_SEC; // in seconds
+		printf("\nstart_parse_lines took %f seconds to execute \n", time_taken);
+	}
 }
 
 void get_auto_comp(char* input, char** sugg)

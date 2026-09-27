@@ -338,8 +338,9 @@ void x_dir_list(fcall* fc)
 	type_def* list_td = get_type_by_name("List");
 	if (list_td != NULL && !is_base_type(list_td))
 	{
-		type_instance* inst = (type_instance*)install_memory_with_type(list_td, 1);
-		var* id_prop = get_var_by_name_on_stack("id", &inst->propertys);
+		type_instance* inst = type_instance_create(list_td);
+		inst->id = list_id;
+		var* id_prop = type_instance_get_field(inst, "id");
 		if (id_prop != NULL && id_prop->value_int != NULL)
 		{
 			*id_prop->value_int = list_id;
@@ -371,7 +372,9 @@ void x_dir_create(fcall* fc)
 #endif
 	}
 	fc->_return.value_int = new_int(1, rc == 0 ? 0 : -1);
+	fc->_return.values = fc->_return.value_int;
 	fc->_return.type_define = T_INT;
+	fc->_return.size = 1;
 }
 
 void x_dir_exists(fcall* fc)
@@ -385,7 +388,9 @@ void x_dir_exists(fcall* fc)
 			exists = 1;
 	}
 	fc->_return.value_int = new_int(1, exists);
+	fc->_return.values = fc->_return.value_int;
 	fc->_return.type_define = T_INT;
+	fc->_return.size = 1;
 }
 
 void x_dir_remove(fcall* fc)
@@ -397,6 +402,8 @@ void x_dir_remove(fcall* fc)
 		rc = rmdir(path);
 	}
 	fc->_return.value_int = new_int(1, rc == 0 ? 0 : -1);
+	fc->_return.values = fc->_return.value_int;
 	fc->_return.type_define = T_INT;
+	fc->_return.size = 1;
 }
 

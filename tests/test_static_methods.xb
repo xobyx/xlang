@@ -40,7 +40,7 @@ class Box() {
     }
 
     static Box createSquare(int size) {
-        Box b(size, size)
+        Box b = new Box(size, size)
         return b
     }
 
@@ -54,18 +54,22 @@ print("=== Testing Static Methods ===\n")
 // Test 1: Static method invocation in assignment
 int sum = MathHelper.add(15, 25)
 print("MathHelper.add(15, 25) = %d\n", sum)
+assert(sum == 40, "MathHelper.add(15, 25) should be 40")
 
 // Test 2: Static method invocation in expression
 int prod = MathHelper.multiply(6, 7)
 print("MathHelper.multiply(6, 7) = %d\n", prod)
+assert(prod == 42, "MathHelper.multiply(6, 7) should be 42")
 
 // Test 3: Static method inside compound expression
 int combo = MathHelper.add(10, 20) + MathHelper.multiply(2, 3)
 print("Combo expression = %d\n", combo)
+assert(combo == 36, "Combo expression should be 36")
 
 // Test 4: Static method calling another static method
 int dbl = MathHelper.double_val(21)
 print("MathHelper.double_val(21) = %d\n", dbl)
+assert(dbl == 42, "MathHelper.double_val(21) should be 42")
 
 // Test 5: Standalone static method statement
 MathHelper.greet("World")
@@ -73,13 +77,17 @@ MathHelper.greet("World")
 // Test 6: Static properties access and mutation
 Counter.global_count = 100
 print("Counter.global_count = %d\n", Counter.global_count)
+assert(Counter.global_count == 100, "Counter.global_count should be 100")
 Counter.set_count(250)
 print("Counter.get_count() = %d\n", Counter.get_count())
+assert(Counter.get_count() == 250, "Counter.get_count() should be 250")
 
 Box sq = Box.createSquare(8)
 print("Square area: %d\n", sq.area())
+assert(sq.area() == 64, "Square area should be 64")
 
 int sq_area = Box.createSquare(5).area()
 print("Chained square area: %d\n", sq_area)
+assert(sq_area == 25, "Chained square area should be 25")
 
 print("=== All Static Method Tests Completed ===\n")

@@ -52,6 +52,7 @@ typedef enum AstNodeType {
 	AST_EXPR_INDEX,
 	AST_EXPR_LIST,
 	AST_EXPR_ASSIGN,
+	AST_EXPR_NEW,
 
 	/* Statements */
 	AST_STMT_EXPR,
@@ -188,6 +189,13 @@ struct AstExpr {
 			char* op; /* "=", "+=", "-=", etc. */
 			AstExpr* value;
 		} assign;
+
+		/* AST_EXPR_NEW */
+		struct {
+			char* class_name;
+			AstExpr** args;
+			int arg_count;
+		} new_expr;
 	} as;
 };
 
@@ -302,6 +310,7 @@ AstExpr* ast_expr_member(AstArena* arena, AstExpr* obj, const char* member, int 
 AstExpr* ast_expr_index(AstArena* arena, AstExpr* target, AstExpr* index, int line, int col);
 AstExpr* ast_expr_list(AstArena* arena, AstExpr** elements, int count, int line, int col);
 AstExpr* ast_expr_assign(AstArena* arena, AstExpr* target, const char* op, AstExpr* value, int line, int col);
+AstExpr* ast_expr_new(AstArena* arena, const char* class_name, AstExpr** args, int arg_count, int line, int col);
 
 AstStmt* ast_stmt_expr(AstArena* arena, AstExpr* expr, int line, int col);
 AstStmt* ast_stmt_var_decl(AstArena* arena, const char* type, const char* name, AstExpr* init, bool is_static, int line, int col);

@@ -19,65 +19,85 @@ class Box() {
 Box b1 = new Box()
 print(b1.count)
 print(b1.total)
+assert(b1.count == 0, "b1.count should be 0")
+assert(b1.total == 100, "b1.total should be 100")
 
 Box b2 = new Box(5, 50)
 print(b2.count)
 print(b2.total)
+assert(b2.count == 5, "b2.count should be 5")
+assert(b2.total == 50, "b2.total should be 50")
 
 // 2. Test compound assignments on primitives
 int a = 10
 a += 20
 print(a)
+assert(a == 30, "a += 20 should be 30")
 
 a -= 5
 print(a)
+assert(a == 25, "a -= 5 should be 25")
 
 a *= 2
 print(a)
+assert(a == 50, "a *= 2 should be 50")
 
 a /= 10
 print(a)
+assert(a == 5, "a /= 10 should be 5")
 
 a %= 3
 print(a)
+assert(a == 2, "a %= 3 should be 2")
 
 // 3. Test increment and decrement
 a++
 print(a)
+assert(a == 3, "a++ should be 3")
 
 a++
 print(a)
+assert(a == 4, "a++ should be 4")
 
 a--
 print(a)
+assert(a == 3, "a-- should be 3")
 
 // 4. Test compound assignments and inc/dec on object properties
 b2.count += 10
 print(b2.count)
+assert(b2.count == 15, "b2.count += 10 should be 15")
 
 b2.count++
 print(b2.count)
+assert(b2.count == 16, "b2.count++ should be 16")
 
 b2.count--
 print(b2.count)
+assert(b2.count == 15, "b2.count-- should be 15")
 
 b2.total -= 20
 print(b2.total)
+assert(b2.total == 30, "b2.total -= 20 should be 30")
 
 b2.total *= 3
 print(b2.total)
+assert(b2.total == 90, "b2.total *= 3 should be 90")
 
 b2.total /= 2
 print(b2.total)
+assert(b2.total == 45, "b2.total /= 2 should be 45")
 
 b2.total %= 11
 print(b2.total)
+assert(b2.total == 1, "b2.total %= 11 should be 1")
 
 // 5. Test string += concatenation
 string greeting = "Hello"
 greeting += ", "
 greeting += "world!"
 print(greeting)
+assert(greeting == "Hello, world!", "greeting should be Hello, world!")
 
 // 6. Test native string split
 string csv = "apple,banana,orange,grape"
@@ -87,6 +107,11 @@ print(fruits.get(0))
 print(fruits.get(1))
 print(fruits.get(2))
 print(fruits.get(3))
+assert(fruits.size() == 4, "fruits size should be 4")
+assert(fruits.get(0) == "apple", "fruits[0] should be apple")
+assert(fruits.get(1) == "banana", "fruits[1] should be banana")
+assert(fruits.get(2) == "orange", "fruits[2] should be orange")
+assert(fruits.get(3) == "grape", "fruits[3] should be grape")
 
 // 7. Test str_split function alias
 int raw_list = str_split("one:two:three", ":")
@@ -94,6 +119,10 @@ print(list_size(raw_list))
 print(list_get(raw_list, 0))
 print(list_get(raw_list, 1))
 print(list_get(raw_list, 2))
+assert(list_size(raw_list) == 3, "raw_list size should be 3")
+assert(list_get(raw_list, 0) == "one", "raw_list[0] should be one")
+assert(list_get(raw_list, 1) == "two", "raw_list[1] should be two")
+assert(list_get(raw_list, 2) == "three", "raw_list[2] should be three")
 list_free(raw_list)
 
 print("test_ergonomics PASS")

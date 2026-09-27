@@ -33,6 +33,21 @@ static void skip_endl(node** n, node* stop)
 	}
 }
 
+static int s_class_depth = 0;
+
+static bool is_primitive_type_name(const char* name)
+{
+	if (!name) return false;
+	return (strcmp(name, "int") == 0 ||
+	        strcmp(name, "float") == 0 ||
+	        strcmp(name, "string") == 0 ||
+	        strcmp(name, "bool") == 0 ||
+	        strcmp(name, "char") == 0 ||
+	        strcmp(name, "long") == 0 ||
+	        strcmp(name, "void") == 0 ||
+	        strcmp(name, "double") == 0);
+}
+
 static AstBinaryOp get_binop(node* n, int* out_tokens)
 {
 	if (out_tokens) *out_tokens = 1;
@@ -65,6 +80,17 @@ static AstBinaryOp get_binop(node* n, int* out_tokens)
 			if (c == '|' && c2 == '|') { if (out_tokens) *out_tokens = 2; return BINOP_OR; }
 			if (c == '<' && c2 == '<') { if (out_tokens) *out_tokens = 2; return BINOP_SHL; }
 			if (c == '>' && c2 == '>') { if (out_tokens) *out_tokens = 2; return BINOP_SHR; }
+			if (c == '+' && c2 == '+') return BINOP_NONE;
+			if (c == '-' && c2 == '-')
+			{
+				node* after_next = node_advance(next);
+				if (after_next == NULL || after_next->type_ == endl ||
+				    after_next->type_ == parentheses4_c || after_next->type_ == comma ||
+				    after_next->type_ == s_index_c)
+				{
+					return BINOP_NONE;
+				}
+			}
 		}
 
 		return ast_binop_from_string(n->value_char_ptr);
@@ -240,7 +266,7 @@ static AstExpr* parse_primary(AstArena* arena, node** n, node* stop)
 				}
 				if (*n == pclose) *n = (*n)->next;
 			}
-			return ast_expr_call(arena, class_name ? class_name : "Object", args, arg_count, line, col);
+			return ast_expr_new(arena, class_name ? class_name : "Object", args, arg_count, line, col);
 		}
 	}
 
@@ -280,6 +306,17 @@ static AstExpr* parse_primary(AstArena* arena, node** n, node* stop)
 				}
 			}
 			if (*n == pclose) *n = (*n)->next;
+
+			/* Check if name is a known class: instantiation without 'new' is disallowed */
+			if ((curr->type_ == itype && curr->value_type != NULL && !is_base_type(curr->value_type)) ||
+			    (name != NULL && !is_primitive_type_name(name) && get_type_by_name(name) != NULL && !is_base_type(get_type_by_name(name))))
+			{
+				xdiag_error("E0012", NULL, line, col, 0, NULL,
+				            "cannot instantiate class '%s' without 'new'; use 'new %s(...)'",
+				            name, name);
+				return NULL;
+			}
+
 			return ast_expr_call(arena, name ? name : "anon", args, arg_count, line, col);
 		}
 
@@ -459,8 +496,8 @@ static AstStmt* parse_statement(AstArena* arena, node** n, node* stop)
 	/* Keywords */
 	if (curr->type_ == keyword)
 	{
-		/* IF Statement */
-		if (curr->value_keyword == _if_)
+		/* IF / EIF Statement */
+		if (curr->value_keyword == _if_ || curr->value_keyword == _eif_)
 		{
 			*n = curr->next;
 			if (!is_end(*n, stop) && (*n)->type_ == parentheses4)
@@ -601,6 +638,10 @@ static AstStmt* parse_statement(AstArena* arena, node** n, node* stop)
 				AstExpr* v_target = ast_expr_identifier(arena, var_name ? var_name : "i", line, col);
 				AstExpr* assign_init = ast_expr_assign(arena, v_target, "=", init_val, line, col);
 				AstStmt* init_stmt = ast_stmt_expr(arena, assign_init, line, col);
+				if (step_expr && step_expr->type != AST_EXPR_ASSIGN)
+				{
+					step_expr = ast_expr_assign(arena, v_target, "=", step_expr, line, col);
+				}
 
 				return ast_stmt_for_c(arena, init_stmt, cond_expr, step_expr, body, line, col);
 			}
@@ -665,6 +706,7 @@ static AstStmt* parse_statement(AstArena* arena, node** n, node* stop)
 			{
 				node* c_close = get_close_part(*n);
 				*n = (*n)->next;
+				s_class_depth++;
 
 				while (!is_end(*n, c_close) && *n != c_close)
 				{
@@ -678,6 +720,7 @@ static AstStmt* parse_statement(AstArena* arena, node** n, node* stop)
 					}
 					skip_endl(n, c_close);
 				}
+				s_class_depth--;
 				if (*n == c_close) *n = (*n)->next;
 			}
 
@@ -687,6 +730,7 @@ static AstStmt* parse_statement(AstArena* arena, node** n, node* stop)
 
 	/* Type Declaration (Variable or Function): int x = 10; or int add(...) { ... } */
 	bool is_static = false;
+	node* saved_curr = *n;
 	if (curr->type_ == keyword && curr->value_keyword == _static_)
 	{
 		is_static = true;
@@ -706,58 +750,93 @@ static AstStmt* parse_statement(AstArena* arena, node** n, node* stop)
 			char* decl_name = name_node->value_char_ptr;
 			*n = name_node->next;
 
-			/* Check if followed by '(' -> Function Declaration */
+			/* Check if followed by '(' -> Function Declaration or Constructor Init */
 			if (!is_end(*n, stop) && (*n)->type_ == parentheses4)
 			{
 				node* pclose = get_close_part(*n);
-				*n = (*n)->next;
-
-				AstParam params[16];
-				int param_count = 0;
-
-				while (!is_end(*n, pclose) && *n != pclose)
+				/* Look ahead past pclose to see if next non-endl token is '{' (parentheses1) */
+				node* after = pclose ? pclose->next : NULL;
+				while (after != NULL && !is_end(after, stop) && (after->type_ & endl))
 				{
-					if ((*n)->type_ == comma)
-					{
-						*n = (*n)->next;
-						continue;
-					}
-					if ((*n)->type_ == itype)
-					{
-						char* ptype = (*n)->value_type ? (*n)->value_type->type_name : "object";
-						*n = (*n)->next;
-						char* pname = (!is_end(*n, pclose) && (*n)->type_ == var_name) ? (*n)->value_char_ptr : "arg";
-						if (!is_end(*n, pclose) && (*n)->type_ == var_name) *n = (*n)->next;
+					after = node_advance(after);
+				}
+				bool is_func_def = (after != NULL && !is_end(after, stop) && after->type_ == parentheses1);
 
-						if (param_count < 16)
+				if (is_func_def)
+				{
+					*n = (*n)->next;
+					AstParam params[16];
+					int param_count = 0;
+
+					while (!is_end(*n, pclose) && *n != pclose)
+					{
+						if ((*n)->type_ == comma)
 						{
-							params[param_count].type_name = ptype;
-							params[param_count].name = pname;
-							param_count++;
+							*n = (*n)->next;
+							continue;
+						}
+						if ((*n)->type_ == itype)
+						{
+							char* ptype = (*n)->value_type ? (*n)->value_type->type_name : "object";
+							*n = (*n)->next;
+							char* pname = (!is_end(*n, pclose) && (*n)->type_ == var_name) ? (*n)->value_char_ptr : "arg";
+							if (!is_end(*n, pclose) && (*n)->type_ == var_name) *n = (*n)->next;
+
+							if (param_count < 16)
+							{
+								params[param_count].type_name = ptype;
+								params[param_count].name = pname;
+								param_count++;
+							}
+						}
+						else
+						{
+							*n = (*n)->next;
 						}
 					}
-					else
-					{
-						*n = (*n)->next;
-					}
-				}
-				if (*n == pclose) *n = (*n)->next;
+					if (*n == pclose) *n = (*n)->next;
 
-				skip_endl(n, stop);
-				AstStmt* body = parse_block(arena, n, stop);
-				return ast_stmt_func_decl(arena, decl_name ? decl_name : "fn", type_name, params, param_count, body, is_static, NULL, line, col);
+					skip_endl(n, stop);
+					AstStmt* body = parse_block(arena, n, stop);
+					return ast_stmt_func_decl(arena, decl_name ? decl_name : "fn", type_name, params, param_count, body, is_static, NULL, line, col);
+				}
+				else
+				{
+					/* Disallowed: Direct constructor call in declaration */
+					xdiag_error("E0010", NULL, line, col, 0, NULL,
+					            "direct constructor call in declaration is disallowed; use '%s %s = new %s(...)'",
+					            type_name, decl_name ? decl_name : "var", type_name);
+					return NULL;
+				}
 			}
 
 			/* Variable Declaration */
 			AstExpr* init_expr = NULL;
-			if (!is_end(*n, stop) && ((*n)->type_ == equles || (*n)->value_keyword == _new_))
+			if (!is_end(*n, stop) && (*n)->type_ == equles)
 			{
 				*n = (*n)->next;
 				init_expr = parse_expr(arena, n, stop);
 			}
 			skip_endl(n, stop);
+
+			if (init_expr == NULL && s_class_depth == 0 && !is_primitive_type_name(type_name))
+			{
+				xdiag_error("E0011", NULL, line, col, 0, NULL,
+				            "implicit default instantiation is disallowed; use '%s %s = new %s()'",
+				            type_name, decl_name ? decl_name : "var", type_name);
+				return NULL;
+			}
+
 			return ast_stmt_var_decl(arena, type_name, decl_name ? decl_name : "var", init_expr, is_static, line, col);
 		}
+		else
+		{
+			*n = saved_curr;
+		}
+	}
+	else if (is_static)
+	{
+		*n = saved_curr;
 	}
 
 	/* Expression / Assignment Statement */
@@ -787,6 +866,20 @@ static AstStmt* parse_statement(AstArena* arena, node** n, node* stop)
 				char op_buf[4] = { c, '=', '\0' };
 				op_str = ast_arena_strdup(arena, op_buf);
 				*n = node_advance(next);
+			}
+		}
+		else if ((*n)->type_ == operators_n && (*n)->value_char_ptr != NULL && next != NULL && next->type_ == operators_n &&
+		         next->value_char_ptr != NULL && *(*n)->value_char_ptr == *next->value_char_ptr)
+		{
+			char c = *(*n)->value_char_ptr;
+			if (c == '+' || c == '-')
+			{
+				char op_buf[4] = { c, '=', '\0' };
+				char* aop_str = ast_arena_strdup(arena, op_buf);
+				*n = node_advance(next);
+				AstExpr* one_lit = ast_expr_literal_int(arena, 1, line, col);
+				expr = ast_expr_assign(arena, expr, aop_str, one_lit, line, col);
+				op_str = NULL;
 			}
 		}
 

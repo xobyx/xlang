@@ -1,5 +1,6 @@
 #include "functions.h"
 #include "func_stack.h"
+
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
@@ -21,8 +22,6 @@
 #include "xgc.h"
 #include "compile.h"
 #include "parse.h"
-
-//#define F
 
 void step(node** nod)
 {
@@ -58,14 +57,6 @@ bool eat(node** nod, enum node_type_enum next, bool must)
 }
 
 void len(fcall* y);
-//void index_(func_deftion* y);
-//var t = {.type_define = T_INT, .name = "a"};
-///func_deftion xd;
-
-//func_deftion xd = {
-//	.start_func_parmeters = {T_INT},.func_code = &index_,.func_name = "index",.function_type = f_main,
-//	.return_type = T_INT,.ref = 0,/* func* STACK_NEXT*/0
-//};
 type_stack simple_type_stack = {.top = T_FUNC, .root = T_LONG, .size = 10};
 
 void int_add(fcall* fcall)
@@ -74,6 +65,83 @@ void int_add(fcall* fcall)
 	{
 		fcall->_return.value_int = new_int(1, *fcall->context->value_int + *fcall->func_parmeters[0].value_int);
 	}
+}
+
+void xassert(fcall* fcall)
+{
+	if (fcall == NULL || fcall->parm_count_c < 1)
+	{
+		fprintf(stderr, "Assertion failed: assert requires at least 1 argument\n");
+		exit(1);
+	}
+
+	bool condition = false;
+	var* arg0 = &fcall->func_parmeters[0];
+
+	if (arg0->type_define == T_BOOL)
+	{
+		if (arg0->value_bool != NULL)
+			condition = *arg0->value_bool;
+		else if (arg0->values != NULL)
+			condition = *(bool*)arg0->values;
+	}
+	else if (arg0->type_define == T_INT)
+	{
+		if (arg0->value_int != NULL)
+			condition = (*arg0->value_int != 0);
+		else if (arg0->values != NULL)
+			condition = (*(int*)arg0->values != 0);
+	}
+	else if (arg0->type_define == T_FLOAT)
+	{
+		if (arg0->value_float != NULL)
+			condition = (*arg0->value_float != 0.0f);
+		else if (arg0->values != NULL)
+			condition = (*(float*)arg0->values != 0.0f);
+	}
+	else if (arg0->type_define == T_STRING)
+	{
+		char* str = NULL;
+		if (arg0->value_str_ptr != NULL)
+			str = *arg0->value_str_ptr;
+		else if (arg0->values != NULL)
+			str = (char*)arg0->values;
+		condition = (str != NULL && str[0] != '\0');
+	}
+	else
+	{
+		condition = (arg0->values != NULL || arg0->value_type_instsance != NULL);
+	}
+
+	if (!condition)
+	{
+		const char* msg = NULL;
+		if (fcall->parm_count_c >= 2)
+		{
+			var* arg1 = &fcall->func_parmeters[1];
+			if (arg1->type_define == T_STRING)
+			{
+				if (arg1->value_str_ptr != NULL && *arg1->value_str_ptr != NULL)
+					msg = *arg1->value_str_ptr;
+				else if (arg1->values != NULL)
+					msg = (char*)arg1->values;
+			}
+		}
+
+		if (msg != NULL)
+		{
+			fprintf(stderr, "Assertion failed: %s\n", msg);
+		}
+		else
+		{
+			fprintf(stderr, "Assertion failed\n");
+		}
+		exit(1);
+	}
+
+	fcall->_return.type_define = T_INT;
+	fcall->_return.value_int = new_int(1, 1);
+	fcall->_return.values = fcall->_return.value_int;
 }
 
 void xeql(fcall* fcall);
@@ -222,13 +290,6 @@ type_def SIMPLE_TYPE[] = {
 
 node* get_root(node* j)
 {
-	//printf("%s", __FUNCTION__);
-	if (j->type_ != endl)
-	{
-		//printf("\nerror line %d \nfile: %s",__LINE__,__FILE__);
-		//return NULL;
-	}
-
 	node* temp = (node*)j;
 
 	while (temp->parent != NULL)
@@ -238,7 +299,7 @@ node* get_root(node* j)
 	return temp;
 }
 
-node* get_first_type_backword_from(node* in, node_type b)
+node* get_first_type_backward_from(node* in, node_type b)
 {
 	node* save = (node*)in;
 	while (save != NULL && save->type_ != b)
@@ -246,6 +307,11 @@ node* get_first_type_backword_from(node* in, node_type b)
 		save = save->parent;
 	}
 	return save;
+}
+
+node* get_first_type_backword_from(node* in, node_type b)
+{
+	return get_first_type_backward_from(in, b);
 }
 
 
@@ -301,21 +367,26 @@ fl* static_flag_check2()
 	return parser_delim_get_first_unclosed(current_parser_ctx);
 }
 
-// check if n starts with keyword x at a word boundary
-int eql(const char* n, const char* x)
+// check if text starts with keyword at a word boundary
+int starts_with_keyword(const char* text, const char* keyword)
 {
-	if (n == NULL || x == NULL)
+	if (text == NULL || keyword == NULL)
 		return 0;
 
-	size_t len_x = strlen(x);
-	if (strncmp(n, x, len_x) != 0)
+	size_t len_kw = strlen(keyword);
+	if (strncmp(text, keyword, len_kw) != 0)
 		return 0;
 
-	char next = n[len_x];
+	char next = text[len_kw];
 	if ((next >= 'a' && next <= 'z') || (next >= 'A' && next <= 'Z') || (next >= '0' && next <= '9') || next == '_')
 		return 0;
 
 	return 1;
+}
+
+int eql(const char* n, const char* x)
+{
+	return starts_with_keyword(n, x);
 }
 
 
@@ -405,43 +476,48 @@ void assign_array_index(var* nvalue, var* marray, int index)
 }
 
 
-void scap_string(char* m)
+void unescape_string(char* str)
 {
-	if (m == NULL) return;
-	char* dst = m;
-	for (char* y = m; *y; y++)
+	if (str == NULL) return;
+	char* dst = str;
+	for (char* p = str; *p; p++)
 	{
-		if (*y == '\\' && *(y + 1) == 'n')
+		if (*p == '\\' && *(p + 1) == 'n')
 		{
 			*dst++ = '\n';
-			y++;
+			p++;
 		}
-		else if (*y == '\\' && *(y + 1) == 't')
+		else if (*p == '\\' && *(p + 1) == 't')
 		{
 			*dst++ = '\t';
-			y++;
+			p++;
 		}
-		else if (*y == '\\' && *(y + 1) == 'r')
+		else if (*p == '\\' && *(p + 1) == 'r')
 		{
 			*dst++ = '\r';
-			y++;
+			p++;
 		}
-		else if (*y == '\\' && *(y + 1) == '\\')
+		else if (*p == '\\' && *(p + 1) == '\\')
 		{
 			*dst++ = '\\';
-			y++;
+			p++;
 		}
-		else if (*y == '\\' && *(y + 1) == '"')
+		else if (*p == '\\' && *(p + 1) == '"')
 		{
 			*dst++ = '"';
-			y++;
+			p++;
 		}
 		else
 		{
-			*dst++ = *y;
+			*dst++ = *p;
 		}
 	}
 	*dst = '\0';
+}
+
+void scap_string(char* m)
+{
+	unescape_string(m);
 }
 
 void print_f(fcall* temp)
@@ -965,27 +1041,6 @@ void xreplace(fcall* y)
 void install_default_types()
 {
 	types = &simple_type_stack;
-
-	/*
-		HMODULE load_library_a = LoadLibraryA("httplib_dy.dll");
-		if (load_library_a != NULL)
-		{
-			ty* get_type_fnction = (ty*)GetProcAddress(load_library_a, "get_type");
-			type_def* nt = get_type_fnction(SIMPLE_TYPE);
-
-			func_deftion* xz = add_function_gloable(nt->d_functions[0]->func_name, nt, nt->d_functions[0]->start_parm_count,
-													nt->d_functions[0]->func_code,
-													nt->d_functions[0]->start_func_parmeters_name,
-													nt->d_functions[0]->start_func_parmeters);
-			//func* temp = copy_func(nt->functions.root);
-			//temp->func_name = nt->functions.root->func_name;
-			//func_stack_push(funcs, temp);
-			xz->function_type = constr;
-
-			//type_stack_push(types, nt);
-			//type_print(nt, 0);
-		}
-		*/
 }
 
 func_deftion* new_func()
@@ -1101,7 +1156,7 @@ type_def* get_class_of_function(func_deftion* fd)
 	return NULL;
 }
 
-var* get_globle_var_by_name(char* name)
+var* get_global_var_by_name(char* name)
 {
 	if (name == NULL || varss == NULL)
 		return NULL;
@@ -1113,49 +1168,175 @@ var* get_globle_var_by_name(char* name)
 	return NULL;
 }
 
+var* get_globle_var_by_name(char* name)
+{
+	return get_global_var_by_name(name);
+}
+
+var* get_function_var_by_name(char* name, fcall* func_call)
+{
+	if (name == NULL || func_call == NULL)
+		return NULL;
+	for (int i = 0; i < func_call->parm_count_c; i++)
+	{
+		if (func_call->func_parmeters[i].name != NULL && strcmp(name, func_call->func_parmeters[i].name) == 0)
+			return &func_call->func_parmeters[i];
+	}
+	return NULL;
+}
 
 var* fget_var_by_name_fc(char* name, fcall* y)
 {
-	if (name == NULL || y == NULL)
-		return NULL;
-	for (int i = 0; i < y->parm_count_c; i++)
-	{
-		if (y->func_parmeters[i].name != NULL && strcmp(name, y->func_parmeters[i].name) == 0)
-			return &y->func_parmeters[i];
-	}
-	return NULL;
+	return get_function_var_by_name(name, y);
 }
 
-var* get_var_by_name_on_stack(char* name, var_stack* y)
+int type_def_compute_field_offsets(type_def* td)
 {
-	if (name == NULL || y == NULL)
-		return NULL;
-	for (var* i = y->root; i != NULL; i = i->stack_next)
+	if (td == NULL) return 0;
+	int base_count = 0;
+	if (td->base != NULL && td->base != td)
 	{
-		if (i->name != NULL && strcmp(name, i->name) == 0)
-			return i;
+		base_count = type_def_compute_field_offsets(td->base);
+	}
+	for (int i = 0; i < td->d_propertys_size; i++)
+	{
+		td->d_propertys[i].slot_idx = base_count + i;
+	}
+	td->total_field_count = base_count + td->d_propertys_size;
+	return td->total_field_count;
+}
+
+int type_def_find_field_slot(const type_def* td, const char* name)
+{
+	if (td == NULL || name == NULL) return -1;
+	for (const type_def* curr = td; curr != NULL; curr = curr->base)
+	{
+		for (int i = 0; i < curr->d_propertys_size; i++)
+		{
+			if (curr->d_propertys[i].name != NULL && strcmp(curr->d_propertys[i].name, name) == 0)
+			{
+				return curr->d_propertys[i].slot_idx;
+			}
+		}
+		if (curr->base == curr) break;
+	}
+	return -1;
+}
+
+static void init_instance_prop_obj(var* inctance_prop);
+
+type_instance* type_instance_create(type_def* td)
+{
+	if (td == NULL) return NULL;
+	if (td->total_field_count == 0 && td->d_propertys_size > 0)
+	{
+		type_def_compute_field_offsets(td);
+	}
+	uint32_t fcount = (uint32_t)td->total_field_count;
+	size_t alloc_size = sizeof(type_instance) + fcount * sizeof(var);
+	type_instance* inst = (type_instance*)gc_calloc(1, alloc_size, GC_KIND_INSTANCE);
+	inst->type = td;
+	inst->field_count = fcount;
+	inst->size = 1;
+	inst->id = 0;
+
+	for (type_def* cur = td; cur != NULL; cur = cur->base)
+	{
+		for (int i = 0; i < cur->d_propertys_size; i++)
+		{
+			var* proto = &cur->d_propertys[i];
+			int slot = proto->slot_idx;
+			if (slot >= 0 && (uint32_t)slot < fcount)
+			{
+				var* f = &inst->fields[slot];
+				f->name = proto->name;
+				f->type_define = proto->type_define;
+				f->access = proto->access;
+				f->holder = inst;
+				f->slot_idx = slot;
+				f->size = 1;
+				if (proto->access != STATIC)
+				{
+					if (proto->type_define != NULL)
+					{
+						f->values = install_memory_with_type(proto->type_define, 1);
+						if (is_base_type(proto->type_define))
+						{
+							if (proto->values != NULL)
+							{
+								set_value_copy_var(f, proto);
+							}
+						}
+						else
+						{
+							f->value_type_instsance = (type_instance*)f->values;
+							init_instance_prop_obj(f);
+						}
+					}
+				}
+				else
+				{
+					f->values = proto->values;
+				}
+			}
+		}
+		if (cur->base == cur) break;
+	}
+
+	return inst;
+}
+
+var* type_instance_get_field(type_instance* inst, const char* name)
+{
+	if (inst == NULL || inst->type == NULL || name == NULL) return NULL;
+	int slot = type_def_find_field_slot(inst->type, name);
+	if (slot >= 0 && (uint32_t)slot < inst->field_count)
+	{
+		return &inst->fields[slot];
 	}
 	return NULL;
 }
 
+var* type_instance_get_field_by_slot(type_instance* inst, int slot)
+{
+	if (inst == NULL || slot < 0 || (uint32_t)slot >= inst->field_count) return NULL;
+	return &inst->fields[slot];
+}
 
-var* all_get_var_by_name(char* name, fcall* called_function, var* called_var)
+int type_instance_get_id(type_instance* inst)
+{
+	if (inst == NULL) return -1;
+	if (inst->id > 0) return inst->id;
+	var* f = type_instance_get_field(inst, "id");
+	if (f != NULL && f->value_int != NULL) return *f->value_int;
+	return -1;
+}
+
+var* find_var_in_scope(char* name, fcall* called_function, var* called_var)
 {
 	var* ret;
 	if (called_function != NULL)
 	{
-		ret = fget_var_by_name_fc(name, called_function);
-		if (ret != NULL)return ret;
+		ret = get_function_var_by_name(name, called_function);
+		if (ret != NULL) return ret;
 	}
 
-	if (called_var != NULL && called_var->value_type_instsance != NULL)
+	if (called_var != NULL)
 	{
-		ret = get_var_by_name_on_stack(name, &called_var->value_type_instsance->propertys);
-		if (ret != NULL)return ret;
+		if (strcmp(name, "this") == 0) return called_var;
+		if (called_var->value_type_instsance != NULL)
+		{
+			ret = type_instance_get_field(called_var->value_type_instsance, name);
+			if (ret != NULL) return ret;
+		}
 	}
 
+	return get_global_var_by_name(name);
+}
 
-	return get_globle_var_by_name(name);
+var* all_get_var_by_name(char* name, fcall* called_function, var* called_var)
+{
+	return find_var_in_scope(name, called_function, called_var);
 }
 
 
@@ -1166,19 +1347,19 @@ bool is_base_type(type_def* t)
 	return t >= SIMPLE_TYPE && t < (SIMPLE_TYPE + 11);
 }
 
-void* install_memory(var* n)
+void* install_memory(var* target_var)
 {
-	return install_memory_with_type(n->type_define, n->size);
+	return install_memory_with_type(target_var->type_define, target_var->size);
 }
 
-static void init_instance_prop_obj(var* inctance_prop)
+static void init_instance_prop_obj(var* instance_prop)
 {
-	if (inctance_prop == NULL || inctance_prop->type_define == NULL || is_base_type(inctance_prop->type_define))
+	if (instance_prop == NULL || instance_prop->type_define == NULL || is_base_type(instance_prop->type_define))
 		return;
 
-	inctance_prop->value_type_instsance = (type_instance*)inctance_prop->values;
+	instance_prop->value_type_instsance = (type_instance*)instance_prop->values;
 
-	type_def* pt = inctance_prop->type_define;
+	type_def* pt = instance_prop->type_define;
 	for (int i = 0; i < pt->d_function_size; i++)
 	{
 		if (pt->d_functions[i].func_name != NULL &&
@@ -1188,7 +1369,7 @@ static void init_instance_prop_obj(var* inctance_prop)
 			if (pt->d_functions[i].start_parm_count == 0)
 			{
 				fcall* cfc = create_fcall(&pt->d_functions[i]);
-				call_function(cfc, &inctance_prop);
+				call_function(cfc, &instance_prop);
 				gc_free_any(cfc);
 				break;
 			}
@@ -1196,173 +1377,45 @@ static void init_instance_prop_obj(var* inctance_prop)
 	}
 }
 
-void instance_type(type_def* type_protype, void* dstn_array, int size)
+void instance_type(type_def* type_prototype, void* dest_array, int size)
 {
+	if (type_prototype == NULL || dest_array == NULL) return;
 	for (int i = 0; i < size; i++)
 	{
-		type_instance* type_new_instance = ((type_instance*)dstn_array) + i;
-		type_new_instance->type = type_protype;
-		type_new_instance->size = size;
-
-		var_stack* props = (var_stack*)malloc(sizeof(var_stack));
-		var_stack_init(props);
-
-		type_def* cur = type_protype->base;
-		while (cur != NULL && cur != cur->base)
+		type_instance* inst = type_instance_create(type_prototype);
+		if (inst != NULL)
 		{
-			for (int m = 0; m < cur->d_propertys_size; m++)
-			{
-				var* protype_prop = cur->d_propertys + m;
-				if (protype_prop->name != NULL && strcmp(protype_prop->name, "this") != 0)
-				{
-					if (get_var_by_name_on_stack(protype_prop->name, props) == NULL)
-					{
-						var* inctance_prop = new_var_on_stack(props, protype_prop->name, protype_prop->type_define);
-						inctance_prop->size = 1;
-						inctance_prop->holder = type_new_instance;
-						inctance_prop->access = protype_prop->access;
-						if (protype_prop->access == STATIC)
-						{
-							inctance_prop->values = protype_prop->values;
-						}
-						else
-						{
-							inctance_prop->values = install_memory_with_type(protype_prop->type_define, 1);
-							if (protype_prop->values != NULL && is_base_type(protype_prop->type_define))
-								set_value_copy_var(inctance_prop, protype_prop);
-							init_instance_prop_obj(inctance_prop);
-						}
-					}
-				}
-			}
-			cur = cur->base;
+			((type_instance**)dest_array)[i] = inst;
 		}
-
-		if (type_protype->d_propertys_size > 0)
-		{
-			for (int m = 0; m < type_protype->d_propertys_size; m++)
-			{
-				var* protype_prop = type_protype->d_propertys + m;
-
-				if (protype_prop->name != NULL && strcmp(protype_prop->name, "this") != 0)
-				{
-					var* inctance_prop = new_var_on_stack(props, protype_prop->name, protype_prop->type_define);
-
-					inctance_prop->size = 1;
-					inctance_prop->holder = type_new_instance;
-					inctance_prop->access = protype_prop->access;
-					if (protype_prop->access == STATIC)
-					{
-						inctance_prop->values = protype_prop->values;
-					}
-					else
-					{
-						inctance_prop->values = install_memory_with_type(protype_prop->type_define, 1);
-						if (protype_prop->values != NULL && is_base_type(protype_prop->type_define))
-						{
-							set_value_copy_var(inctance_prop, protype_prop);
-						}
-						init_instance_prop_obj(inctance_prop);
-					}
-				}
-			}
-		}
-		props->stack_holder = type_new_instance;
-		type_new_instance->propertys = *props;
-		free(props);
-
-		var* y = new_var_on_stack(&type_new_instance->propertys, "this", type_protype);
-		y->value_type_instsance = type_new_instance;
-	}
-}
-
-void copy_object(type_instance* src, void* dstn_array, int size)
-{
-	for (int i = 0; i < size; i++)
-	{
-		type_instance* dstn = (type_instance*)dstn_array + i;
-		dstn->type = src->type;
-
-		dstn->size = src->size;
-		var_stack* props = (var_stack*)malloc(sizeof(var_stack));
-		var_stack_init(props);
-
-		//printf("\ncopy %s %s\n",src->w==child?"inc type":"super type",src->name);
-		if (src->propertys.size > 0)
-		{
-			for (var* prop = src->propertys.root; prop != NULL; prop = prop->stack_next)
-			{
-				if (strcmp(prop->name, "this") != 0)
-				{
-					var* inctance_prop = new_var_on_stack(props, prop->name, prop->type_define);
-
-					inctance_prop->size = size;
-
-					inctance_prop->holder = dstn;
-
-					inctance_prop->access = prop->access;
-					if ((prop)->access == STATIC)
-					{
-						//TODO:2022
-						//(*y)->values = x->values;
-					}
-					else
-					{
-						if (is_base_type(prop->type_define))
-						{
-							inctance_prop->values = install_memory_with_type(prop->type_define, size);
-
-							set_value_copy_var(inctance_prop, prop);
-						}
-						else //inctance_prop
-						{
-							inctance_prop->values = install_memory_with_type(prop->type_define, size);
-							copy_object(prop->value_type_instsance, inctance_prop->values, size);
-							//set_value_copy_var(inctance_prop, prop);
-						}
-					}
-				}
-			}
-		}
-		props->stack_holder = src;
-		dstn->propertys = *props;
-
-		var* y = new_var_on_stack(&dstn->propertys, "this", dstn->type);
-
-		y->value_type_instsance = dstn;
 	}
 }
 
 
-void* install_memory_with_type(type_def* mtype, const int count)
+void* install_memory_with_type(type_def* var_type, const int count)
 {
 	void* r = NULL;
-	if (mtype == NULL) return r;
-	const int ncount = count > 0 ? count : 1;
-	if (T_INT == mtype)
+	if (var_type == NULL) return r;
+	const int element_count = count > 0 ? count : 1;
+	if (T_INT == var_type)
 	{
-		r = (int*)gc_calloc(ncount, sizeof(int), GC_KIND_RAW);
+		r = (int*)gc_calloc(element_count, sizeof(int), GC_KIND_RAW);
 	}
-	else if (T_LONG == mtype)
-		r = (long*)gc_calloc(ncount, sizeof(long), GC_KIND_RAW);
-	else if (T_CHAR == mtype)
+	else if (T_LONG == var_type)
+		r = (long*)gc_calloc(element_count, sizeof(long), GC_KIND_RAW);
+	else if (T_CHAR == var_type)
 	{
-		r = (char*)gc_calloc(ncount + 1, sizeof(char), GC_KIND_RAW);
+		r = (char*)gc_calloc(element_count + 1, sizeof(char), GC_KIND_RAW);
 	}
-	else if (T_FLOAT == mtype)
-		r = (float*)gc_calloc(ncount, sizeof(float), GC_KIND_RAW);
-	else if (T_STRING == mtype)
-		r = (char**)gc_calloc(ncount, sizeof(char*), GC_KIND_RAW);
-	else if (T_BOOL == mtype)
-		r = (bool*)gc_calloc(ncount, sizeof(bool), GC_KIND_RAW);
+	else if (T_FLOAT == var_type)
+		r = (float*)gc_calloc(element_count, sizeof(float), GC_KIND_RAW);
+	else if (T_STRING == var_type)
+		r = (char**)gc_calloc(element_count, sizeof(char*), GC_KIND_RAW);
+	else if (T_BOOL == var_type)
+		r = (bool*)gc_calloc(element_count, sizeof(bool), GC_KIND_RAW);
 
-	else if (!is_base_type(mtype))
+	else if (!is_base_type(var_type))
 	{
-		type_instance* n_copy_array = (type_instance*)gc_calloc(ncount, sizeof(type_instance), GC_KIND_INSTANCE);
-
-		instance_type(mtype, n_copy_array, ncount);
-
-		r = n_copy_array;
+		r = type_instance_create(var_type);
 	}
 
 	return r;
@@ -1426,20 +1479,24 @@ bool copy_array(var* out, void* out_memory, var* src)
 	}
 	else if (!is_base_type(out->type_define))
 	{
-		//int* g = (int*)mvar->value;
-		//memcpy(memory, g, sizeof(int) * mvar->size);
-
-		copy_object(src->value_type_instsance, (type_instance*)out_memory, src->size);
+		out->value_type_instsance = src->value_type_instsance;
+		out->values = src->values;
 	}
 	return false;
 }
 
-bool is_double_equle(node* mnode)
+bool is_double_equal(node* mnode)
 {
-	return mnode->type_ == equles && mnode->next->type_ == equles;
+	return (mnode->type_ == equals || mnode->type_ == equles) &&
+	       (mnode->next->type_ == equals || mnode->next->type_ == equles);
 }
 
-bool is_double_oprater(node* mnode)
+bool is_double_equle(node* mnode)
+{
+	return is_double_equal(mnode);
+}
+
+bool is_double_operator(node* mnode)
 {
 	if (mnode == NULL || mnode->next == NULL || mnode->value_char_ptr == NULL || mnode->next->value_char_ptr == NULL)
 		return false;
@@ -1457,6 +1514,11 @@ bool is_double_oprater(node* mnode)
 	if (c1 == '|' && c2 == '|') return true; /* || */
 
 	return false;
+}
+
+bool is_double_oprater(node* mnode)
+{
+	return is_double_operator(mnode);
 }
 
 
@@ -1487,66 +1549,67 @@ char* get_file_buffer(FILE* sf)
 	return buff;
 }
 
-//memory must allocted before call 
-void set_value_copy_var(var* dstn, var* scr)
+// memory must be allocated before call
+void set_value_copy_var(var* dest, var* src)
 {
-	if (dstn == NULL || scr == NULL) return;
-	if (T_INT == dstn->type_define)
-		*dstn->value_int = *scr->value_int;
-	else if (T_STRING == dstn->type_define)
+	if (dest == NULL || src == NULL) return;
+	if (T_INT == dest->type_define)
+		*dest->value_int = *src->value_int;
+	else if (T_STRING == dest->type_define)
 	{
-		const char* s = (scr->value_str_ptr != NULL && *scr->value_str_ptr != NULL) ? *scr->value_str_ptr : "";
-		*dstn->value_str_ptr = (char*)malloc(strlen(s) + 1);
-		strcpy(*dstn->value_str_ptr, s);
+		const char* s = (src->value_str_ptr != NULL && *src->value_str_ptr != NULL) ? *src->value_str_ptr : "";
+		*dest->value_str_ptr = (char*)malloc(strlen(s) + 1);
+		strcpy(*dest->value_str_ptr, s);
 	}
-	else if (T_CHAR == dstn->type_define)
+	else if (T_CHAR == dest->type_define)
 	{
-		*dstn->value_char_ptr = *scr->value_char_ptr;
+		*dest->value_char_ptr = *src->value_char_ptr;
 	}
-	else if (T_LONG == dstn->type_define)
+	else if (T_LONG == dest->type_define)
 	{
-		*dstn->value_long = *scr->value_long;
+		*dest->value_long = *src->value_long;
 	}
-	else if (T_FLOAT == dstn->type_define)
+	else if (T_FLOAT == dest->type_define)
 	{
-		*dstn->value_float = *scr->value_float;
+		*dest->value_float = *src->value_float;
 	}
-	else if (T_BOOL == dstn->type_define)
+	else if (T_BOOL == dest->type_define)
 	{
-		*dstn->value_bool = *scr->value_bool;
+		*dest->value_bool = *src->value_bool;
 	}
 	else
 	{
-		if (dstn->value_type_instsance != NULL && scr->value_type_instsance != NULL)
-			*dstn->value_type_instsance = *scr->value_type_instsance;
+		if (dest->value_type_instsance != NULL && src->value_type_instsance != NULL)
+			*dest->value_type_instsance = *src->value_type_instsance;
 	}
 }
 
-//var type and memory must already alocated  //for value  //  only parse int
-void set_value_copy_node(var* dstn, node* scr)
+// var type and memory must already be allocated
+void set_value_copy_node(var* dest, node* src_node)
 {
-	if (T_INT == dstn->type_define)
-		*dstn->value_int = atoi(scr->value_char_ptr);
-	else if (T_STRING == dstn->type_define)
+	if (dest == NULL || src_node == NULL) return;
+	if (T_INT == dest->type_define)
+		*dest->value_int = atoi(src_node->value_char_ptr);
+	else if (T_STRING == dest->type_define)
 	{
-		*dstn->value_str_ptr = (char*)gc_calloc(1, strlen(scr->value_char_ptr) + 1, GC_KIND_STRING);
-		strcpy(*dstn->value_str_ptr, scr->value_char_ptr);
+		*dest->value_str_ptr = (char*)gc_calloc(1, strlen(src_node->value_char_ptr) + 1, GC_KIND_STRING);
+		strcpy(*dest->value_str_ptr, src_node->value_char_ptr);
 	}
-	else if (T_FLOAT == dstn->type_define)
+	else if (T_FLOAT == dest->type_define)
 	{
-		*dstn->value_float = atof(scr->value_char_ptr);
+		*dest->value_float = atof(src_node->value_char_ptr);
 	}
-	else if (T_LONG == dstn->type_define)
+	else if (T_LONG == dest->type_define)
 	{
-		*dstn->value_long = atol(scr->value_char_ptr);
+		*dest->value_long = atol(src_node->value_char_ptr);
 	}
-	else if (T_BOOL == dstn->type_define)
+	else if (T_BOOL == dest->type_define)
 	{
-		*dstn->value_bool = strcmp(scr->value_char_ptr, "false") != 0;
+		*dest->value_bool = strcmp(src_node->value_char_ptr, "false") != 0;
 	}
-	else if (T_CHAR == dstn->type_define)
+	else if (T_CHAR == dest->type_define)
 	{
-		*dstn->value_char_ptr = *scr->value_char_ptr;
+		*dest->value_char_ptr = *src_node->value_char_ptr;
 	}
 }
 
@@ -2371,8 +2434,14 @@ func_deftion simple_function_array[] = {
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &x_proc_run, .func_name = "proc_run",
 		.function_type = f_main, .return_type = T_ANY, .start_parm_count = 1, .ref = 0,
+		.stack_next = simple_function_array + 157
+	},
+	{
+		.start_func_parmeters = {T_ANY, T_ANY}, .start_parm_count = 1, .func_code = &xassert, .func_name = "assert", .function_type = f_main,
+		.return_type = T_INT,
+		.ref = 0,
 		.stack_next = 0
-	}
+	},
 };
 func_stack base_function = {.top = simple_function_array + (SIMPLE_FUNC_COUNT - 1), .size = SIMPLE_FUNC_COUNT, .root = simple_function_array + 0};
 
@@ -2391,7 +2460,8 @@ type_instance xlnag_object = {
 		.top = simple_function_array + 12, .size = 13, .root = simple_function_array + 0
 	},
 	.size = 1, .type = T_OBJECT,
-	//.propertys = {.size = 6, .top = tinfo + 5, .root = tinfo + 0, .stack_holder = 0}
+	.id = 0,
+	.field_count = 0,
 };
 var start_var = {
 	.name = "xlang", .type_define = T_OBJECT, .value_type_instsance = &xlnag_object,
@@ -2427,12 +2497,9 @@ var* get_array_item(var* name, int index)
 
 	if (name->type_define->type_name != NULL && strcmp(name->type_define->type_name, "List") == 0)
 	{
-		var* id_prop = NULL;
-		if (name->value_type_instsance != NULL)
-			id_prop = get_var_by_name_on_stack("id", &name->value_type_instsance->propertys);
-		if (id_prop != NULL && id_prop->value_int != NULL)
+		int list_id = type_instance_get_id(name->value_type_instsance);
+		if (list_id > 0)
 		{
-			int list_id = *id_prop->value_int;
 			return x_list_get_var(list_id, index);
 		}
 		return NULL;

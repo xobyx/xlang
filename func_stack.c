@@ -4,46 +4,29 @@
 #include <stdlib.h>
 #include <string.h>
 
-
- void func_stack_init(func_stack * S) {
+void func_stack_init(func_stack* S)
+{
 	S->size = 0;
 	S->top = NULL;
 	S->root = NULL;
-	
-	
-	
 }
- void int_func(func_deftion * n)
+
+func_deftion* new_func_on_stack(func_stack* n)
 {
-	
-	
-
-	
-	
-	
-
-
+	func_deftion* f = (func_deftion*)malloc(sizeof(func_deftion));
+	memset(f, 0, sizeof(func_deftion));
+	func_stack_push(n, f);
+	return f;
 }
-func_deftion * new_func_on_stack(func_stack* n)
- {
-        func_deftion* f= (func_deftion*)malloc(sizeof(func_deftion));
-		memset(f,0,sizeof(func_deftion));
-		func_stack_push(n,f);
-		return f;
 
- }
- void func_stack_push(func_stack * stk, func_deftion * el) {
-    // Increment number of elements.
+void func_stack_push(func_stack* stk, func_deftion* el)
+{
 	stk->size++;
-	if(stk->root==NULL) stk->root=el;
-    // Set el to point to current stack top as its next element.
-	
-	if(stk->top!=NULL)
-		stk->top->stack_next=el;
-    // Set el to be the top element of S.
-    stk->top = el;
-
-	
+	if (stk->root == NULL)
+		stk->root = el;
+	if (stk->top != NULL)
+		stk->top->stack_next = el;
+	stk->top = el;
 }
 
 extern func_deftion simple_function_array[];

@@ -21,10 +21,14 @@ const char* xir_opcode_name(XIrOpCode op)
 	case OP_STORE_LOCAL:  return "OP_STORE_LOCAL";
 	case OP_LOAD_FIELD:   return "OP_LOAD_FIELD";
 	case OP_STORE_FIELD:  return "OP_STORE_FIELD";
+	case OP_GET_FIELD_INDEX:  return "OP_GET_FIELD_INDEX";
+	case OP_SET_FIELD_INDEX: return "OP_SET_FIELD_INDEX";
 	case OP_LOAD_INDEX:   return "OP_LOAD_INDEX";
 	case OP_STORE_INDEX:  return "OP_STORE_INDEX";
 	case OP_BUILD_LIST:   return "OP_BUILD_LIST";
 	case OP_NEW_INSTANCE: return "OP_NEW_INSTANCE";
+	case OP_CLASS:        return "OP_CLASS";
+	case OP_METHOD:       return "OP_METHOD";
 	case OP_POP:          return "OP_POP";
 	case OP_DUP:          return "OP_DUP";
 	case OP_ADD:          return "OP_ADD";
@@ -195,6 +199,26 @@ bool xval_equal(XValue a, XValue b)
 			return (double)a.as.ival == b.as.fval;
 		if (a.type == VAL_FLOAT && b.type == VAL_INT)
 			return a.as.fval == (double)b.as.ival;
+		/* Allow bool and int comparison */
+		if (a.type == VAL_BOOL && b.type == VAL_INT)
+			return (a.as.bval ? 1 : 0) == b.as.ival;
+		if (a.type == VAL_INT && b.type == VAL_BOOL)
+			return a.as.ival == (b.as.bval ? 1 : 0);
+		/* Allow int and string comparison (e.g. 42 == "42") */
+		if (a.type == VAL_INT && b.type == VAL_STRING && b.as.sval != NULL)
+		{
+			char* endptr = NULL;
+			long v = strtol(b.as.sval, &endptr, 10);
+			if (endptr != b.as.sval && *endptr == '\0')
+				return a.as.ival == v;
+		}
+		if (a.type == VAL_STRING && b.type == VAL_INT && a.as.sval != NULL)
+		{
+			char* endptr = NULL;
+			long v = strtol(a.as.sval, &endptr, 10);
+			if (endptr != a.as.sval && *endptr == '\0')
+				return v == b.as.ival;
+		}
 		return false;
 	}
 
@@ -474,6 +498,36 @@ int xir_disassemble_instruction(const XIrChunk* chunk, int offset)
 			uint16_t count = (chunk->code[offset + 1] << 8) | chunk->code[offset + 2];
 			printf("%d items\n", count);
 			return offset + 3;
+		}
+
+	case OP_GET_FIELD_INDEX:
+	case OP_SET_FIELD_INDEX:
+		{
+			uint16_t slot = (chunk->code[offset + 1] << 8) | chunk->code[offset + 2];
+			printf("slot \033[33m[%d]\033[0m\n", slot);
+			return offset + 3;
+		}
+
+	case OP_CLASS:
+		{
+			uint16_t s_cls = (chunk->code[offset + 1] << 8) | chunk->code[offset + 2];
+			uint16_t s_base = (chunk->code[offset + 3] << 8) | chunk->code[offset + 4];
+			uint16_t fcount = (chunk->code[offset + 5] << 8) | chunk->code[offset + 6];
+			const char* cname = (s_cls < chunk->symbols.count) ? chunk->symbols.symbols[s_cls] : "?";
+			const char* bname = (s_base != 0xFFFF && s_base < chunk->symbols.count) ? chunk->symbols.symbols[s_base] : "Object";
+			printf("\033[35m%s\033[0m : %s (%d fields)\n", cname, bname, fcount);
+			return offset + 7 + fcount * 2;
+		}
+
+	case OP_METHOD:
+		{
+			uint16_t s_cls = (chunk->code[offset + 1] << 8) | chunk->code[offset + 2];
+			uint16_t s_m = (chunk->code[offset + 3] << 8) | chunk->code[offset + 4];
+			uint8_t arity = chunk->code[offset + 5];
+			const char* cname = (s_cls < chunk->symbols.count) ? chunk->symbols.symbols[s_cls] : "?";
+			const char* mname = (s_m < chunk->symbols.count) ? chunk->symbols.symbols[s_m] : "?";
+			printf("%s.\033[36m%s\033[0m (%d args)\n", cname, mname, arity);
+			return offset + 6;
 		}
 
 	case OP_NEW_INSTANCE:

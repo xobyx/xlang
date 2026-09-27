@@ -10,7 +10,7 @@ print("  Native Micro-Framework, REST API & Benchmarks   ")
 print("==================================================")
 
 # Step 1: Initialize HTTP Web Server
-HttpServer server
+HttpServer server = new HttpServer()
 int port = 18080
 int rc = server.init("127.0.0.1", port)
 if (rc < 0) {

@@ -6,6 +6,9 @@ x = 100
 y = 200
 }
 }
-Point p
+Point p = new Point()
 print(p.x)
 print(p.y)
+assert(p.x == 100, "p.x should be 100")
+assert(p.y == 200, "p.y should be 200")
+

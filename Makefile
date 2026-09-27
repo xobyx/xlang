@@ -40,9 +40,9 @@ OBJDIR_RELEASE = obj/Release
 DEP_RELEASE =
 OUT_RELEASE = bin/Release/xlang
 
-OBJ_DEBUG = $(OBJDIR_DEBUG)/calc.o $(OBJDIR_DEBUG)/xlang.o $(OBJDIR_DEBUG)/var_stack.o $(OBJDIR_DEBUG)/type_stack.o $(OBJDIR_DEBUG)/stack.o $(OBJDIR_DEBUG)/save.o $(OBJDIR_DEBUG)/compile.o $(OBJDIR_DEBUG)/parse.o $(OBJDIR_DEBUG)/lexer.o $(OBJDIR_DEBUG)/md5.o $(OBJDIR_DEBUG)/functions.o $(OBJDIR_DEBUG)/func_stack.o $(OBJDIR_DEBUG)/debuge.o $(OBJDIR_DEBUG)/echo.o $(OBJDIR_DEBUG)/xsocket.o $(OBJDIR_DEBUG)/xfile.o $(OBJDIR_DEBUG)/xsys.o $(OBJDIR_DEBUG)/xstring.o $(OBJDIR_DEBUG)/xmath.o $(OBJDIR_DEBUG)/xcollection.o $(OBJDIR_DEBUG)/ximport.o $(OBJDIR_DEBUG)/xgc.o $(OBJDIR_DEBUG)/xdiag.o $(OBJDIR_DEBUG)/xdatetime.o $(OBJDIR_DEBUG)/xjson.o $(OBJDIR_DEBUG)/xast.o $(OBJDIR_DEBUG)/xast_parser.o $(OBJDIR_DEBUG)/xir.o $(OBJDIR_DEBUG)/xir_compiler.o $(OBJDIR_DEBUG)/xvm.o #$(OBJDIR_DEBUG)/http.o
-
-OBJ_RELEASE = $(OBJDIR_RELEASE)/calc.o $(OBJDIR_RELEASE)/xlang.o $(OBJDIR_RELEASE)/var_stack.o $(OBJDIR_RELEASE)/type_stack.o $(OBJDIR_RELEASE)/stack.o $(OBJDIR_RELEASE)/save.o $(OBJDIR_RELEASE)/compile.o $(OBJDIR_RELEASE)/parse.o $(OBJDIR_RELEASE)/lexer.o $(OBJDIR_RELEASE)/md5.o $(OBJDIR_RELEASE)/functions.o $(OBJDIR_RELEASE)/func_stack.o $(OBJDIR_RELEASE)/debuge.o $(OBJDIR_RELEASE)/echo.o $(OBJDIR_RELEASE)/xsocket.o $(OBJDIR_RELEASE)/xfile.o $(OBJDIR_RELEASE)/xsys.o $(OBJDIR_RELEASE)/xstring.o $(OBJDIR_RELEASE)/xmath.o $(OBJDIR_RELEASE)/xcollection.o $(OBJDIR_RELEASE)/ximport.o $(OBJDIR_RELEASE)/xgc.o $(OBJDIR_RELEASE)/xdiag.o $(OBJDIR_RELEASE)/xdatetime.o $(OBJDIR_RELEASE)/xjson.o $(OBJDIR_RELEASE)/xast.o $(OBJDIR_RELEASE)/xast_parser.o $(OBJDIR_RELEASE)/xir.o $(OBJDIR_RELEASE)/xir_compiler.o $(OBJDIR_RELEASE)/xvm.o #$(OBJDIR_RELEASE)/http.o
+OBJ_DEBUG = $(OBJDIR_DEBUG)/calc.o $(OBJDIR_DEBUG)/xlang.o $(OBJDIR_DEBUG)/var_stack.o $(OBJDIR_DEBUG)/type_stack.o $(OBJDIR_DEBUG)/stack.o $(OBJDIR_DEBUG)/compile.o $(OBJDIR_DEBUG)/parse.o $(OBJDIR_DEBUG)/lexer.o $(OBJDIR_DEBUG)/md5.o $(OBJDIR_DEBUG)/functions.o $(OBJDIR_DEBUG)/func_stack.o $(OBJDIR_DEBUG)/debuge.o $(OBJDIR_DEBUG)/echo.o $(OBJDIR_DEBUG)/xsocket.o $(OBJDIR_DEBUG)/xfile.o $(OBJDIR_DEBUG)/xsys.o $(OBJDIR_DEBUG)/xstring.o $(OBJDIR_DEBUG)/xmath.o $(OBJDIR_DEBUG)/xcollection.o $(OBJDIR_DEBUG)/ximport.o $(OBJDIR_DEBUG)/xgc.o $(OBJDIR_DEBUG)/xdiag.o $(OBJDIR_DEBUG)/xdatetime.o $(OBJDIR_DEBUG)/xjson.o $(OBJDIR_DEBUG)/xast.o $(OBJDIR_DEBUG)/xast_parser.o $(OBJDIR_DEBUG)/xir.o $(OBJDIR_DEBUG)/xir_compiler.o $(OBJDIR_DEBUG)/xvm.o $(OBJDIR_DEBUG)/arena.o $(OBJDIR_DEBUG)/xdis_html.o
+ #$(OBJDIR_DEBUG)/http.o
+OBJ_RELEASE = $(OBJDIR_RELEASE)/calc.o $(OBJDIR_RELEASE)/xlang.o $(OBJDIR_RELEASE)/var_stack.o $(OBJDIR_RELEASE)/type_stack.o $(OBJDIR_RELEASE)/stack.o $(OBJDIR_RELEASE)/compile.o $(OBJDIR_RELEASE)/parse.o $(OBJDIR_RELEASE)/lexer.o $(OBJDIR_RELEASE)/md5.o $(OBJDIR_RELEASE)/functions.o $(OBJDIR_RELEASE)/func_stack.o $(OBJDIR_RELEASE)/debuge.o $(OBJDIR_RELEASE)/echo.o $(OBJDIR_RELEASE)/xsocket.o $(OBJDIR_RELEASE)/xfile.o $(OBJDIR_RELEASE)/xsys.o $(OBJDIR_RELEASE)/xstring.o $(OBJDIR_RELEASE)/xmath.o $(OBJDIR_RELEASE)/xcollection.o $(OBJDIR_RELEASE)/ximport.o $(OBJDIR_RELEASE)/xgc.o $(OBJDIR_RELEASE)/xdiag.o $(OBJDIR_RELEASE)/xdatetime.o $(OBJDIR_RELEASE)/xjson.o $(OBJDIR_RELEASE)/xast.o $(OBJDIR_RELEASE)/xast_parser.o $(OBJDIR_RELEASE)/xir.o $(OBJDIR_RELEASE)/xir_compiler.o $(OBJDIR_RELEASE)/xvm.o $(OBJDIR_RELEASE)/arena.o $(OBJDIR_RELEASE)/xdis_html.o #$(OBJDIR_RELEASE)/http.o
 
 all: debug release
 
@@ -70,9 +70,6 @@ $(OBJDIR_DEBUG)/type_stack.o: type_stack.c
 
 $(OBJDIR_DEBUG)/stack.o: stack.c
 	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c stack.c -o $(OBJDIR_DEBUG)/stack.o
-
-$(OBJDIR_DEBUG)/save.o: save.c
-	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c save.c -o $(OBJDIR_DEBUG)/save.o
 
 $(OBJDIR_DEBUG)/compile.o: compile.c
 	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c compile.c -o $(OBJDIR_DEBUG)/compile.o
@@ -152,6 +149,12 @@ $(OBJDIR_DEBUG)/xir_compiler.o: xir_compiler.c
 $(OBJDIR_DEBUG)/xvm.o: xvm.c
 	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c xvm.c -o $(OBJDIR_DEBUG)/xvm.o
 
+$(OBJDIR_DEBUG)/arena.o: arena.c
+	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c arena.c -o $(OBJDIR_DEBUG)/arena.o
+
+$(OBJDIR_DEBUG)/xdis_html.o: xdis_html.c
+	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c xdis_html.c -o $(OBJDIR_DEBUG)/xdis_html.o
+
 clean_debug:
 	rm -f $(OBJ_DEBUG) $(OUT_DEBUG)
 	rm -rf bin/Debug
@@ -179,9 +182,6 @@ $(OBJDIR_RELEASE)/type_stack.o: type_stack.c
 
 $(OBJDIR_RELEASE)/stack.o: stack.c
 	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c stack.c -o $(OBJDIR_RELEASE)/stack.o
-
-$(OBJDIR_RELEASE)/save.o: save.c
-	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c save.c -o $(OBJDIR_RELEASE)/save.o
 
 $(OBJDIR_RELEASE)/compile.o: compile.c
 	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c compile.c -o $(OBJDIR_RELEASE)/compile.o
@@ -259,6 +259,12 @@ $(OBJDIR_RELEASE)/xir_compiler.o: xir_compiler.c
 
 $(OBJDIR_RELEASE)/xvm.o: xvm.c
 	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c xvm.c -o $(OBJDIR_RELEASE)/xvm.o
+
+$(OBJDIR_RELEASE)/arena.o: arena.c
+	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c arena.c -o $(OBJDIR_RELEASE)/arena.o
+
+$(OBJDIR_RELEASE)/xdis_html.o: xdis_html.c
+	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c xdis_html.c -o $(OBJDIR_RELEASE)/xdis_html.o
 
 clean_release:
 	rm -f $(OBJ_RELEASE) $(OUT_RELEASE)

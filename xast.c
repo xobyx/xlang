@@ -308,6 +308,24 @@ AstExpr* ast_expr_assign(AstArena* arena, AstExpr* target, const char* op, AstEx
 	return e;
 }
 
+AstExpr* ast_expr_new(AstArena* arena, const char* class_name, AstExpr** args, int arg_count, int line, int col)
+{
+	AstExpr* e = alloc_expr(arena, AST_EXPR_NEW, line, col);
+	e->as.new_expr.class_name = ast_arena_strdup(arena, class_name);
+	e->as.new_expr.arg_count = arg_count;
+	if (arg_count > 0 && args != NULL)
+	{
+		e->as.new_expr.args = (AstExpr**)ast_arena_alloc(arena, sizeof(AstExpr*) * arg_count);
+		memcpy(e->as.new_expr.args, args, sizeof(AstExpr*) * arg_count);
+	}
+	else
+	{
+		e->as.new_expr.args = NULL;
+	}
+	return e;
+}
+
+
 /* -------------------------------------------------------------------------
  * AST Statement Constructors
  * ------------------------------------------------------------------------- */
@@ -574,6 +592,13 @@ void xast_dump_expr(const AstExpr* expr, int indent, bool is_last)
 		printf("\033[1;31mAssignExpr\033[0m (%s)\n", expr->as.assign.op);
 		xast_dump_expr(expr->as.assign.target, indent + 1, false);
 		xast_dump_expr(expr->as.assign.value, indent + 1, true);
+		break;
+	case AST_EXPR_NEW:
+		printf("\033[1;36mNewExpr\033[0m: %s (%d args)\n", expr->as.new_expr.class_name, expr->as.new_expr.arg_count);
+		for (int i = 0; i < expr->as.new_expr.arg_count; i++)
+		{
+			xast_dump_expr(expr->as.new_expr.args[i], indent + 1, i == expr->as.new_expr.arg_count - 1);
+		}
 		break;
 	default:
 		printf("UnknownExpr (%d)\n", expr->type);

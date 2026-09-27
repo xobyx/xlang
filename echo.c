@@ -1,174 +1,219 @@
-#include "types.h"
+#include "echo.h"
 #include <stdio.h>
 
-#define p printf
-#define l(i) printf("%*s",i*4," ");
-void echo_type_instance(type_instance* c, int level);
-void echo_type_def(type_def c, int level);
-void echo_func_def(func_deftion m, int le);
-void echo_var(var p, int level);
-void _echo(fcall* v)
+static inline void print_indent(int level)
 {
-	p("{\n");
-	echo_var(v->func_parmeters[0], 1);
-	p("}\n");
+	if (level > 0)
+		printf("%*s", level * 4, " ");
 }
-void echo_var(var v, int le)
-{
-	l(le)p("name:%s\n", v.name ? v.name : "(null)");
-	l(le)p("size:%d\n", v.size);
 
-	if (v.type_define != NULL && v.values != NULL)
+void _echo(fcall* func_call)
+{
+	printf("{\n");
+	if (func_call != NULL && func_call->param_count > 0)
+		echo_var(func_call->func_parameters[0], 1);
+	printf("}\n");
+}
+
+void echo_var(var variable, int indent_level)
+{
+	print_indent(indent_level);
+	printf("name:%s\n", variable.name ? variable.name : "(null)");
+	print_indent(indent_level);
+	printf("size:%d\n", variable.size);
+
+	if (variable.type_define != NULL && variable.values != NULL)
 	{
-		switch (v.type_define->type_id)
+		switch (variable.type_define->type_id)
 		{
-		case 0:///long
-			l(le)p("value long : %ld", *v.value_long);
+		case 0: /* long */
+			print_indent(indent_level);
+			printf("value long : %ld", *variable.value_long);
 			break;
-		case 1://string
-			l(le)p("value string : %s", *v.value_str_ptr ? *v.value_str_ptr : "(null)");
+		case 1: /* string */
+			print_indent(indent_level);
+			printf("value string : %s", variable.value_str_ptr ? *variable.value_str_ptr : "(null)");
 			break;
-		case 2://char
-			l(le)p("value char : %c", *v.value_char_ptr);
+		case 2: /* char */
+			print_indent(indent_level);
+			printf("value char : %c", *variable.value_char_ptr);
 			break;
-		case 3://int
-			l(le)p("value_int : %d", *v.value_int);
+		case 3: /* int */
+			print_indent(indent_level);
+			printf("value_int : %d", *variable.value_int);
 			break;
-		case 4://bool
-			l(le)p("value_bool : %s", *v.value_bool ? "true" : "false");
+		case 4: /* bool */
+			print_indent(indent_level);
+			printf("value_bool : %s", *variable.value_bool ? "true" : "false");
 			break;
-		case 5://float
-			l(le)p("value float : %f", *v.value_float);
+		case 5: /* float */
+			print_indent(indent_level);
+			printf("value float : %f", *variable.value_float);
 			break;
-		case 9: //T_FUNC
-		{
-			l(le)p("value function :\n");
-			l(le)p("{\n");
-			if (v.value_func != NULL)
-				echo_func_def(*v.value_func, le + 1);
-			l(le)p("}\n");
+		case 9: /* T_FUNC */
+			print_indent(indent_level);
+			printf("value function :\n");
+			print_indent(indent_level);
+			printf("{\n");
+			if (variable.value_func != NULL)
+				echo_func_def(*variable.value_func, indent_level + 1);
+			print_indent(indent_level);
+			printf("}\n");
 			break;
-		}
 		default:
-			p("unimpl %d %s", __LINE__, __FILE__);
+			printf("unimplemented %d %s", __LINE__, __FILE__);
 			break;
 		}
 	}
-	l(le) p(", addr = {{%p}} , {{size = %d}} \n", v.values, v.size);
+	print_indent(indent_level);
+	printf(", addr = {{%p}} , {{size = %d}} \n", variable.values, variable.size);
 
-	if (v.type_define != NULL)
+	if (variable.type_define != NULL)
 	{
-		l(le)p("type define : \n");
-		l(le)p("{\n");
-		echo_type_def(*v.type_define, le + 1);
-		l(le)p("}\n");
+		print_indent(indent_level);
+		printf("type define : \n");
+		print_indent(indent_level);
+		printf("{\n");
+		echo_type_def(*variable.type_define, indent_level + 1);
+		print_indent(indent_level);
+		printf("}\n");
 	}
 }
-void echo_func_def(func_deftion m, int le)
+
+void echo_func_def(func_deftion func_def, int indent_level)
 {
-	l(le)p("function name : %s \n", m.func_name);
-	l(le)p("parms count : %d \n", m.start_parm_count);
-	l(le)p("parms: \n");
-	l(le)p("{\n");
-	int nl =le+1;
-	int nnl =le+2;
-	for (int i = 0; i < m.start_parm_count; i++)
+	print_indent(indent_level);
+	printf("function name : %s \n", func_def.func_name ? func_def.func_name : "(null)");
+	print_indent(indent_level);
+	printf("parms count : %d \n", func_def.start_param_count);
+	print_indent(indent_level);
+	printf("parms: \n");
+	print_indent(indent_level);
+	printf("{\n");
+
+	int next_level = indent_level + 1;
+	int inner_level = indent_level + 2;
+	for (int i = 0; i < func_def.start_param_count; i++)
 	{
-		l(nl)p("{\n");
-		l(nnl)p("parm index :%d , name : %s\n", i, m.start_func_parmeters_name[i]);
-		if (*(m.start_func_parmeters+i) != NULL)
+		print_indent(next_level);
+		printf("{\n");
+		print_indent(inner_level);
+		printf("parm index :%d , name : %s\n", i, func_def.start_func_parameters_name[i]);
+		if (func_def.start_func_parameters[i] != NULL)
 		{
-			l(nnl)p("parm type :\n");
-			l(nnl)p("{\n");
-			echo_type_def(*m.start_func_parmeters[i], le + 3);
-			l(nnl)p("}\n");
+			print_indent(inner_level);
+			printf("parm type :\n");
+			print_indent(inner_level);
+			printf("{\n");
+			echo_type_def(*func_def.start_func_parameters[i], indent_level + 3);
+			print_indent(inner_level);
+			printf("}\n");
 		}
 		else
 		{
-			l(nnl)p("typedef: ANY TYPE\n");
+			print_indent(inner_level);
+			printf("typedef: ANY TYPE\n");
 		}
-		l(nl)p("}\n");
-	
+		print_indent(next_level);
+		printf("}\n");
 	}
-	l(le)p("}\n");
-	l(le)p("function code: %p \n", m.func_code);
+	print_indent(indent_level);
+	printf("}\n");
+	print_indent(indent_level);
+	printf("function code: %p \n", func_def.func_code);
 
-	//function_type function_type;
-	l(le)p("return type : \n");
-	l(le)p("{\n");
-	if (m.return_type != NULL)
-		echo_type_def(*m.return_type, le + 1);
-	l(le)p("}\n");
+	print_indent(indent_level);
+	printf("return type : \n");
+	print_indent(indent_level);
+	printf("{\n");
+	if (func_def.return_type != NULL)
+		echo_type_def(*func_def.return_type, indent_level + 1);
+	print_indent(indent_level);
+	printf("}\n");
 }
 
-void echo_type_def(type_def c, int le)
+void echo_type_def(type_def type_definition, int indent_level)
 {
-	l(le)p("type name : %s \n", c.type_name);
-	l(le)p("type id : %d \n", c.type_id);
-	l(le)p("props count : %d\n", c.d_propertys_size);
-	l(le)p("props :\n");
-	l(le)p("{\n");
-	for (int i = 0; i < c.d_propertys_size; i++)
+	print_indent(indent_level);
+	printf("type name : %s \n", type_definition.type_name ? type_definition.type_name : "(null)");
+	print_indent(indent_level);
+	printf("type id : %d \n", type_definition.type_id);
+	print_indent(indent_level);
+	printf("props count : %d\n", type_definition.property_count);
+	print_indent(indent_level);
+	printf("props :\n");
+	print_indent(indent_level);
+	printf("{\n");
+	for (int i = 0; i < type_definition.property_count; i++)
 	{
-		echo_var(c.d_propertys[i], le + 1);
-
+		echo_var(type_definition.properties[i], indent_level + 1);
 	}
-	l(le)p("}\n");
+	print_indent(indent_level);
+	printf("}\n");
 
-	l(le)p("function count : %d\n", c.d_function_size);
-	l(le)p("functions : \n");
-	l(le)p("{\n");
-	for (int i = 0; i < c.d_function_size; i++)
+	print_indent(indent_level);
+	printf("function count : %d\n", type_definition.function_count);
+	print_indent(indent_level);
+	printf("functions : \n");
+	print_indent(indent_level);
+	printf("{\n");
+	for (int i = 0; i < type_definition.function_count; i++)
 	{
-		echo_func_def(c.d_functions[i], le + 1);
-
+		echo_func_def(type_definition.d_functions[i], indent_level + 1);
 	}
-	l(le)p("}\n");
-
-
-
-
-	///struct type_def* base;
-	///struct type_def* stack_next;
-	///enum var_access access;
-	//enum w_type w;
-
+	print_indent(indent_level);
+	printf("}\n");
 }
-void echo_type_instance(type_instance* c, int le)
+
+void echo_type_instance(type_instance* instance, int indent_level)
 {
-	if (c == NULL) return;
-	l(le)p("props count : %d\n", c->propertys.size);
-	l(le)p("prop : \n");
-	l(le)p("{\n");
-	for (var* i = c->propertys.root; i != NULL; i = i->stack_next)
-	{
-		echo_var(*i, le + 1);
+	if (instance == NULL)
+		return;
 
+	print_indent(indent_level);
+	printf("props count : %u\n", instance->field_count);
+	print_indent(indent_level);
+	printf("prop : \n");
+	print_indent(indent_level);
+	printf("{\n");
+	for (uint32_t i = 0; i < instance->field_count; i++)
+	{
+		echo_var(instance->fields[i], indent_level + 1);
 	}
-	l(le)p("}\n");
+	print_indent(indent_level);
+	printf("}\n");
 
-	l(le)p("function count : %d\n", c->functions.size);
-	l(le)p("functions :\n");
-	l(le)p("{\n");
-	for (func_deftion* i = c->functions.root; i != NULL; i = i->stack_next)
+	print_indent(indent_level);
+	printf("function count : %d\n", instance->functions.size);
+	print_indent(indent_level);
+	printf("functions :\n");
+	print_indent(indent_level);
+	printf("{\n");
+	for (func_deftion* i = instance->functions.root; i != NULL; i = i->stack_next)
 	{
-		echo_func_def(*i, le + 1);
-
+		echo_func_def(*i, indent_level + 1);
 	}
-	l(le)p("}\n");
+	print_indent(indent_level);
+	printf("}\n");
 
-	if (c->type != NULL)
+	if (instance->type != NULL)
 	{
-		l(le)p("type define : \n");
-		l(le)p("{\n");
-		echo_type_def(*c->type, le + 1);
-		l(le)p("}\n");
+		print_indent(indent_level);
+		printf("type define : \n");
+		print_indent(indent_level);
+		printf("{\n");
+		echo_type_def(*instance->type, indent_level + 1);
+		print_indent(indent_level);
+		printf("}\n");
 	}
-	if (c->base != NULL && c->base != c)
+	if (instance->base != NULL && instance->base != instance)
 	{
-		l(le)p("base :\n");
-		l(le)p("{\n");
-		echo_type_instance(c->base, le + 1);
-		l(le)p("}\n");
+		print_indent(indent_level);
+		printf("base :\n");
+		print_indent(indent_level);
+		printf("{\n");
+		echo_type_instance(instance->base, indent_level + 1);
+		print_indent(indent_level);
+		printf("}\n");
 	}
 }

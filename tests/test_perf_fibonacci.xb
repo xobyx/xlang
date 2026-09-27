@@ -75,6 +75,19 @@ print("fib_iter(45) = %d (expected 1134903170)", i45)
 int oop_val = Fibonacci.compute_iter(20)
 print("Fibonacci.compute_iter(20) = %d", oop_val)
 
+assert(r0 == 0, "fib_rec(0) should be 0")
+assert(r1 == 1, "fib_rec(1) should be 1")
+assert(r5 == 5, "fib_rec(5) should be 5")
+assert(r10 == 55, "fib_rec(10) should be 55")
+assert(r20 == 6765, "fib_rec(20) should be 6765")
+assert(i0 == 0, "fib_iter(0) should be 0")
+assert(i1 == 1, "fib_iter(1) should be 1")
+assert(i5 == 5, "fib_iter(5) should be 5")
+assert(i10 == 55, "fib_iter(10) should be 55")
+assert(i20 == 6765, "fib_iter(20) should be 6765")
+assert(i45 == 1134903170, "fib_iter(45) should be 1134903170")
+assert(oop_val == 6765, "Fibonacci.compute_iter(20) should be 6765")
+
 if (r20 == 6765) {
     print("PASS: Recursive Fibonacci matches mathematical sequence")
 } else {

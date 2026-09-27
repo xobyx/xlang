@@ -1612,6 +1612,45 @@ int x_list_item_type(int id, int index)
 	return (int)l->items[index].type;
 }
 
+int x_list_set_item_int(int id, int index, int val)
+{
+	if (id <= 0 || id >= MAX_LISTS || s_lists[id] == NULL || !s_lists[id]->active)
+		return 0;
+	x_list_t* l = s_lists[id];
+	if (index < 0 || index >= l->size) return 0;
+	if (l->items[index].type == X_ELEM_STR && l->items[index].str_val) free(l->items[index].str_val);
+	l->items[index].type = X_ELEM_INT;
+	l->items[index].int_val = val;
+	sync_item_var(&l->items[index]);
+	return 1;
+}
+
+int x_list_set_item_float(int id, int index, float val)
+{
+	if (id <= 0 || id >= MAX_LISTS || s_lists[id] == NULL || !s_lists[id]->active)
+		return 0;
+	x_list_t* l = s_lists[id];
+	if (index < 0 || index >= l->size) return 0;
+	if (l->items[index].type == X_ELEM_STR && l->items[index].str_val) free(l->items[index].str_val);
+	l->items[index].type = X_ELEM_FLOAT;
+	l->items[index].float_val = val;
+	sync_item_var(&l->items[index]);
+	return 1;
+}
+
+int x_list_set_item_str(int id, int index, const char* val)
+{
+	if (id <= 0 || id >= MAX_LISTS || s_lists[id] == NULL || !s_lists[id]->active)
+		return 0;
+	x_list_t* l = s_lists[id];
+	if (index < 0 || index >= l->size) return 0;
+	if (l->items[index].type == X_ELEM_STR && l->items[index].str_val) free(l->items[index].str_val);
+	l->items[index].type = X_ELEM_STR;
+	l->items[index].str_val = strdup(val ? val : "");
+	sync_item_var(&l->items[index]);
+	return 1;
+}
+
 int x_map_alloc(void)
 {
 	int slot = -1;

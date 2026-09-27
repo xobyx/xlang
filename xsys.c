@@ -260,10 +260,24 @@ void x_proc_run(fcall* fc)
 #endif
 
 	type_def* pr_td = get_type_by_name("ProcessResult");
+	if (pr_td == NULL || pr_td->d_propertys_size == 0)
+	{
+		extern type_def* new_type(void);
+		extern void define_new_class_prop(char* name, type_def* contern_class, type_def* new_var_type, var** out_var);
+		if (pr_td == NULL)
+		{
+			pr_td = new_type();
+			pr_td->type_name = "ProcessResult";
+		}
+		var* dummy = NULL;
+		define_new_class_prop("stdout", pr_td, T_STRING, &dummy);
+		define_new_class_prop("exit_code", pr_td, T_INT, &dummy);
+		type_def_compute_field_offsets(pr_td);
+	}
 	if (pr_td != NULL && !is_base_type(pr_td))
 	{
-		type_instance* inst = (type_instance*)install_memory_with_type(pr_td, 1);
-		var* so_prop = get_var_by_name_on_stack("stdout", &inst->propertys);
+		type_instance* inst = type_instance_create(pr_td);
+		var* so_prop = type_instance_get_field(inst, "stdout");
 		if (so_prop != NULL)
 		{
 			char* out_copy = (char*)gc_malloc(len + 1, GC_KIND_STRING);
@@ -274,7 +288,7 @@ void x_proc_run(fcall* fc)
 			so_prop->value_str_ptr = get_pptr_string(out_copy);
 			so_prop->type_define = T_STRING;
 		}
-		var* ec_prop = get_var_by_name_on_stack("exit_code", &inst->propertys);
+		var* ec_prop = type_instance_get_field(inst, "exit_code");
 		if (ec_prop != NULL && ec_prop->value_int != NULL)
 		{
 			*ec_prop->value_int = exit_code;

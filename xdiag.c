@@ -7,6 +7,17 @@
 
 static char g_current_file[512] = "<script>";
 static char* g_source_code = NULL;
+static int g_error_count = 0;
+
+int xdiag_get_error_count(void)
+{
+	return g_error_count;
+}
+
+void xdiag_reset_error_count(void)
+{
+	g_error_count = 0;
+}
 
 void xdiag_set_current_file(const char* filepath)
 {
@@ -101,6 +112,11 @@ void xdiag_report(XDiagLevel level, const char* code, const char* file, int line
 	const char* c_blue = color ? "\033[1;36m" : "";
 	const char* c_bold = color ? "\033[1m" : "";
 	const char* c_reset = color ? "\033[0m" : "";
+
+	if (level == DIAG_ERROR)
+	{
+		g_error_count++;
+	}
 
 	const char* level_name = "error";
 	const char* level_color = c_red;

@@ -1,0 +1,14 @@
+// Disallowed syntax test: Instantiation without 'new'
+// Disallowed: Point p = Point(10, 20)
+// Required:   Point p = new Point(10, 20)
+
+class Point(){
+    int x
+    int y
+    int Point(int a, int b){
+        x = a
+        y = b
+    }
+}
+
+Point p = Point(10, 20)
