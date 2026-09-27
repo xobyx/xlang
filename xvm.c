@@ -321,6 +321,16 @@ void xvm_init(XVm* vm)
 	vm->class_datetime = xclass_create(vm, "DateTime", vm->class_object);
 	vm->global_count = 0;
 	vm->print_trace = false;
+	vm->jit_enabled = false;
+	vm->jit_threshold = 20;
+	vm->jit_engine = NULL;
+}
+
+void xvm_enable_jit(XVm* vm, int threshold)
+{
+	if (!vm) return;
+	vm->jit_enabled = true;
+	vm->jit_threshold = (threshold > 0) ? threshold : 20;
 }
 
 void xvm_free(XVm* vm)
@@ -1354,6 +1364,7 @@ static XVmResult xvm_run_loop(XVm* vm, XIrChunk* chunk)
 		case OP_LOOP:
 			{
 				uint16_t offset = read_short(frame);
+				current_chunk->exec_count++;
 				frame->ip = current_chunk->code + offset;
 				break;
 			}
@@ -1488,12 +1499,52 @@ static XVmResult xvm_run_loop(XVm* vm, XIrChunk* chunk)
 					}
 				}
 
-				if (callee_closure->function && arg_count != callee_closure->function->arity)
+				if (callee_closure->function)
 				{
-					fprintf(stderr, "VM Runtime Error: Function '%s' expects %d arguments, but got %d\n",
-					        callee_closure->function->name ? callee_closure->function->name : "fn",
-					        callee_closure->function->arity, arg_count);
-					return VM_RUNTIME_ERROR;
+					XFunction* fn = callee_closure->function;
+					fn->call_count++;
+
+					if (vm->jit_enabled && fn->jit_native_entry != NULL)
+					{
+						if (arg_count == 0)
+						{
+							int64_t (*f0)(void) = (int64_t (*)(void))fn->jit_native_entry;
+							int64_t ret = f0();
+							if (s_idx == 0xFFFF) xvm_pop(vm);
+							xvm_push(vm, xval_int(ret));
+							break;
+						}
+						else if (arg_count == 1)
+						{
+							XValue a0 = xvm_pop(vm);
+							if (s_idx == 0xFFFF) xvm_pop(vm);
+							int64_t v0 = (a0.type == VAL_FLOAT) ? (int64_t)a0.as.fval : ((a0.type == VAL_STRING) ? (intptr_t)a0.as.sval : a0.as.ival);
+							int64_t (*f1)(int64_t) = (int64_t (*)(int64_t))fn->jit_native_entry;
+							int64_t ret = f1(v0);
+							xvm_push(vm, xval_int(ret));
+							break;
+						}
+						else if (arg_count == 2)
+						{
+							XValue a1 = xvm_pop(vm);
+							XValue a0 = xvm_pop(vm);
+							if (s_idx == 0xFFFF) xvm_pop(vm);
+							int64_t v0 = (a0.type == VAL_FLOAT) ? (int64_t)a0.as.fval : ((a0.type == VAL_STRING) ? (intptr_t)a0.as.sval : a0.as.ival);
+							int64_t v1 = (a1.type == VAL_FLOAT) ? (int64_t)a1.as.fval : ((a1.type == VAL_STRING) ? (intptr_t)a1.as.sval : a1.as.ival);
+							int64_t (*f2)(int64_t, int64_t) = (int64_t (*)(int64_t, int64_t))fn->jit_native_entry;
+							int64_t ret = f2(v0, v1);
+							xvm_push(vm, xval_int(ret));
+							break;
+						}
+					}
+
+					if (arg_count != fn->arity)
+					{
+						fprintf(stderr, "VM Runtime Error: Function '%s' expects %d arguments, but got %d\n",
+						        fn->name ? fn->name : "fn",
+						        fn->arity, arg_count);
+						return VM_RUNTIME_ERROR;
+					}
 				}
 
 				if (vm->frame_count >= VM_FRAMES_MAX)

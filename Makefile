@@ -11,12 +11,21 @@ AR = ar
 LD = g++
 WINDRES = windres
 
+LLVM_CONFIG = $(shell which llvm-config-19 2>/dev/null || which llvm-config 2>/dev/null)
+ifneq ($(LLVM_CONFIG),)
+LLVM_CFLAGS = $(shell $(LLVM_CONFIG) --cflags 2>/dev/null) -DXLANG_HAS_LLVM_JIT=1
+LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags --libs orcjit executionengine core support native irreader analysis 2>/dev/null)
+else
+LLVM_CFLAGS = -DXLANG_HAS_LLVM_JIT=0
+LLVM_LDFLAGS =
+endif
+
 INC =
-CFLAGS = -Wall
+CFLAGS = -Wall $(LLVM_CFLAGS)
 RESINC =
 #LIBDIR = -Lpcre/.libs
 LIB =
-LDFLAGS = -L. -Wl,-Bstatic -lpcre -Wl,-Bdynamic -lm
+LDFLAGS = -rdynamic $(LLVM_LDFLAGS) -L. -Wl,-Bstatic -lpcre -Wl,-Bdynamic -lm
 
 INC_DEBUG = $(INC)
 CFLAGS_DEBUG = $(CFLAGS) -g
@@ -40,9 +49,8 @@ OBJDIR_RELEASE = obj/Release
 DEP_RELEASE =
 OUT_RELEASE = bin/Release/xlang
 
-OBJ_DEBUG = $(OBJDIR_DEBUG)/calc.o $(OBJDIR_DEBUG)/xlang.o $(OBJDIR_DEBUG)/var_stack.o $(OBJDIR_DEBUG)/type_stack.o $(OBJDIR_DEBUG)/stack.o $(OBJDIR_DEBUG)/compile.o $(OBJDIR_DEBUG)/parse.o $(OBJDIR_DEBUG)/lexer.o $(OBJDIR_DEBUG)/md5.o $(OBJDIR_DEBUG)/functions.o $(OBJDIR_DEBUG)/func_stack.o $(OBJDIR_DEBUG)/debuge.o $(OBJDIR_DEBUG)/echo.o $(OBJDIR_DEBUG)/xsocket.o $(OBJDIR_DEBUG)/xfile.o $(OBJDIR_DEBUG)/xsys.o $(OBJDIR_DEBUG)/xstring.o $(OBJDIR_DEBUG)/xmath.o $(OBJDIR_DEBUG)/xcollection.o $(OBJDIR_DEBUG)/ximport.o $(OBJDIR_DEBUG)/xgc.o $(OBJDIR_DEBUG)/xdiag.o $(OBJDIR_DEBUG)/xdatetime.o $(OBJDIR_DEBUG)/xjson.o $(OBJDIR_DEBUG)/xast.o $(OBJDIR_DEBUG)/xast_parser.o $(OBJDIR_DEBUG)/xir.o $(OBJDIR_DEBUG)/xir_compiler.o $(OBJDIR_DEBUG)/xvm.o $(OBJDIR_DEBUG)/arena.o $(OBJDIR_DEBUG)/xdis_html.o $(OBJDIR_DEBUG)/xllvm_emit.o
- #$(OBJDIR_DEBUG)/http.o
-OBJ_RELEASE = $(OBJDIR_RELEASE)/calc.o $(OBJDIR_RELEASE)/xlang.o $(OBJDIR_RELEASE)/var_stack.o $(OBJDIR_RELEASE)/type_stack.o $(OBJDIR_RELEASE)/stack.o $(OBJDIR_RELEASE)/compile.o $(OBJDIR_RELEASE)/parse.o $(OBJDIR_RELEASE)/lexer.o $(OBJDIR_RELEASE)/md5.o $(OBJDIR_RELEASE)/functions.o $(OBJDIR_RELEASE)/func_stack.o $(OBJDIR_RELEASE)/debuge.o $(OBJDIR_RELEASE)/echo.o $(OBJDIR_RELEASE)/xsocket.o $(OBJDIR_RELEASE)/xfile.o $(OBJDIR_RELEASE)/xsys.o $(OBJDIR_RELEASE)/xstring.o $(OBJDIR_RELEASE)/xmath.o $(OBJDIR_RELEASE)/xcollection.o $(OBJDIR_RELEASE)/ximport.o $(OBJDIR_RELEASE)/xgc.o $(OBJDIR_RELEASE)/xdiag.o $(OBJDIR_RELEASE)/xdatetime.o $(OBJDIR_RELEASE)/xjson.o $(OBJDIR_RELEASE)/xast.o $(OBJDIR_RELEASE)/xast_parser.o $(OBJDIR_RELEASE)/xir.o $(OBJDIR_RELEASE)/xir_compiler.o $(OBJDIR_RELEASE)/xvm.o $(OBJDIR_RELEASE)/arena.o $(OBJDIR_RELEASE)/xdis_html.o $(OBJDIR_RELEASE)/xllvm_emit.o #$(OBJDIR_RELEASE)/http.o
+OBJ_DEBUG = $(OBJDIR_DEBUG)/calc.o $(OBJDIR_DEBUG)/xlang.o $(OBJDIR_DEBUG)/var_stack.o $(OBJDIR_DEBUG)/type_stack.o $(OBJDIR_DEBUG)/stack.o $(OBJDIR_DEBUG)/compile.o $(OBJDIR_DEBUG)/parse.o $(OBJDIR_DEBUG)/lexer.o $(OBJDIR_DEBUG)/md5.o $(OBJDIR_DEBUG)/functions.o $(OBJDIR_DEBUG)/func_stack.o $(OBJDIR_DEBUG)/debuge.o $(OBJDIR_DEBUG)/echo.o $(OBJDIR_DEBUG)/xsocket.o $(OBJDIR_DEBUG)/xfile.o $(OBJDIR_DEBUG)/xsys.o $(OBJDIR_DEBUG)/xstring.o $(OBJDIR_DEBUG)/xmath.o $(OBJDIR_DEBUG)/xcollection.o $(OBJDIR_DEBUG)/ximport.o $(OBJDIR_DEBUG)/xgc.o $(OBJDIR_DEBUG)/xdiag.o $(OBJDIR_DEBUG)/xdatetime.o $(OBJDIR_DEBUG)/xjson.o $(OBJDIR_DEBUG)/xast.o $(OBJDIR_DEBUG)/xast_parser.o $(OBJDIR_DEBUG)/xir.o $(OBJDIR_DEBUG)/xir_compiler.o $(OBJDIR_DEBUG)/xvm.o $(OBJDIR_DEBUG)/arena.o $(OBJDIR_DEBUG)/xdis_html.o $(OBJDIR_DEBUG)/xllvm_emit.o $(OBJDIR_DEBUG)/xllvm_rt.o $(OBJDIR_DEBUG)/xllvm_jit.o
+OBJ_RELEASE = $(OBJDIR_RELEASE)/calc.o $(OBJDIR_RELEASE)/xlang.o $(OBJDIR_RELEASE)/var_stack.o $(OBJDIR_RELEASE)/type_stack.o $(OBJDIR_RELEASE)/stack.o $(OBJDIR_RELEASE)/compile.o $(OBJDIR_RELEASE)/parse.o $(OBJDIR_RELEASE)/lexer.o $(OBJDIR_RELEASE)/md5.o $(OBJDIR_RELEASE)/functions.o $(OBJDIR_RELEASE)/func_stack.o $(OBJDIR_RELEASE)/debuge.o $(OBJDIR_RELEASE)/echo.o $(OBJDIR_RELEASE)/xsocket.o $(OBJDIR_RELEASE)/xfile.o $(OBJDIR_RELEASE)/xsys.o $(OBJDIR_RELEASE)/xstring.o $(OBJDIR_RELEASE)/xmath.o $(OBJDIR_RELEASE)/xcollection.o $(OBJDIR_RELEASE)/ximport.o $(OBJDIR_RELEASE)/xgc.o $(OBJDIR_RELEASE)/xdiag.o $(OBJDIR_RELEASE)/xdatetime.o $(OBJDIR_RELEASE)/xjson.o $(OBJDIR_RELEASE)/xast.o $(OBJDIR_RELEASE)/xast_parser.o $(OBJDIR_RELEASE)/xir.o $(OBJDIR_RELEASE)/xir_compiler.o $(OBJDIR_RELEASE)/xvm.o $(OBJDIR_RELEASE)/arena.o $(OBJDIR_RELEASE)/xdis_html.o $(OBJDIR_RELEASE)/xllvm_emit.o $(OBJDIR_RELEASE)/xllvm_rt.o $(OBJDIR_RELEASE)/xllvm_jit.o
 
 all: debug release
 
@@ -162,6 +170,9 @@ $(OBJDIR_DEBUG)/xllvm_emit.o: xllvm_emit.c
 $(OBJDIR_DEBUG)/xllvm_rt.o: xllvm_rt.c
 	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c xllvm_rt.c -o $(OBJDIR_DEBUG)/xllvm_rt.o
 
+$(OBJDIR_DEBUG)/xllvm_jit.o: xllvm_jit.c
+	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c xllvm_jit.c -o $(OBJDIR_DEBUG)/xllvm_jit.o
+
 clean_debug:
 	rm -f $(OBJ_DEBUG) $(OUT_DEBUG)
 	rm -rf bin/Debug
@@ -279,6 +290,9 @@ $(OBJDIR_RELEASE)/xllvm_emit.o: xllvm_emit.c
 
 $(OBJDIR_RELEASE)/xllvm_rt.o: xllvm_rt.c
 	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c xllvm_rt.c -o $(OBJDIR_RELEASE)/xllvm_rt.o
+
+$(OBJDIR_RELEASE)/xllvm_jit.o: xllvm_jit.c
+	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c xllvm_jit.c -o $(OBJDIR_RELEASE)/xllvm_jit.o
 
 clean_release:
 	rm -f $(OBJ_RELEASE) $(OUT_RELEASE)

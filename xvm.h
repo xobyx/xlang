@@ -113,10 +113,14 @@ typedef struct XVm {
 	int global_count;
 
 	bool print_trace;
+	bool jit_enabled;
+	int jit_threshold;
+	void* jit_engine;
 } XVm;
 
 void xvm_init(XVm* vm);
 void xvm_free(XVm* vm);
+void xvm_enable_jit(XVm* vm, int threshold);
 
 XVmResult xvm_run(XVm* vm, XIrChunk* chunk);
 

@@ -1276,6 +1276,78 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 
 	case AST_EXPR_METHOD_CALL:
 		{
+			const char* static_class = NULL;
+			if (expr->as.method_call.object && expr->as.method_call.object->type == AST_EXPR_IDENTIFIER)
+			{
+				const char* id_name = expr->as.method_call.object->as.identifier_name;
+				for (int c = 0; c < e->class_count; c++)
+				{
+					if (strcmp(e->classes[c].name, id_name) == 0)
+					{
+						static_class = e->classes[c].name;
+						break;
+					}
+				}
+			}
+
+			if (static_class != NULL)
+			{
+				const char* mname = expr->as.method_call.method_name;
+				int argc = expr->as.method_call.arg_count;
+				char def_class[64] = {0};
+				const AstStmt* m_decl = find_class_method_defining_class(e, static_class, mname, argc, def_class, sizeof(def_class));
+				const char* actual_class = def_class[0] ? def_class : static_class;
+				const char* ret_llvm = "i32";
+				if (m_decl)
+				{
+					const char* ret_name = m_decl->as.func_decl.return_type ? m_decl->as.func_decl.return_type : "void";
+					ret_llvm = xlang_type_to_llvm(e, ret_name);
+				}
+
+				char sym_name[128];
+				get_method_symbol_name(e, actual_class, mname, argc, sym_name, sizeof(sym_name));
+
+				LLVMValue evaluated_args[32];
+				for (int i = 0; i < argc && i < 32; i++)
+				{
+					evaluated_args[i] = emit_expr(e, expr->as.method_call.args[i]);
+					if (m_decl && i < m_decl->as.func_decl.param_count)
+					{
+						const char* pty = xlang_type_to_llvm(e, m_decl->as.func_decl.params[i].type_name);
+						evaluated_args[i] = coerce_value(e, evaluated_args[i], pty);
+					}
+				}
+
+				if (strcmp(ret_llvm, "void") == 0)
+				{
+					buf_emit(e, "  call void @%s(", sym_name);
+					for (int i = 0; i < argc && i < 32; i++)
+					{
+						if (i > 0) buf_emit(e, ", ");
+						buf_emit(e, "%s %s", evaluated_args[i].type, evaluated_args[i].repr);
+					}
+					buf_emit(e, ")\n");
+					strcpy(val.repr, "");
+					strcpy(val.type, "void");
+					return val;
+				}
+				else
+				{
+					int t = new_temp_id(e);
+					snprintf(val.repr, sizeof(val.repr), "%%t%d", t);
+					strcpy(val.type, ret_llvm);
+
+					buf_emit(e, "  %s = call %s @%s(", val.repr, ret_llvm, sym_name);
+					for (int i = 0; i < argc && i < 32; i++)
+					{
+						if (i > 0) buf_emit(e, ", ");
+						buf_emit(e, "%s %s", evaluated_args[i].type, evaluated_args[i].repr);
+					}
+					buf_emit(e, ")\n");
+					return val;
+				}
+			}
+
 			LLVMValue obj = emit_expr(e, expr->as.method_call.object);
 			const char* mname = expr->as.method_call.method_name;
 			int argc = expr->as.method_call.arg_count;
@@ -1376,12 +1448,21 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 				}
 			}
 
+			bool is_m_static = (m_decl && m_decl->as.func_decl.is_static);
 			if (strcmp(ret_llvm, "void") == 0)
 			{
-				buf_emit(e, "  call void @%s(%s %s", sym_name, obj.type, obj.repr);
+				buf_emit(e, "  call void @%s(", sym_name);
+				int out_args = 0;
+				if (!is_m_static)
+				{
+					buf_emit(e, "%s %s", obj.type, obj.repr);
+					out_args++;
+				}
 				for (int i = 0; i < argc && i < 32; i++)
 				{
-					buf_emit(e, ", %s %s", evaluated_args[i].type, evaluated_args[i].repr);
+					if (out_args > 0) buf_emit(e, ", ");
+					buf_emit(e, "%s %s", evaluated_args[i].type, evaluated_args[i].repr);
+					out_args++;
 				}
 				buf_emit(e, ")\n");
 				strcpy(val.repr, "");
@@ -1394,10 +1475,18 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 				snprintf(val.repr, sizeof(val.repr), "%%t%d", t);
 				strcpy(val.type, ret_llvm);
 
-				buf_emit(e, "  %s = call %s @%s(%s %s", val.repr, ret_llvm, sym_name, obj.type, obj.repr);
+				buf_emit(e, "  %s = call %s @%s(", val.repr, ret_llvm, sym_name);
+				int out_args = 0;
+				if (!is_m_static)
+				{
+					buf_emit(e, "%s %s", obj.type, obj.repr);
+					out_args++;
+				}
 				for (int i = 0; i < argc && i < 32; i++)
 				{
-					buf_emit(e, ", %s %s", evaluated_args[i].type, evaluated_args[i].repr);
+					if (out_args > 0) buf_emit(e, ", ");
+					buf_emit(e, "%s %s", evaluated_args[i].type, evaluated_args[i].repr);
+					out_args++;
 				}
 				buf_emit(e, ")\n");
 				return val;
@@ -1807,9 +1896,9 @@ static void emit_function(XLLVMEmitter* e, const AstStmt* fn_stmt, const char* c
 
 	buf_emit(e, "define %s @%s(", lret, full_name);
 
-	/* If method, prepend %this */
+	/* If method, prepend %this unless static */
 	int p_offset = 0;
-	if (class_prefix != NULL)
+	if (class_prefix != NULL && !fn_stmt->as.func_decl.is_static)
 	{
 		buf_emit(e, "%%struct.%s* %%this", class_prefix);
 		p_offset = 1;

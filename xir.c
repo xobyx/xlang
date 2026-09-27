@@ -132,6 +132,8 @@ XFunction* xfunc_create(const char* name, int arity)
 	fn->name = name ? strdup(name) : strdup("fn");
 	fn->arity = arity;
 	fn->upvalue_count = 0;
+	fn->jit_native_entry = NULL;
+	fn->call_count = 0;
 	xir_chunk_init(&fn->chunk);
 	return fn;
 }
@@ -253,6 +255,9 @@ void xir_chunk_init(XIrChunk* chunk)
 	chunk->symbols.symbols = NULL;
 	chunk->symbols.count = 0;
 	chunk->symbols.capacity = 0;
+
+	chunk->jit_native_entry = NULL;
+	chunk->exec_count = 0;
 }
 
 void xir_chunk_free(XIrChunk* chunk)

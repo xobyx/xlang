@@ -852,8 +852,17 @@ int system_setenv(const char* name, const char* val)
 }
 
 /* -------------------------------------------------------------------------
- * GC Operations (Native Stubs)
+ * GC Operations (Native Stubs - Weak to allow override when linked into xlang)
  * ------------------------------------------------------------------------- */
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((weak)) int gc_collect(void) { return 0; }
+__attribute__((weak)) int gc_allocated_bytes(void) { return 0; }
+__attribute__((weak)) int gc_total_objects(void) { return 0; }
+__attribute__((weak)) int gc_enable(void) { return 1; }
+__attribute__((weak)) int gc_disable(void) { return 0; }
+__attribute__((weak)) int gc_set_threshold(int th) { (void)th; return 0; }
+__attribute__((weak)) int gc_dump(void) { return 0; }
+#else
 int gc_collect(void) { return 0; }
 int gc_allocated_bytes(void) { return 0; }
 int gc_total_objects(void) { return 0; }
@@ -861,3 +870,4 @@ int gc_enable(void) { return 1; }
 int gc_disable(void) { return 0; }
 int gc_set_threshold(int th) { (void)th; return 0; }
 int gc_dump(void) { return 0; }
+#endif

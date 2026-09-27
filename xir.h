@@ -170,6 +170,9 @@ typedef struct XIrChunk {
 
 	XIrValuePool constants;
 	XIrSymbolTable symbols;
+
+	void* jit_native_entry;
+	int exec_count;
 } XIrChunk;
 
 struct XFunction {
@@ -177,6 +180,8 @@ struct XFunction {
 	int arity;
 	int upvalue_count;
 	XIrChunk chunk;
+	void* jit_native_entry;
+	int call_count;
 };
 
 XFunction* xfunc_create(const char* name, int arity);

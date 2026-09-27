@@ -26,6 +26,7 @@ __  __   ___   | |__    _   _  __  __
 #include "xir_compiler.h"
 #include "xvm.h"
 #include "xllvm.h"
+#include "xllvm_jit.h"
 #include <ctype.h>
 #include "arena.h"
 clock_t t;
@@ -455,6 +456,7 @@ int main(const int argc, char** argv)
 	bool flag_dump_ir = false;
 	bool flag_vm = false;
 	bool flag_trace_vm = false;
+	bool flag_jit = false;
 	bool flag_view = false;
 	bool flag_emit_llvm = false;
 	bool flag_build = false;
@@ -474,6 +476,10 @@ int main(const int argc, char** argv)
 		else if (strcmp(argv[i], "build") == 0 || strcmp(argv[i], "--build") == 0)
 		{
 			flag_build = true;
+		}
+		else if (strcmp(argv[i], "--jit") == 0)
+		{
+			flag_jit = true;
 		}
 		else if (strcmp(argv[i], "-o") == 0)
 		{
@@ -519,6 +525,7 @@ int main(const int argc, char** argv)
 			printf("  -o <file>       Specify output file path (bytecode, LLVM IR, or binary)\n");
 			printf("  --emit-llvm, -S Emit textual LLVM IR (.ll) for script\n");
 			printf("  build           Compile script to standalone native binary via LLVM\n");
+			printf("  --jit           Execute script via in-process LLVM ORC JIT\n");
 			printf("  --dump-ast      Parse script and display Structured AST\n");
 			printf("  --dump-ir       Compile/load bytecode and disassemble\n");
 			printf("  --vm            Execute script using the Bytecode Virtual Machine\n");
@@ -598,7 +605,7 @@ int main(const int argc, char** argv)
 	xdiag_set_current_file(script_path);
 	xdiag_set_source_code(buff);
 
-	if (flag_dump_ast || flag_dump_ir || flag_vm || flag_compile || flag_view || flag_emit_llvm || flag_build)
+	if (flag_dump_ast || flag_dump_ir || flag_vm || flag_compile || flag_view || flag_emit_llvm || flag_build || flag_jit)
 	{
 		g_parse_only = true;
 		print_parse_log = 0;
@@ -817,6 +824,27 @@ int main(const int argc, char** argv)
 		return 0;
 	}
 
+	if (flag_jit && !flag_vm)
+	{
+		xdiag_reset_error_count();
+		AstArena* arena = ast_arena_create(64 * 1024);
+		start_parse_lines(buff, false);
+		AstProgram* prog = xast_parse_node_stream(arena, nodes->root, NULL);
+		if (xdiag_get_error_count() > 0 || prog == NULL)
+		{
+			ast_arena_destroy(arena);
+			free(buff);
+			clean_memory();
+			return 1;
+		}
+
+		int ret = xllvm_jit_run_program(prog, script_path, g_script_argc, g_script_argv);
+		ast_arena_destroy(arena);
+		free(buff);
+		clean_memory();
+		return ret;
+	}
+
 	if (flag_vm)
 	{
 		xdiag_reset_error_count();
@@ -836,7 +864,27 @@ int main(const int argc, char** argv)
 		XVm vm;
 		xvm_init(&vm);
 		vm.print_trace = flag_trace_vm;
+		XLLVMJit* jit = NULL;
+		if (flag_jit)
+		{
+			jit = xllvm_jit_create();
+			if (jit)
+			{
+				if (xllvm_jit_add_program(jit, prog, script_path))
+				{
+					xvm_enable_jit(&vm, 20);
+					vm.jit_engine = jit;
+					xllvm_jit_bind_vm(jit, &vm, prog);
+				}
+				else
+				{
+					xllvm_jit_free(jit);
+					jit = NULL;
+				}
+			}
+		}
 		XVmResult res = xvm_run(&vm, &chunk);
+		if (jit) xllvm_jit_free(jit);
 		xvm_free(&vm);
 		xir_chunk_free(&chunk);
 		ast_arena_destroy(arena);
