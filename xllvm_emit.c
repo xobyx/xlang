@@ -12,7 +12,7 @@
 
 typedef struct LLVMLocalVar {
 	char name[64];
-	char llvm_type[32];   /* e.g. "i32", "double", "i1", "i8*", "%struct.Point*" */
+	char llvm_type[128];  /* e.g. "i32", "double", "i1", "i8*", "%struct.Point*" */
 	char alloca_reg[32];  /* e.g. "%x.addr", "%y" */
 	int depth;
 } LLVMLocalVar;
@@ -33,7 +33,7 @@ typedef struct LLVMStringConst {
 typedef struct LLVMFieldDesc {
 	char name[64];
 	char type_name[32];
-	char llvm_type[32];
+	char llvm_type[128];
 	int slot;
 } LLVMFieldDesc;
 
@@ -46,7 +46,7 @@ typedef struct LLVMClassDesc {
 
 typedef struct LLVMValue {
 	char repr[128];     /* SSA register "%t1" or literal constant "42" */
-	char type[32];      /* "i32", "double", "i1", "i8*", "%struct.Point*" */
+	char type[128];     /* "i32", "double", "i1", "i8*", "%struct.Point*" */
 } LLVMValue;
 
 typedef struct XLLVMEmitter {
@@ -71,7 +71,7 @@ typedef struct XLLVMEmitter {
 	int class_count;
 	const LLVMClassDesc* current_class;
 
-	char current_func_ret_type[32];
+	char current_func_ret_type[128];
 	bool current_block_terminated;
 
 	/* Buffer for code within a function or main */
@@ -273,7 +273,189 @@ static const AstStmt* find_function(XLLVMEmitter* e, const char* name)
 	return NULL;
 }
 
-static const AstStmt* find_class_method(XLLVMEmitter* e, const char* class_name, const char* method_name)
+static int llvm_type_align(const char* type)
+{
+	if (type && (strchr(type, '*') != NULL || strcmp(type, "i64") == 0 || strcmp(type, "double") == 0))
+		return 8;
+	return 4;
+}
+
+static const char* get_builtin_ret_type(const char* name)
+{
+	if (!name) return NULL;
+	if (strcmp(name, "_lower") == 0 ||
+	    strcmp(name, "_upper") == 0 ||
+	    strcmp(name, "_trim") == 0 ||
+	    strcmp(name, "substr") == 0 ||
+	    strcmp(name, "chr") == 0 ||
+	    strcmp(name, "_str_concat") == 0 ||
+	    strcmp(name, "_str_from_int") == 0 ||
+	    strcmp(name, "_str_from_float") == 0 ||
+	    strcmp(name, "map_get") == 0 ||
+	    strcmp(name, "map_keys") == 0 ||
+	    strcmp(name, "map_values") == 0 ||
+	    strcmp(name, "map_to_string") == 0 ||
+	    strcmp(name, "list_get") == 0 ||
+	    strcmp(name, "list_pop") == 0 ||
+	    strcmp(name, "list_join") == 0 ||
+	    strcmp(name, "list_to_string") == 0 ||
+	    strcmp(name, "socket_recv") == 0 ||
+	    strcmp(name, "socket_recvfrom") == 0 ||
+	    strcmp(name, "system_getenv") == 0 ||
+	    strcmp(name, "get_arg") == 0)
+	{
+		return "i8*";
+	}
+
+	if (strcmp(name, "map_get_float") == 0 ||
+	    strcmp(name, "list_get_float") == 0)
+	{
+		return "double";
+	}
+
+	if (strcmp(name, "map_new") == 0 ||
+	    strcmp(name, "map_put") == 0 ||
+	    strcmp(name, "map_put_int") == 0 ||
+	    strcmp(name, "map_put_float") == 0 ||
+	    strcmp(name, "map_get_int") == 0 ||
+	    strcmp(name, "map_has") == 0 ||
+	    strcmp(name, "map_remove") == 0 ||
+	    strcmp(name, "map_size") == 0 ||
+	    strcmp(name, "map_clear") == 0 ||
+	    strcmp(name, "map_free") == 0 ||
+	    strcmp(name, "map_keys_list") == 0 ||
+	    strcmp(name, "list_new") == 0 ||
+	    strcmp(name, "list_add") == 0 ||
+	    strcmp(name, "list_add_int") == 0 ||
+	    strcmp(name, "list_add_float") == 0 ||
+	    strcmp(name, "list_get_int") == 0 ||
+	    strcmp(name, "list_set") == 0 ||
+	    strcmp(name, "list_set_int") == 0 ||
+	    strcmp(name, "list_remove_at") == 0 ||
+	    strcmp(name, "list_size") == 0 ||
+	    strcmp(name, "list_clear") == 0 ||
+	    strcmp(name, "list_contains") == 0 ||
+	    strcmp(name, "list_contains_int") == 0 ||
+	    strcmp(name, "list_index_of") == 0 ||
+	    strcmp(name, "list_index_of_int") == 0 ||
+	    strcmp(name, "list_pop_int") == 0 ||
+	    strcmp(name, "list_free") == 0 ||
+	    strcmp(name, "socket_create") == 0 ||
+	    strcmp(name, "socket_connect") == 0 ||
+	    strcmp(name, "socket_bind") == 0 ||
+	    strcmp(name, "socket_listen") == 0 ||
+	    strcmp(name, "socket_accept") == 0 ||
+	    strcmp(name, "socket_send") == 0 ||
+	    strcmp(name, "socket_close") == 0 ||
+	    strcmp(name, "socket_set_timeout") == 0 ||
+	    strcmp(name, "socket_set_reuseaddr") == 0 ||
+	    strcmp(name, "socket_sendto") == 0 ||
+	    strcmp(name, "clock_ms") == 0 ||
+	    strcmp(name, "get_argc") == 0 ||
+	    strcmp(name, "system_exec") == 0 ||
+	    strcmp(name, "system_setenv") == 0 ||
+	    strcmp(name, "gc_collect") == 0 ||
+	    strcmp(name, "gc_allocated_bytes") == 0 ||
+	    strcmp(name, "gc_total_objects") == 0 ||
+	    strcmp(name, "gc_enable") == 0 ||
+	    strcmp(name, "gc_disable") == 0 ||
+	    strcmp(name, "gc_set_threshold") == 0 ||
+	    strcmp(name, "gc_dump") == 0 ||
+	    strcmp(name, "_len") == 0 ||
+	    strcmp(name, "index_of") == 0 ||
+	    strcmp(name, "str_eq") == 0)
+	{
+		return "i32";
+	}
+
+	return NULL;
+}
+
+static const char* get_builtin_param_type(const char* name, int p)
+{
+	if (!name) return "i32";
+	if (strcmp(name, "_len") == 0 ||
+	    strcmp(name, "_trim") == 0 ||
+	    strcmp(name, "_lower") == 0 ||
+	    strcmp(name, "_upper") == 0 ||
+	    strcmp(name, "socket_create") == 0 ||
+	    strcmp(name, "system_exec") == 0 ||
+	    strcmp(name, "system_getenv") == 0)
+	{
+		if (p == 0) return "i8*";
+	}
+	else if (strcmp(name, "substr") == 0)
+	{
+		if (p == 0) return "i8*";
+		return "i32";
+	}
+	else if (strcmp(name, "index_of") == 0 || strcmp(name, "str_eq") == 0 || strcmp(name, "system_setenv") == 0)
+	{
+		return "i8*";
+	}
+	else if (strcmp(name, "chr") == 0 || strcmp(name, "get_arg") == 0)
+	{
+		return "i32";
+	}
+	else if (strcmp(name, "socket_send") == 0)
+	{
+		if (p == 0) return "i32";
+		if (p == 1) return "i8*";
+	}
+	else if (strcmp(name, "socket_bind") == 0 || strcmp(name, "socket_connect") == 0)
+	{
+		if (p == 0) return "i32";
+		if (p == 1) return "i8*";
+		if (p == 2) return "i32";
+	}
+	else if (strcmp(name, "map_put") == 0 || strcmp(name, "map_set") == 0)
+	{
+		if (p == 0) return "i32";
+		if (p == 1) return "i8*";
+		if (p == 2) return "i8*";
+	}
+	else if (strcmp(name, "map_get") == 0 || strcmp(name, "map_has") == 0 || strcmp(name, "map_remove") == 0 || strcmp(name, "map_contains") == 0)
+	{
+		if (p == 0) return "i32";
+		if (p == 1) return "i8*";
+	}
+	else if (strcmp(name, "map_put_int") == 0)
+	{
+		if (p == 0) return "i32";
+		if (p == 1) return "i8*";
+		if (p == 2) return "i32";
+	}
+	else if (strcmp(name, "map_put_float") == 0)
+	{
+		if (p == 0) return "i32";
+		if (p == 1) return "i8*";
+		if (p == 2) return "double";
+	}
+	else if (strcmp(name, "list_add") == 0 || strcmp(name, "list_contains") == 0 || strcmp(name, "list_index_of") == 0)
+	{
+		if (p == 0) return "i32";
+		if (p == 1) return "i8*";
+	}
+	else if (strcmp(name, "list_set") == 0)
+	{
+		if (p == 0) return "i32";
+		if (p == 1) return "i32";
+		if (p == 2) return "i8*";
+	}
+	else if (strcmp(name, "list_join") == 0)
+	{
+		if (p == 0) return "i32";
+		if (p == 1) return "i8*";
+	}
+	return "i32";
+}
+
+static bool is_global_builtin(const char* name)
+{
+	return get_builtin_ret_type(name) != NULL;
+}
+
+static const AstStmt* find_class_method_defining_class(XLLVMEmitter* e, const char* class_name, const char* method_name, int arity, char* out_defining_class, size_t out_sz)
 {
 	if (!e->prog || !class_name || !method_name) return NULL;
 	for (int i = 0; i < e->prog->statement_count; i++)
@@ -285,11 +467,59 @@ static const AstStmt* find_class_method(XLLVMEmitter* e, const char* class_name,
 			{
 				const AstStmt* mem = stmt->as.class_decl.members[m];
 				if (mem->type == AST_STMT_FUNC_DECL && strcmp(mem->as.func_decl.name, method_name) == 0)
-					return mem;
+				{
+					if (arity < 0 || mem->as.func_decl.param_count == arity)
+					{
+						if (out_defining_class && out_sz > 0)
+							snprintf(out_defining_class, out_sz, "%s", class_name);
+						return mem;
+					}
+				}
+			}
+			/* Also check base class */
+			if (stmt->as.class_decl.base_name)
+			{
+				return find_class_method_defining_class(e, stmt->as.class_decl.base_name, method_name, arity, out_defining_class, out_sz);
 			}
 		}
 	}
 	return NULL;
+}
+
+static const AstStmt* find_class_method(XLLVMEmitter* e, const char* class_name, const char* method_name, int arity)
+{
+	return find_class_method_defining_class(e, class_name, method_name, arity, NULL, 0);
+}
+
+static bool is_class_method_overloaded(XLLVMEmitter* e, const char* class_name, const char* method_name)
+{
+	if (!e->prog || !class_name || !method_name) return false;
+	int matches = 0;
+	for (int i = 0; i < e->prog->statement_count; i++)
+	{
+		const AstStmt* stmt = e->prog->statements[i];
+		if (stmt->type == AST_STMT_CLASS_DECL && strcmp(stmt->as.class_decl.name, class_name) == 0)
+		{
+			for (int m = 0; m < stmt->as.class_decl.member_count; m++)
+			{
+				const AstStmt* mem = stmt->as.class_decl.members[m];
+				if (mem->type == AST_STMT_FUNC_DECL && strcmp(mem->as.func_decl.name, method_name) == 0)
+				{
+					matches++;
+					if (matches > 1) return true;
+				}
+			}
+		}
+	}
+	return false;
+}
+
+static void get_method_symbol_name(XLLVMEmitter* e, const char* class_name, const char* method_name, int arity, char* out_buf, size_t out_sz)
+{
+	if (is_class_method_overloaded(e, class_name, method_name) && arity > 0)
+		snprintf(out_buf, out_sz, "%s_%s_%d", class_name, method_name, arity);
+	else
+		snprintf(out_buf, out_sz, "%s_%s", class_name, method_name);
 }
 
 /* -------------------------------------------------------------------------
@@ -331,11 +561,29 @@ static LLVMValue coerce_value(XLLVMEmitter* e, LLVMValue val, const char* target
 		buf_emit(e, "  %s = icmp ne i32 %s, 0\n", res.repr, val.repr);
 		return res;
 	}
-	if (strcmp(val.type, "i8*") == 0 && strstr(target_type, "%struct.") != NULL)
+	if (strchr(val.type, '*') != NULL && strchr(target_type, '*') != NULL)
 	{
 		int t = new_temp_id(e);
 		snprintf(res.repr, sizeof(res.repr), "%%t%d", t);
-		buf_emit(e, "  %s = bitcast i8* %s to %s\n", res.repr, val.repr, target_type);
+		buf_emit(e, "  %s = bitcast %s %s to %s\n", res.repr, val.type, val.repr, target_type);
+		return res;
+	}
+	if (strcmp(val.type, "i32") == 0 && strchr(target_type, '*') != NULL)
+	{
+		int t_ext = new_temp_id(e);
+		int t_ptr = new_temp_id(e);
+		buf_emit(e, "  %%t%d = zext i32 %s to i64\n", t_ext, val.repr);
+		buf_emit(e, "  %%t%d = inttoptr i64 %%t%d to %s\n", t_ptr, t_ext, target_type);
+		snprintf(res.repr, sizeof(res.repr), "%%t%d", t_ptr);
+		return res;
+	}
+	if (strchr(val.type, '*') != NULL && strcmp(target_type, "i32") == 0)
+	{
+		int t_i64 = new_temp_id(e);
+		int t_i32 = new_temp_id(e);
+		buf_emit(e, "  %%t%d = ptrtoint %s %s to i64\n", t_i64, val.type, val.repr);
+		buf_emit(e, "  %%t%d = trunc i64 %%t%d to i32\n", t_i32, t_i64);
+		snprintf(res.repr, sizeof(res.repr), "%%t%d", t_i32);
 		return res;
 	}
 	return val;
@@ -394,8 +642,8 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 				int t = new_temp_id(e);
 				snprintf(val.repr, sizeof(val.repr), "%%t%d", t);
 				snprintf(val.type, sizeof(val.type), "%s", local->llvm_type);
-				buf_emit(e, "  %s = load %s, %s* %s, align 4\n",
-				         val.repr, local->llvm_type, local->llvm_type, local->alloca_reg);
+				buf_emit(e, "  %s = load %s, %s* %s, align %d\n",
+				         val.repr, local->llvm_type, local->llvm_type, local->alloca_reg, llvm_type_align(local->llvm_type));
 				return val;
 			}
 			/* Check if it's a field of this in an instance method */
@@ -410,8 +658,8 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 						const char* fty = e->current_class->fields[i].llvm_type;
 						buf_emit(e, "  %%t%d = getelementptr inbounds %%struct.%s, %%struct.%s* %%this, i32 0, i32 %d\n",
 						         t_ptr, e->current_class->name, e->current_class->name, e->current_class->fields[i].slot);
-						buf_emit(e, "  %%t%d = load %s, %s* %%t%d, align 4\n",
-						         t_val, fty, fty, t_ptr);
+						buf_emit(e, "  %%t%d = load %s, %s* %%t%d, align %d\n",
+						         t_val, fty, fty, t_ptr, llvm_type_align(fty));
 						snprintf(val.repr, sizeof(val.repr), "%%t%d", t_val);
 						snprintf(val.type, sizeof(val.type), "%s", fty);
 						return val;
@@ -436,8 +684,8 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 				if (local != NULL)
 				{
 					rhs = coerce_value(e, rhs, local->llvm_type);
-					buf_emit(e, "  store %s %s, %s* %s, align 4\n",
-					         local->llvm_type, rhs.repr, local->llvm_type, local->alloca_reg);
+					buf_emit(e, "  store %s %s, %s* %s, align %d\n",
+					         local->llvm_type, rhs.repr, local->llvm_type, local->alloca_reg, llvm_type_align(local->llvm_type));
 					return rhs;
 				}
 				if (e->current_class != NULL)
@@ -451,14 +699,14 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 							rhs = coerce_value(e, rhs, fty);
 							buf_emit(e, "  %%t%d = getelementptr inbounds %%struct.%s, %%struct.%s* %%this, i32 0, i32 %d\n",
 							         t_ptr, e->current_class->name, e->current_class->name, e->current_class->fields[i].slot);
-							buf_emit(e, "  store %s %s, %s* %%t%d, align 4\n",
-							         fty, rhs.repr, fty, t_ptr);
+							buf_emit(e, "  store %s %s, %s* %%t%d, align %d\n",
+							         fty, rhs.repr, fty, t_ptr, llvm_type_align(fty));
 							return rhs;
 						}
 					}
 				}
-				buf_emit(e, "  store %s %s, %s* @%s, align 4\n",
-				         rhs.type, rhs.repr, rhs.type, name);
+				buf_emit(e, "  store %s %s, %s* @%s, align %d\n",
+				         rhs.type, rhs.repr, rhs.type, name, llvm_type_align(rhs.type));
 				return rhs;
 			}
 			else if (expr->as.assign.target->type == AST_EXPR_MEMBER)
@@ -487,8 +735,8 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 								rhs = coerce_value(e, rhs, fty);
 								buf_emit(e, "  %%t%d = getelementptr inbounds %%struct.%s, %%struct.%s* %s, i32 0, i32 %d\n",
 								         t_ptr, cname, cname, obj.repr, e->classes[c].fields[f].slot);
-								buf_emit(e, "  store %s %s, %s* %%t%d, align 4\n",
-								         fty, rhs.repr, fty, t_ptr);
+								buf_emit(e, "  store %s %s, %s* %%t%d, align %d\n",
+								         fty, rhs.repr, fty, t_ptr, llvm_type_align(fty));
 								return rhs;
 							}
 						}
@@ -502,6 +750,82 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 		{
 			LLVMValue left = emit_expr(e, expr->as.binary.left);
 			LLVMValue right = emit_expr(e, expr->as.binary.right);
+
+			/* 1. String Concatenation */
+			if (expr->as.binary.op == BINOP_ADD && (strcmp(left.type, "i8*") == 0 || strcmp(right.type, "i8*") == 0))
+			{
+				if (strcmp(left.type, "i8*") != 0)
+				{
+					int t_s = new_temp_id(e);
+					if (strcmp(left.type, "double") == 0)
+						buf_emit(e, "  %%t%d = call i8* @_str_from_float(double %s)\n", t_s, left.repr);
+					else
+					{
+						left = coerce_value(e, left, "i32");
+						buf_emit(e, "  %%t%d = call i8* @_str_from_int(i32 %s)\n", t_s, left.repr);
+					}
+					snprintf(left.repr, sizeof(left.repr), "%%t%d", t_s);
+					strcpy(left.type, "i8*");
+				}
+				if (strcmp(right.type, "i8*") != 0)
+				{
+					int t_s = new_temp_id(e);
+					if (strcmp(right.type, "double") == 0)
+						buf_emit(e, "  %%t%d = call i8* @_str_from_float(double %s)\n", t_s, right.repr);
+					else
+					{
+						right = coerce_value(e, right, "i32");
+						buf_emit(e, "  %%t%d = call i8* @_str_from_int(i32 %s)\n", t_s, right.repr);
+					}
+					snprintf(right.repr, sizeof(right.repr), "%%t%d", t_s);
+					strcpy(right.type, "i8*");
+				}
+
+				int t_res = new_temp_id(e);
+				snprintf(val.repr, sizeof(val.repr), "%%t%d", t_res);
+				strcpy(val.type, "i8*");
+				buf_emit(e, "  %s = call i8* @_str_concat(i8* %s, i8* %s)\n", val.repr, left.repr, right.repr);
+				return val;
+			}
+
+			/* 2. String Equality / Inequality */
+			if ((expr->as.binary.op == BINOP_EQ || expr->as.binary.op == BINOP_NEQ) &&
+			    (strcmp(left.type, "i8*") == 0 || strcmp(right.type, "i8*") == 0))
+			{
+				if (strcmp(left.repr, "null") == 0 || strcmp(right.repr, "null") == 0)
+				{
+					left = coerce_value(e, left, "i8*");
+					right = coerce_value(e, right, "i8*");
+					int t_res = new_temp_id(e);
+					snprintf(val.repr, sizeof(val.repr), "%%t%d", t_res);
+					strcpy(val.type, "i1");
+					buf_emit(e, "  %s = icmp %s i8* %s, %s\n", val.repr, expr->as.binary.op == BINOP_EQ ? "eq" : "ne", left.repr, right.repr);
+					return val;
+				}
+
+				left = coerce_value(e, left, "i8*");
+				right = coerce_value(e, right, "i8*");
+				int t_cmp = new_temp_id(e);
+				buf_emit(e, "  %%t%d = call i32 @str_eq(i8* %s, i8* %s)\n", t_cmp, left.repr, right.repr);
+				int t_res = new_temp_id(e);
+				snprintf(val.repr, sizeof(val.repr), "%%t%d", t_res);
+				strcpy(val.type, "i1");
+				buf_emit(e, "  %s = icmp %s i32 %%t%d, 1\n", val.repr, expr->as.binary.op == BINOP_EQ ? "eq" : "ne", t_cmp);
+				return val;
+			}
+
+			/* 3. Pointer Equality / Inequality */
+			if ((expr->as.binary.op == BINOP_EQ || expr->as.binary.op == BINOP_NEQ) &&
+			    (strchr(left.type, '*') != NULL || strchr(right.type, '*') != NULL))
+			{
+				left = coerce_value(e, left, "i8*");
+				right = coerce_value(e, right, "i8*");
+				int t_res = new_temp_id(e);
+				snprintf(val.repr, sizeof(val.repr), "%%t%d", t_res);
+				strcpy(val.type, "i1");
+				buf_emit(e, "  %s = icmp %s i8* %s, %s\n", val.repr, expr->as.binary.op == BINOP_EQ ? "eq" : "ne", left.repr, right.repr);
+				return val;
+			}
 
 			bool is_float = (strcmp(left.type, "double") == 0 || strcmp(right.type, "double") == 0);
 			if (is_float)
@@ -727,11 +1051,16 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 				const char* ret_name = fn_decl->as.func_decl.return_type ? fn_decl->as.func_decl.return_type : "void";
 				ret_llvm = xlang_type_to_llvm(e, ret_name);
 			}
+			else if (is_global_builtin(callee))
+			{
+				ret_llvm = get_builtin_ret_type(callee);
+			}
 
 			/* Implicit this method call within an instance method */
-			if (!fn_decl && e->current_class != NULL)
+			if (!fn_decl && !is_global_builtin(callee) && e->current_class != NULL)
 			{
-				const AstStmt* m_decl = find_class_method(e, e->current_class->name, callee);
+				char def_class[64] = {0};
+				const AstStmt* m_decl = find_class_method_defining_class(e, e->current_class->name, callee, argc, def_class, sizeof(def_class));
 				if (m_decl != NULL)
 				{
 					const char* ret_name = m_decl->as.func_decl.return_type ? m_decl->as.func_decl.return_type : "void";
@@ -748,12 +1077,21 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 						}
 					}
 
-					char this_type[128];
-					snprintf(this_type, sizeof(this_type), "%%struct.%s*", e->current_class->name);
+					const char* actual_class = def_class[0] ? def_class : e->current_class->name;
+					char sym_name[128];
+					get_method_symbol_name(e, actual_class, callee, argc, sym_name, sizeof(sym_name));
+
+					char this_target_type[128];
+					snprintf(this_target_type, sizeof(this_target_type), "%%struct.%s*", actual_class);
+
+					LLVMValue this_val;
+					snprintf(this_val.repr, sizeof(this_val.repr), "%%this");
+					snprintf(this_val.type, sizeof(this_val.type), "%%struct.%s*", e->current_class->name);
+					this_val = coerce_value(e, this_val, this_target_type);
 
 					if (strcmp(ret_llvm, "void") == 0)
 					{
-						buf_emit(e, "  call void @%s_%s(%s %%this", e->current_class->name, callee, this_type);
+						buf_emit(e, "  call void @%s(%s %s", sym_name, this_val.type, this_val.repr);
 						for (int i = 0; i < argc && i < 32; i++)
 						{
 							buf_emit(e, ", %s %s", evaluated_args[i].type, evaluated_args[i].repr);
@@ -769,7 +1107,7 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 						snprintf(val.repr, sizeof(val.repr), "%%t%d", t);
 						strcpy(val.type, ret_llvm);
 
-						buf_emit(e, "  %s = call %s @%s_%s(%s %%this", val.repr, ret_llvm, e->current_class->name, callee, this_type);
+						buf_emit(e, "  %s = call %s @%s(%s %s", val.repr, ret_llvm, sym_name, this_val.type, this_val.repr);
 						for (int i = 0; i < argc && i < 32; i++)
 						{
 							buf_emit(e, ", %s %s", evaluated_args[i].type, evaluated_args[i].repr);
@@ -789,11 +1127,22 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 					const char* pty = xlang_type_to_llvm(e, fn_decl->as.func_decl.params[i].type_name);
 					evaluated_args[i] = coerce_value(e, evaluated_args[i], pty);
 				}
+				else if (is_global_builtin(callee))
+				{
+					const char* pty = get_builtin_param_type(callee, i);
+					evaluated_args[i] = coerce_value(e, evaluated_args[i], pty);
+				}
+			}
+
+			const char* emit_callee = callee;
+			if (strcmp(callee, "main") == 0 && fn_decl != NULL)
+			{
+				emit_callee = "_user_main";
 			}
 
 			if (strcmp(ret_llvm, "void") == 0)
 			{
-				buf_emit(e, "  call void @%s(", callee);
+				buf_emit(e, "  call void @%s(", emit_callee);
 				for (int i = 0; i < argc && i < 32; i++)
 				{
 					if (i > 0) buf_emit(e, ", ");
@@ -810,7 +1159,7 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 				snprintf(val.repr, sizeof(val.repr), "%%t%d", t);
 				strcpy(val.type, ret_llvm);
 
-				buf_emit(e, "  %s = call %s @%s(", val.repr, ret_llvm, callee);
+				buf_emit(e, "  %s = call %s @%s(", val.repr, ret_llvm, emit_callee);
 				for (int i = 0; i < argc && i < 32; i++)
 				{
 					if (i > 0) buf_emit(e, ", ");
@@ -901,10 +1250,12 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 			}
 
 			/* Invoke constructor if present */
-			const AstStmt* ctor = find_class_method(e, cname, cname);
+			const AstStmt* ctor = find_class_method(e, cname, cname, expr->as.new_expr.arg_count);
 			if (ctor != NULL)
 			{
-				buf_emit(e, "  call void @%s_%s(%%struct.%s* %%t%d", cname, cname, cname, t_obj);
+				char ctor_sym[128];
+				get_method_symbol_name(e, cname, cname, expr->as.new_expr.arg_count, ctor_sym, sizeof(ctor_sym));
+				buf_emit(e, "  call void @%s(%%struct.%s* %%t%d", ctor_sym, cname, t_obj);
 				for (int a = 0; a < expr->as.new_expr.arg_count; a++)
 				{
 					LLVMValue arg_val = emit_expr(e, expr->as.new_expr.args[a]);
@@ -929,6 +1280,65 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 			const char* mname = expr->as.method_call.method_name;
 			int argc = expr->as.method_call.arg_count;
 
+			/* String method dispatch */
+			if (strcmp(obj.type, "i8*") == 0)
+			{
+				if (strcmp(mname, "len") == 0 || strcmp(mname, "length") == 0)
+				{
+					int t = new_temp_id(e);
+					snprintf(val.repr, sizeof(val.repr), "%%t%d", t);
+					strcpy(val.type, "i32");
+					buf_emit(e, "  %s = call i32 @_len(i8* %s)\n", val.repr, obj.repr);
+					return val;
+				}
+				if (strcmp(mname, "trim") == 0)
+				{
+					int t = new_temp_id(e);
+					snprintf(val.repr, sizeof(val.repr), "%%t%d", t);
+					strcpy(val.type, "i8*");
+					buf_emit(e, "  %s = call i8* @_trim(i8* %s)\n", val.repr, obj.repr);
+					return val;
+				}
+				if (strcmp(mname, "lower") == 0)
+				{
+					int t = new_temp_id(e);
+					snprintf(val.repr, sizeof(val.repr), "%%t%d", t);
+					strcpy(val.type, "i8*");
+					buf_emit(e, "  %s = call i8* @_lower(i8* %s)\n", val.repr, obj.repr);
+					return val;
+				}
+				if (strcmp(mname, "upper") == 0)
+				{
+					int t = new_temp_id(e);
+					snprintf(val.repr, sizeof(val.repr), "%%t%d", t);
+					strcpy(val.type, "i8*");
+					buf_emit(e, "  %s = call i8* @_upper(i8* %s)\n", val.repr, obj.repr);
+					return val;
+				}
+				if (strcmp(mname, "substr") == 0 && argc >= 2)
+				{
+					LLVMValue a0 = emit_expr(e, expr->as.method_call.args[0]);
+					LLVMValue a1 = emit_expr(e, expr->as.method_call.args[1]);
+					a0 = coerce_value(e, a0, "i32");
+					a1 = coerce_value(e, a1, "i32");
+					int t = new_temp_id(e);
+					snprintf(val.repr, sizeof(val.repr), "%%t%d", t);
+					strcpy(val.type, "i8*");
+					buf_emit(e, "  %s = call i8* @substr(i8* %s, i32 %s, i32 %s)\n", val.repr, obj.repr, a0.repr, a1.repr);
+					return val;
+				}
+				if ((strcmp(mname, "index_of") == 0 || strcmp(mname, "indexOf") == 0) && argc >= 1)
+				{
+					LLVMValue a0 = emit_expr(e, expr->as.method_call.args[0]);
+					a0 = coerce_value(e, a0, "i8*");
+					int t = new_temp_id(e);
+					snprintf(val.repr, sizeof(val.repr), "%%t%d", t);
+					strcpy(val.type, "i32");
+					buf_emit(e, "  %s = call i32 @index_of(i8* %s, i8* %s)\n", val.repr, obj.repr, a0.repr);
+					return val;
+				}
+			}
+
 			char cname[64] = {0};
 			if (strncmp(obj.type, "%struct.", 8) == 0)
 			{
@@ -938,13 +1348,22 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 				else strcpy(cname, start);
 			}
 
-			const AstStmt* m_decl = find_class_method(e, cname, mname);
+			char def_class[64] = {0};
+			const AstStmt* m_decl = find_class_method_defining_class(e, cname, mname, argc, def_class, sizeof(def_class));
 			const char* ret_llvm = "i32";
 			if (m_decl)
 			{
 				const char* ret_name = m_decl->as.func_decl.return_type ? m_decl->as.func_decl.return_type : "void";
 				ret_llvm = xlang_type_to_llvm(e, ret_name);
 			}
+
+			const char* actual_class = def_class[0] ? def_class : cname;
+			char sym_name[128];
+			get_method_symbol_name(e, actual_class, mname, argc, sym_name, sizeof(sym_name));
+
+			char target_this_type[128];
+			snprintf(target_this_type, sizeof(target_this_type), "%%struct.%s*", actual_class);
+			obj = coerce_value(e, obj, target_this_type);
 
 			LLVMValue evaluated_args[32];
 			for (int i = 0; i < argc && i < 32; i++)
@@ -959,7 +1378,7 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 
 			if (strcmp(ret_llvm, "void") == 0)
 			{
-				buf_emit(e, "  call void @%s_%s(%s %s", cname, mname, obj.type, obj.repr);
+				buf_emit(e, "  call void @%s(%s %s", sym_name, obj.type, obj.repr);
 				for (int i = 0; i < argc && i < 32; i++)
 				{
 					buf_emit(e, ", %s %s", evaluated_args[i].type, evaluated_args[i].repr);
@@ -975,7 +1394,7 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 				snprintf(val.repr, sizeof(val.repr), "%%t%d", t);
 				strcpy(val.type, ret_llvm);
 
-				buf_emit(e, "  %s = call %s @%s_%s(%s %s", val.repr, ret_llvm, cname, mname, obj.type, obj.repr);
+				buf_emit(e, "  %s = call %s @%s(%s %s", val.repr, ret_llvm, sym_name, obj.type, obj.repr);
 				for (int i = 0; i < argc && i < 32; i++)
 				{
 					buf_emit(e, ", %s %s", evaluated_args[i].type, evaluated_args[i].repr);
@@ -1010,8 +1429,8 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 							const char* fty = e->classes[c].fields[f].llvm_type;
 							buf_emit(e, "  %%t%d = getelementptr inbounds %%struct.%s, %%struct.%s* %s, i32 0, i32 %d\n",
 							         t_ptr, cname, cname, obj.repr, e->classes[c].fields[f].slot);
-							buf_emit(e, "  %%t%d = load %s, %s* %%t%d, align 4\n",
-							         t_val, fty, fty, t_ptr);
+							buf_emit(e, "  %%t%d = load %s, %s* %%t%d, align %d\n",
+							         t_val, fty, fty, t_ptr, llvm_type_align(fty));
 							snprintf(val.repr, sizeof(val.repr), "%%t%d", t_val);
 							snprintf(val.type, sizeof(val.type), "%s", fty);
 							return val;
@@ -1277,6 +1696,47 @@ static void emit_stmt(XLLVMEmitter* e, const AstStmt* stmt)
 /* -------------------------------------------------------------------------
  * Top-Level Discovery & Class Struct Collection
  * ------------------------------------------------------------------------- */
+static void resolve_class_inheritance(XLLVMEmitter* e, LLVMClassDesc* cd)
+{
+	if (cd->base_name[0] == '\0') return;
+	LLVMClassDesc* base = NULL;
+	for (int i = 0; i < e->class_count; i++)
+	{
+		if (strcmp(e->classes[i].name, cd->base_name) == 0)
+		{
+			base = &e->classes[i];
+			break;
+		}
+	}
+	if (!base) return;
+	resolve_class_inheritance(e, base);
+
+	/* Check if base fields already copied */
+	if (base->field_count > 0 && cd->field_count + base->field_count <= MAX_FIELDS_PER_CLASS)
+	{
+		bool already_has = false;
+		for (int f = 0; f < cd->field_count; f++)
+		{
+			if (strcmp(cd->fields[f].name, base->fields[0].name) == 0)
+			{
+				already_has = true;
+				break;
+			}
+		}
+		if (!already_has)
+		{
+			int base_count = base->field_count;
+			memmove(&cd->fields[base_count], &cd->fields[0], cd->field_count * sizeof(LLVMFieldDesc));
+			memcpy(&cd->fields[0], &base->fields[0], base_count * sizeof(LLVMFieldDesc));
+			cd->field_count += base_count;
+			for (int f = 0; f < cd->field_count; f++)
+			{
+				cd->fields[f].slot = f;
+			}
+		}
+	}
+}
+
 static void collect_classes(XLLVMEmitter* e)
 {
 	e->class_count = 0;
@@ -1314,6 +1774,11 @@ static void collect_classes(XLLVMEmitter* e)
 			}
 		}
 	}
+
+	for (int i = 0; i < e->class_count; i++)
+	{
+		resolve_class_inheritance(e, &e->classes[i]);
+	}
 }
 
 /* -------------------------------------------------------------------------
@@ -1328,7 +1793,9 @@ static void emit_function(XLLVMEmitter* e, const AstStmt* fn_stmt, const char* c
 
 	char full_name[128];
 	if (class_prefix != NULL)
-		snprintf(full_name, sizeof(full_name), "%s_%s", class_prefix, fn_name);
+		get_method_symbol_name(e, class_prefix, fn_name, fn_stmt->as.func_decl.param_count, full_name, sizeof(full_name));
+	else if (strcmp(fn_name, "main") == 0)
+		snprintf(full_name, sizeof(full_name), "_user_main");
 	else
 		snprintf(full_name, sizeof(full_name), "%s", fn_name);
 
@@ -1430,7 +1897,6 @@ bool xllvm_emit_program(const AstProgram* prog, const char* source_file, FILE* o
 		fprintf(out, "\n");
 
 	/* 3. Emit functions and collect top-level statements into code_buf */
-	bool has_top_level = false;
 	bool has_user_main = false;
 
 	/* Buffer for top-level code inside @main */
@@ -1470,10 +1936,6 @@ bool xllvm_emit_program(const AstProgram* prog, const char* source_file, FILE* o
 				has_user_main = true;
 			emit_function(&emitter, stmt, NULL);
 		}
-		else
-		{
-			has_top_level = true;
-		}
 	}
 
 	char* functions_ir = strdup(emitter.code_buf ? emitter.code_buf : "");
@@ -1498,7 +1960,7 @@ bool xllvm_emit_program(const AstProgram* prog, const char* source_file, FILE* o
 	if (has_user_main && !emitter.current_block_terminated)
 	{
 		int t_res = new_temp_id(&emitter);
-		buf_emit(&emitter, "  %%t%d = call i32 @main()\n", t_res);
+		buf_emit(&emitter, "  %%t%d = call i32 @_user_main()\n", t_res);
 		buf_emit(&emitter, "  ret i32 %%t%d\n", t_res);
 		emitter.current_block_terminated = true;
 	}
@@ -1530,18 +1992,102 @@ bool xllvm_emit_program(const AstProgram* prog, const char* source_file, FILE* o
 	fprintf(out, "declare void @free(i8*)\n");
 	fprintf(out, "declare i8* @gc_malloc(i64, i32)\n");
 	fprintf(out, "declare i8* @gc_calloc(i64, i64, i32)\n");
-	fprintf(out, "\n");
+	fprintf(out, "declare i32 @strcmp(i8*, i8*)\n");
+	fprintf(out, "declare void @xllvm_rt_init(i32, i8**)\n\n");
+
+	fprintf(out, "; String Helpers\n");
+	fprintf(out, "declare i8* @_str_concat(i8*, i8*)\n");
+	fprintf(out, "declare i8* @_str_from_int(i32)\n");
+	fprintf(out, "declare i8* @_str_from_float(double)\n");
+	fprintf(out, "declare i32 @_len(i8*)\n");
+	fprintf(out, "declare i8* @_trim(i8*)\n");
+	fprintf(out, "declare i8* @_lower(i8*)\n");
+	fprintf(out, "declare i8* @_upper(i8*)\n");
+	fprintf(out, "declare i8* @substr(i8*, i32, i32)\n");
+	fprintf(out, "declare i8* @chr(i32)\n");
+	fprintf(out, "declare i32 @index_of(i8*, i8*)\n");
+	fprintf(out, "declare i32 @str_eq(i8*, i8*)\n\n");
+
+	fprintf(out, "; Map Operations\n");
+	fprintf(out, "declare i32 @map_new()\n");
+	fprintf(out, "declare i32 @map_put(i32, i8*, i8*)\n");
+	fprintf(out, "declare i32 @map_put_int(i32, i8*, i32)\n");
+	fprintf(out, "declare i32 @map_put_float(i32, i8*, double)\n");
+	fprintf(out, "declare i8* @map_get(i32, i8*)\n");
+	fprintf(out, "declare i32 @map_get_int(i32, i8*)\n");
+	fprintf(out, "declare double @map_get_float(i32, i8*)\n");
+	fprintf(out, "declare i32 @map_has(i32, i8*)\n");
+	fprintf(out, "declare i32 @map_remove(i32, i8*)\n");
+	fprintf(out, "declare i32 @map_size(i32)\n");
+	fprintf(out, "declare i32 @map_clear(i32)\n");
+	fprintf(out, "declare i8* @map_keys(i32)\n");
+	fprintf(out, "declare i8* @map_values(i32)\n");
+	fprintf(out, "declare i8* @map_to_string(i32)\n");
+	fprintf(out, "declare i32 @map_free(i32)\n");
+	fprintf(out, "declare i32 @map_keys_list(i32)\n\n");
+
+	fprintf(out, "; List Operations\n");
+	fprintf(out, "declare i32 @list_new()\n");
+	fprintf(out, "declare i32 @list_add(i32, i8*)\n");
+	fprintf(out, "declare i32 @list_add_int(i32, i32)\n");
+	fprintf(out, "declare i32 @list_add_float(i32, double)\n");
+	fprintf(out, "declare i8* @list_get(i32, i32)\n");
+	fprintf(out, "declare i32 @list_get_int(i32, i32)\n");
+	fprintf(out, "declare double @list_get_float(i32, i32)\n");
+	fprintf(out, "declare i32 @list_set(i32, i32, i8*)\n");
+	fprintf(out, "declare i32 @list_set_int(i32, i32, i32)\n");
+	fprintf(out, "declare i32 @list_remove_at(i32, i32)\n");
+	fprintf(out, "declare i32 @list_size(i32)\n");
+	fprintf(out, "declare i32 @list_clear(i32)\n");
+	fprintf(out, "declare i32 @list_contains(i32, i8*)\n");
+	fprintf(out, "declare i32 @list_contains_int(i32, i32)\n");
+	fprintf(out, "declare i32 @list_index_of(i32, i8*)\n");
+	fprintf(out, "declare i32 @list_index_of_int(i32, i32)\n");
+	fprintf(out, "declare i8* @list_pop(i32)\n");
+	fprintf(out, "declare i32 @list_pop_int(i32)\n");
+	fprintf(out, "declare i8* @list_join(i32, i8*)\n");
+	fprintf(out, "declare i8* @list_to_string(i32)\n");
+	fprintf(out, "declare i32 @list_free(i32)\n\n");
+
+	fprintf(out, "; Socket Operations\n");
+	fprintf(out, "declare i32 @socket_create(i8*)\n");
+	fprintf(out, "declare i32 @socket_connect(i32, i8*, i32)\n");
+	fprintf(out, "declare i32 @socket_bind(i32, i8*, i32)\n");
+	fprintf(out, "declare i32 @socket_listen(i32, i32)\n");
+	fprintf(out, "declare i32 @socket_accept(i32)\n");
+	fprintf(out, "declare i32 @socket_send(i32, i8*)\n");
+	fprintf(out, "declare i8* @socket_recv(i32, i32)\n");
+	fprintf(out, "declare i32 @socket_close(i32)\n");
+	fprintf(out, "declare i32 @socket_set_timeout(i32, i32)\n");
+	fprintf(out, "declare i32 @socket_set_reuseaddr(i32, i32)\n");
+	fprintf(out, "declare i32 @socket_sendto(i32, i8*, i8*, i32)\n");
+	fprintf(out, "declare i8* @socket_recvfrom(i32, i32)\n\n");
+
+	fprintf(out, "; System Operations\n");
+	fprintf(out, "declare i32 @clock_ms()\n");
+	fprintf(out, "declare i32 @get_argc()\n");
+	fprintf(out, "declare i8* @get_arg(i32)\n");
+	fprintf(out, "declare i32 @system_exec(i8*)\n");
+	fprintf(out, "declare i8* @system_getenv(i8*)\n");
+	fprintf(out, "declare i32 @system_setenv(i8*, i8*)\n\n");
+
+	fprintf(out, "; GC Operations\n");
+	fprintf(out, "declare i32 @gc_collect()\n");
+	fprintf(out, "declare i32 @gc_allocated_bytes()\n");
+	fprintf(out, "declare i32 @gc_total_objects()\n");
+	fprintf(out, "declare i32 @gc_enable()\n");
+	fprintf(out, "declare i32 @gc_disable()\n");
+	fprintf(out, "declare i32 @gc_set_threshold(i32)\n");
+	fprintf(out, "declare i32 @gc_dump()\n\n");
 
 	/* 6. Write Functions IR */
 	fprintf(out, "%s", functions_ir);
 
-	/* 7. Write Main Entrypoint (if user didn't write an explicit @main function or has top-level stmts) */
-	if (!has_user_main || has_top_level)
-	{
-		fprintf(out, "define i32 @main(i32 %%argc, i8** %%argv) {\nentry:\n");
-		fprintf(out, "%s", main_ir);
-		fprintf(out, "}\n");
-	}
+	/* 7. Write Main Entrypoint */
+	fprintf(out, "define i32 @main(i32 %%argc, i8** %%argv) {\nentry:\n");
+	fprintf(out, "  call void @xllvm_rt_init(i32 %%argc, i8** %%argv)\n");
+	fprintf(out, "%s", main_ir);
+	fprintf(out, "}\n");
 
 	free(functions_ir);
 	free(main_ir);

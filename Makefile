@@ -52,7 +52,8 @@ before_debug:
 	test -d bin/Debug || mkdir -p bin/Debug
 	test -d $(OBJDIR_DEBUG) || mkdir -p $(OBJDIR_DEBUG)
 
-after_debug:
+after_debug: $(OBJDIR_DEBUG)/xllvm_rt.o
+	cp -f $(OBJDIR_DEBUG)/xllvm_rt.o bin/Debug/xllvm_rt.o
 
 debug: before_debug out_debug after_debug
 
@@ -158,6 +159,9 @@ $(OBJDIR_DEBUG)/xdis_html.o: xdis_html.c
 $(OBJDIR_DEBUG)/xllvm_emit.o: xllvm_emit.c
 	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c xllvm_emit.c -o $(OBJDIR_DEBUG)/xllvm_emit.o
 
+$(OBJDIR_DEBUG)/xllvm_rt.o: xllvm_rt.c
+	$(CC) $(CFLAGS_DEBUG) $(INC_DEBUG) -c xllvm_rt.c -o $(OBJDIR_DEBUG)/xllvm_rt.o
+
 clean_debug:
 	rm -f $(OBJ_DEBUG) $(OUT_DEBUG)
 	rm -rf bin/Debug
@@ -167,7 +171,8 @@ before_release:
 	test -d bin/Release || mkdir -p bin/Release
 	test -d $(OBJDIR_RELEASE) || mkdir -p $(OBJDIR_RELEASE)
 
-after_release:
+after_release: $(OBJDIR_RELEASE)/xllvm_rt.o
+	cp -f $(OBJDIR_RELEASE)/xllvm_rt.o bin/Release/xllvm_rt.o
 
 release: before_release out_release after_release
 
@@ -271,6 +276,9 @@ $(OBJDIR_RELEASE)/xdis_html.o: xdis_html.c
 
 $(OBJDIR_RELEASE)/xllvm_emit.o: xllvm_emit.c
 	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c xllvm_emit.c -o $(OBJDIR_RELEASE)/xllvm_emit.o
+
+$(OBJDIR_RELEASE)/xllvm_rt.o: xllvm_rt.c
+	$(CC) $(CFLAGS_RELEASE) $(INC_RELEASE) -c xllvm_rt.c -o $(OBJDIR_RELEASE)/xllvm_rt.o
 
 clean_release:
 	rm -f $(OBJ_RELEASE) $(OUT_RELEASE)

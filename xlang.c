@@ -740,8 +740,23 @@ int main(const int argc, char** argv)
 			return 1;
 		}
 
+		const char* rt_obj = NULL;
+		if (access("obj/Release/xllvm_rt.o", R_OK) == 0)
+			rt_obj = "obj/Release/xllvm_rt.o";
+		else if (access("bin/Release/xllvm_rt.o", R_OK) == 0)
+			rt_obj = "bin/Release/xllvm_rt.o";
+		else if (access("obj/Debug/xllvm_rt.o", R_OK) == 0)
+			rt_obj = "obj/Debug/xllvm_rt.o";
+		else if (access("bin/Debug/xllvm_rt.o", R_OK) == 0)
+			rt_obj = "bin/Debug/xllvm_rt.o";
+		else if (access("/usr/local/lib/xlang/xllvm_rt.o", R_OK) == 0)
+			rt_obj = "/usr/local/lib/xlang/xllvm_rt.o";
+
 		char compile_cmd[1280];
-		snprintf(compile_cmd, sizeof(compile_cmd), "clang -O2 -Wno-override-module \"%s\" -lm -o \"%s\"", ll_path, bin_target);
+		if (rt_obj)
+			snprintf(compile_cmd, sizeof(compile_cmd), "clang -O2 -Wno-override-module \"%s\" \"%s\" -lm -o \"%s\"", ll_path, rt_obj, bin_target);
+		else
+			snprintf(compile_cmd, sizeof(compile_cmd), "clang -O2 -Wno-override-module \"%s\" -lm -o \"%s\"", ll_path, bin_target);
 		int compile_res = system(compile_cmd);
 		if (compile_res == 0)
 		{
