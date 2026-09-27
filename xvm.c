@@ -492,6 +492,87 @@ static inline const char* xinstance_class_name(const XInstance* inst)
 }
 
 /* -------------------------------------------------------------------------
+ * Var / XValue Interop Bridge
+ * ------------------------------------------------------------------------- */
+XValue var_to_xvalue(const var* v)
+{
+	if (v == NULL || v->type_define == NULL) return xval_null();
+	if (v->type_define == T_INT)
+	{
+		return xval_int(v->value_int != NULL ? *v->value_int : 0);
+	}
+	else if (v->type_define == T_FLOAT)
+	{
+		return xval_float(v->value_float != NULL ? *v->value_float : 0.0);
+	}
+	else if (v->type_define == T_LONG)
+	{
+		return xval_int(v->value_long != NULL ? *v->value_long : 0);
+	}
+	else if (v->type_define == T_BOOL)
+	{
+		return xval_bool(v->value_bool != NULL ? *v->value_bool : false);
+	}
+	else if (v->type_define == T_STRING)
+	{
+		const char* s = (v->value_str_ptr != NULL && *v->value_str_ptr != NULL) ? *v->value_str_ptr : "";
+		return xval_str(s);
+	}
+	else if (!is_base_type(v->type_define))
+	{
+		type_instance* ti = v->value_type_instsance ? v->value_type_instsance : (type_instance*)v->values;
+		return xval_obj(ti);
+	}
+	return xval_null();
+}
+
+void xvalue_to_var(XValue xv, var* out_v)
+{
+	if (out_v == NULL) return;
+	memset(out_v, 0, sizeof(var));
+	out_v->size = 1;
+	switch (xv.type)
+	{
+	case VAL_INT:
+		out_v->type_define = T_INT;
+		out_v->inline_val.inline_int = (int)xv.as.ival;
+		out_v->values = &out_v->inline_val;
+		break;
+	case VAL_FLOAT:
+		out_v->type_define = T_FLOAT;
+		out_v->inline_val.inline_float = (float)xv.as.fval;
+		out_v->values = &out_v->inline_val;
+		break;
+	case VAL_BOOL:
+		out_v->type_define = T_BOOL;
+		out_v->inline_val.inline_bool = xv.as.bval;
+		out_v->values = &out_v->inline_val;
+		break;
+	case VAL_STRING:
+		out_v->type_define = T_STRING;
+		out_v->inline_val.raw_primitive = (int64_t)(intptr_t)(xv.as.sval ? xv.as.sval : "");
+		out_v->values = &out_v->inline_val;
+		break;
+	case VAL_OBJECT:
+		if (xv.as.oval != NULL)
+		{
+			XInstance* inst = (XInstance*)xv.as.oval;
+			const char* cname = xinstance_class_name(inst);
+			type_def* td = cname ? get_type_by_name((char*)cname) : NULL;
+			out_v->type_define = td ? td : T_OBJECT;
+			out_v->inline_val.inline_int = inst->id;
+			out_v->values = &out_v->inline_val;
+			out_v->holder = (type_instance*)inst;
+		}
+		break;
+	default:
+		out_v->type_define = NULL;
+		out_v->values = NULL;
+		break;
+	}
+}
+
+/* -------------------------------------------------------------------------
  * Virtual Machine Dispatch Loop
  * ------------------------------------------------------------------------- */
 static XVmResult xvm_run_loop(XVm* vm, XIrChunk* chunk)
@@ -1321,50 +1402,9 @@ static XVmResult xvm_run_loop(XVm* vm, XIrChunk* chunk)
 							memset(&fc, 0, sizeof(fcall));
 							fc.deftion = native_fn;
 							fc.parm_count_c = arg_count;
-							int i_buf[32];
-							float f_buf[32];
-							char* s_buf[32];
-							bool b_buf[32];
 							for (int i = 0; i < arg_count; i++)
 							{
-								if (n_args[i].type == VAL_INT)
-								{
-									i_buf[i] = (int)n_args[i].as.ival;
-									fc.func_parmeters[i].type_define = T_INT;
-									fc.func_parmeters[i].value_int = &i_buf[i];
-									fc.func_parmeters[i].values = &i_buf[i];
-								}
-								else if (n_args[i].type == VAL_FLOAT)
-								{
-									f_buf[i] = (float)n_args[i].as.fval;
-									fc.func_parmeters[i].type_define = T_FLOAT;
-									fc.func_parmeters[i].value_float = &f_buf[i];
-									fc.func_parmeters[i].values = &f_buf[i];
-								}
-								else if (n_args[i].type == VAL_STRING)
-								{
-									s_buf[i] = n_args[i].as.sval;
-									fc.func_parmeters[i].type_define = T_STRING;
-									fc.func_parmeters[i].value_str_ptr = &s_buf[i];
-									fc.func_parmeters[i].values = &s_buf[i];
-								}
-								else if (n_args[i].type == VAL_BOOL)
-								{
-									b_buf[i] = n_args[i].as.bval;
-									fc.func_parmeters[i].type_define = T_BOOL;
-									fc.func_parmeters[i].value_bool = &b_buf[i];
-									fc.func_parmeters[i].values = &b_buf[i];
-								}
-								else if (n_args[i].type == VAL_OBJECT && n_args[i].as.oval != NULL)
-								{
-									XInstance* inst = (XInstance*)n_args[i].as.oval;
-									i_buf[i] = inst->id;
-									const char* cname = xinstance_class_name(inst);
-									type_def* td = get_type_by_name((char*)cname);
-									fc.func_parmeters[i].type_define = td ? td : T_INT;
-									fc.func_parmeters[i].value_int = &i_buf[i];
-									fc.func_parmeters[i].values = &i_buf[i];
-								}
+								xvalue_to_var(n_args[i], &fc.func_parmeters[i]);
 							}
 							native_fn->func_code(&fc);
 							if (strcmp(name, "json_parse") == 0)
@@ -1395,14 +1435,8 @@ static XVmResult xvm_run_loop(XVm* vm, XIrChunk* chunk)
 								}
 								break;
 							}
-							if (fc._return.type_define == T_INT && fc._return.value_int)
-								xvm_push(vm, xval_int(*fc._return.value_int));
-							else if (fc._return.type_define == T_FLOAT && fc._return.value_float)
-								xvm_push(vm, xval_float(*fc._return.value_float));
-							else if (fc._return.type_define == T_STRING && fc._return.value_str_ptr && *fc._return.value_str_ptr)
-								xvm_push(vm, xval_str(*fc._return.value_str_ptr));
-							else if (fc._return.type_define == T_BOOL && fc._return.value_bool)
-								xvm_push(vm, xval_bool(*fc._return.value_bool));
+							if (fc._return.type_define != NULL && is_base_type(fc._return.type_define))
+								xvm_push(vm, var_to_xvalue(&fc._return));
 							else if (fc._return.type_define != NULL && !is_base_type(fc._return.type_define))
 							{
 								const char* tname = fc._return.type_define->type_name ? fc._return.type_define->type_name : "Object";
@@ -1425,14 +1459,7 @@ static XVmResult xvm_run_loop(XVm* vm, XIrChunk* chunk)
 											slot = (int)f;
 										if (slot >= 0 && (uint32_t)slot < inst->field_count)
 										{
-											if (fld->type_define == T_INT && fld->value_int)
-												inst->fields[slot] = xval_int(*fld->value_int);
-											else if (fld->type_define == T_FLOAT && fld->value_float)
-												inst->fields[slot] = xval_float(*fld->value_float);
-											else if (fld->type_define == T_STRING && fld->value_str_ptr && *fld->value_str_ptr)
-												inst->fields[slot] = xval_str(*fld->value_str_ptr);
-											else if (fld->type_define == T_BOOL && fld->value_bool)
-												inst->fields[slot] = xval_bool(*fld->value_bool);
+											inst->fields[slot] = var_to_xvalue(fld);
 										}
 									}
 								}
@@ -1734,52 +1761,15 @@ static XVmResult xvm_run_loop(XVm* vm, XIrChunk* chunk)
 						ctx.values = &s_ctx;
 						fc.context = &ctx;
 
-						int i_buf[32];
-						float f_buf[32];
-						char* s_buf[32];
-						bool b_buf[32];
 						for (int i = 0; i < arg_count; i++)
 						{
-							if (args[i].type == VAL_INT)
-							{
-								i_buf[i] = (int)args[i].as.ival;
-								fc.func_parmeters[i].type_define = T_INT;
-								fc.func_parmeters[i].value_int = &i_buf[i];
-								fc.func_parmeters[i].values = &i_buf[i];
-							}
-							else if (args[i].type == VAL_FLOAT)
-							{
-								f_buf[i] = (float)args[i].as.fval;
-								fc.func_parmeters[i].type_define = T_FLOAT;
-								fc.func_parmeters[i].value_float = &f_buf[i];
-								fc.func_parmeters[i].values = &f_buf[i];
-							}
-							else if (args[i].type == VAL_STRING)
-							{
-								s_buf[i] = (char*)(args[i].as.sval ? args[i].as.sval : "");
-								fc.func_parmeters[i].type_define = T_STRING;
-								fc.func_parmeters[i].value_str_ptr = &s_buf[i];
-								fc.func_parmeters[i].values = &s_buf[i];
-							}
-							else if (args[i].type == VAL_BOOL)
-							{
-								b_buf[i] = args[i].as.bval;
-								fc.func_parmeters[i].type_define = T_BOOL;
-								fc.func_parmeters[i].value_bool = &b_buf[i];
-								fc.func_parmeters[i].values = &b_buf[i];
-							}
+							xvalue_to_var(args[i], &fc.func_parmeters[i]);
 						}
 
 						str_fn->func_code(&fc);
 
-						if (fc._return.type_define == T_INT && fc._return.value_int)
-							xvm_push(vm, xval_int(*fc._return.value_int));
-						else if (fc._return.type_define == T_FLOAT && fc._return.value_float)
-							xvm_push(vm, xval_float(*fc._return.value_float));
-						else if (fc._return.type_define == T_STRING && fc._return.value_str_ptr && *fc._return.value_str_ptr)
-							xvm_push(vm, xval_str(*fc._return.value_str_ptr));
-						else if (fc._return.type_define == T_BOOL && fc._return.value_bool)
-							xvm_push(vm, xval_bool(*fc._return.value_bool));
+						if (fc._return.type_define != NULL && is_base_type(fc._return.type_define))
+							xvm_push(vm, var_to_xvalue(&fc._return));
 						else if (fc._return.type_define != NULL && !is_base_type(fc._return.type_define))
 						{
 							const char* tname = fc._return.type_define->type_name ? fc._return.type_define->type_name : "Object";

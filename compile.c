@@ -28,6 +28,14 @@ void define_class_property(char* name, type_def* container_class, type_def* prop
 		ivar->type_define = prop_type;
 		ivar->name = name;
 		ivar->slot_idx = psize;
+		ivar->access = PUBLIC;
+
+		FieldDescriptor* fd = &container_class->field_descriptors[psize];
+		fd->name = name;
+		fd->type_define = prop_type;
+		fd->slot_idx = psize;
+		fd->access = PUBLIC;
+
 		container_class->d_propertys_size++;
 		*out_var = ivar;
 	}
@@ -185,7 +193,8 @@ bool call_function(fcall* mfunc, var** context)
 {
 	if (mfunc->deftion->function_type == constr && (*context == NULL || (*context)->values == NULL))
 	{
-		mfunc->_return.values = install_memory_with_type(mfunc->_return.type_define, 1);
+		mfunc->_return.size = 1;
+		mfunc->_return.values = install_memory(&mfunc->_return);
 		*context = &mfunc->_return;
 	}
 	if (*context != NULL && (*context)->value_type_instsance == NULL && (*context)->values != NULL && !is_base_type((*context)->type_define))
@@ -420,7 +429,7 @@ static void assign_loop_var(var* loop_v, var* item_v)
 	if (loop_v == NULL || item_v == NULL) return;
 	loop_v->type_define = item_v->type_define;
 	loop_v->size = 1;
-	loop_v->values = install_memory_with_type(item_v->type_define, 1);
+	loop_v->values = install_memory(loop_v);
 	if (item_v->type_define == T_INT && item_v->value_int != NULL)
 	{
 		*loop_v->value_int = *item_v->value_int;
@@ -875,8 +884,8 @@ var* eval_member_access(node** nod, fcall* calling_function, var* calling_object
 		case value:
 			{
 				mvar = new_temp_var((*nod)->opt_type_ptr);
-
-				mvar->values = install_memory_with_type((*nod)->opt_type_ptr, 1);
+				mvar->size = 1;
+				mvar->values = install_memory(mvar);
 				set_value_copy_node(mvar, *nod);
 				step(nod);
 				break;
@@ -1108,6 +1117,10 @@ node* eval_ast_nodes(var* context_object, node* root_node, fcall* calling_functi
 						if (is_static_decl && n_var != NULL)
 						{
 							n_var->access = STATIC;
+							if (target_class != NULL && n_var->slot_idx >= 0 && n_var->slot_idx < target_class->d_propertys_size)
+							{
+								target_class->field_descriptors[n_var->slot_idx].access = STATIC;
+							}
 						}
 						is_static_decl = false;
 
@@ -1135,7 +1148,7 @@ node* eval_ast_nodes(var* context_object, node* root_node, fcall* calling_functi
 									       var_type->type_name);
 									exit(1);
 								}
-								n_var->values = install_memory_with_type(n_var->type_define, n_var->size);
+								n_var->values = install_memory(n_var);
 							}
 						}
 					}

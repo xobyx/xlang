@@ -215,13 +215,19 @@ typedef struct node_stack
 
 enum var_access { PUBLIC = 1, STATIC, PRIVATE };
 
+/* FieldDescriptor: Compact compile-time schema metadata for class fields (~24 bytes) */
+typedef struct FieldDescriptor {
+	char* name;
+	struct type_def* type_define;
+	int slot_idx;
+	enum var_access access;
+} FieldDescriptor;
+
+typedef struct FieldDescriptor field_descriptor;
+
 typedef struct var
 {
-
-
-
 	char* name;
-
 
 	union
 	{
@@ -237,8 +243,20 @@ typedef struct var
 		bool * value_bool;
 		struct func_deftion* value_func;
 		struct type_def* value_type;
-
 	};
+
+	/* Inlined storage for scalar primitives to eliminate heap allocations for numbers */
+	union
+	{
+		int64_t raw_primitive;
+		int inline_int;
+		long inline_long;
+		float inline_float;
+		bool inline_bool;
+		int64_t ival;
+		double fval;
+		bool bval;
+	} inline_val;
 
 	struct type_instance * holder;
 
@@ -330,6 +348,7 @@ typedef struct type_def
 		var d_propertys[100];
 		var properties[100];
 	};
+	FieldDescriptor field_descriptors[100];
 	union
 	{
 		func_deftion d_functions[100];

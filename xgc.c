@@ -435,7 +435,7 @@ void gc_mark_var(var* v)
 		}
 	}
 
-	if (v->values != NULL && gc_is_managed(v->values))
+	if (v->values != NULL && v->values != &v->inline_val && gc_is_managed(v->values))
 	{
 		gc_mark_ptr(v->values);
 	}

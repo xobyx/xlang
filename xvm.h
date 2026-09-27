@@ -131,6 +131,11 @@ void xvm_push(XVm* vm, XValue val);
 XValue xvm_pop(XVm* vm);
 XValue xvm_peek(XVm* vm, int distance);
 
+/* Var / XValue Interop Bridge */
+struct var;
+XValue var_to_xvalue(const struct var* v);
+void xvalue_to_var(XValue xv, struct var* out_v);
+
 #ifdef __cplusplus
 }
 #endif

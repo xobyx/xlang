@@ -271,7 +271,7 @@ static bool eval_name(node** nod, fcall* calling_function, var* calling_object,
 						/* Class without explicit constructor: allocate default instance */
 						var* inst_var = new_temp_var(td);
 						inst_var->size = 1;
-						inst_var->values = install_memory_with_type(td, 1);
+						inst_var->values = install_memory(inst_var);
 						inst_var->value_type_instsance = (type_instance*)inst_var->values;
 						node* p4_fallback = (*nod)->next;
 						if (p4_fallback != NULL && p4_fallback->type_ == parentheses4)
@@ -400,7 +400,7 @@ var* name_exp(node** nod, fcall* calling_function, var* calling_object, node_typ
 				{
 					mvar = new_temp_var(list_td);
 					mvar->size = 1;
-					mvar->values = install_memory_with_type(list_td, 1);
+					mvar->values = install_memory(mvar);
 					mvar->value_type_instsance = (type_instance*)mvar->values;
 					mvar->value_type_instsance->id = list_id;
 					var* id_prop = type_instance_get_field(mvar->value_type_instsance, "id");
@@ -439,7 +439,8 @@ var* name_exp(node** nod, fcall* calling_function, var* calling_object, node_typ
 				exit(1);
 			}
 			mvar = new_temp_var((*nod)->opt_type_ptr);
-			mvar->values = install_memory_with_type((*nod)->opt_type_ptr, 1);
+			mvar->size = 1;
+			mvar->values = install_memory(mvar);
 			set_value_copy_node(mvar, *nod);
 			step(nod);
 			break;
@@ -823,7 +824,7 @@ static var* eval_binary_op(var* left, const char* op, var* right)
 
 		var* res = new_temp_var(T_BOOL);
 		res->size = 1;
-		res->values = install_memory_with_type(T_BOOL, 1);
+		res->values = install_memory(res);
 		if (res->values != NULL)
 			*(bool*)res->values = match;
 		return res;
@@ -835,7 +836,7 @@ static var* eval_binary_op(var* left, const char* op, var* right)
 
 	var* res = new_temp_var(res_type);
 	res->size = 1;
-	res->values = install_memory_with_type(res_type, 1);
+	res->values = install_memory(res);
 	int count = 0;
 	move(res, res->values, &count, left);
 
@@ -938,7 +939,7 @@ node* calc(node* cnode, fcall* calling_function, var* calling_object, node_type 
 			{
 				var* neg = new_temp_var(operand->type_define);
 				neg->size = 1;
-				neg->values = install_memory_with_type(operand->type_define, 1);
+				neg->values = install_memory(neg);
 				int c = 0;
 				move(neg, neg->values, &c, operand);
 				if (neg->type_define == T_INT && neg->value_int != NULL)
@@ -963,7 +964,7 @@ node* calc(node* cnode, fcall* calling_function, var* calling_object, node_type 
 
 				var* not_var = new_temp_var(T_BOOL);
 				not_var->size = 1;
-				not_var->values = install_memory_with_type(T_BOOL, 1);
+				not_var->values = install_memory(not_var);
 				if (not_var->values != NULL)
 					*(bool*)not_var->values = !bval;
 				operand = not_var;
@@ -1068,17 +1069,17 @@ node* calc(node* cnode, fcall* calling_function, var* calling_object, node_type 
 					bval = (*final_val->value_int != 0);
 				else if (final_val->value_bool != NULL)
 					bval = *final_val->value_bool;
-				bool* bmem = (bool*)install_memory_with_type(T_BOOL, 1);
-				if (bmem != NULL)
-					*bmem = bval;
-				calc_result->values = bmem;
+				calc_result->size = 1;
 				calc_result->type_define = T_BOOL;
+				calc_result->values = install_memory(calc_result);
+				if (calc_result->values != NULL)
+					*(bool*)calc_result->values = bval;
 			}
 			else if (final_val->type_define != NULL && is_base_type(final_val->type_define))
 			{
 				calc_result->type_define = final_val->type_define;
 				calc_result->size = final_val->size > 0 ? final_val->size : 1;
-				calc_result->values = install_memory_with_type(calc_result->type_define, calc_result->size);
+				calc_result->values = install_memory(calc_result);
 				int count = 0;
 				move(calc_result, calc_result->values, &count, final_val);
 			}

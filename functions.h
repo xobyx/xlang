@@ -47,6 +47,8 @@ int eql(const char* n, const char* x);
 void instance_type(type_def* type_prototype, void* dest_array, int size);
 int type_def_compute_field_offsets(type_def* td);
 int type_def_find_field_slot(const type_def* td, const char* name);
+FieldDescriptor* type_def_get_field_descriptor(const type_def* td, const char* name);
+FieldDescriptor* type_def_get_field_descriptor_by_slot(const type_def* td, int slot);
 type_instance* type_instance_create(type_def* td);
 var* type_instance_get_field(type_instance* inst, const char* name);
 var* type_instance_get_field_by_slot(type_instance* inst, int slot);

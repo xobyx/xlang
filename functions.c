@@ -1201,6 +1201,10 @@ int type_def_compute_field_offsets(type_def* td)
 	for (int i = 0; i < td->d_propertys_size; i++)
 	{
 		td->d_propertys[i].slot_idx = base_count + i;
+		td->field_descriptors[i].slot_idx = base_count + i;
+		td->field_descriptors[i].name = td->d_propertys[i].name;
+		td->field_descriptors[i].type_define = td->d_propertys[i].type_define;
+		td->field_descriptors[i].access = td->d_propertys[i].access;
 	}
 	td->total_field_count = base_count + td->d_propertys_size;
 	return td->total_field_count;
@@ -1213,6 +1217,10 @@ int type_def_find_field_slot(const type_def* td, const char* name)
 	{
 		for (int i = 0; i < curr->d_propertys_size; i++)
 		{
+			if (curr->field_descriptors[i].name != NULL && strcmp(curr->field_descriptors[i].name, name) == 0)
+			{
+				return curr->field_descriptors[i].slot_idx;
+			}
 			if (curr->d_propertys[i].name != NULL && strcmp(curr->d_propertys[i].name, name) == 0)
 			{
 				return curr->d_propertys[i].slot_idx;
@@ -1221,6 +1229,44 @@ int type_def_find_field_slot(const type_def* td, const char* name)
 		if (curr->base == curr) break;
 	}
 	return -1;
+}
+
+FieldDescriptor* type_def_get_field_descriptor(const type_def* td, const char* name)
+{
+	if (td == NULL || name == NULL) return NULL;
+	for (const type_def* curr = td; curr != NULL; curr = curr->base)
+	{
+		for (int i = 0; i < curr->d_propertys_size; i++)
+		{
+			if (curr->field_descriptors[i].name != NULL && strcmp(curr->field_descriptors[i].name, name) == 0)
+			{
+				return (FieldDescriptor*)&curr->field_descriptors[i];
+			}
+			if (curr->d_propertys[i].name != NULL && strcmp(curr->d_propertys[i].name, name) == 0)
+			{
+				return (FieldDescriptor*)&curr->field_descriptors[i];
+			}
+		}
+		if (curr->base == curr) break;
+	}
+	return NULL;
+}
+
+FieldDescriptor* type_def_get_field_descriptor_by_slot(const type_def* td, int slot)
+{
+	if (td == NULL || slot < 0) return NULL;
+	for (const type_def* curr = td; curr != NULL; curr = curr->base)
+	{
+		for (int i = 0; i < curr->d_propertys_size; i++)
+		{
+			if (curr->field_descriptors[i].slot_idx == slot)
+			{
+				return (FieldDescriptor*)&curr->field_descriptors[i];
+			}
+		}
+		if (curr->base == curr) break;
+	}
+	return NULL;
 }
 
 static void init_instance_prop_obj(var* inctance_prop);
@@ -1259,7 +1305,7 @@ type_instance* type_instance_create(type_def* td)
 				{
 					if (proto->type_define != NULL)
 					{
-						f->values = install_memory_with_type(proto->type_define, 1);
+						f->values = install_memory(f);
 						if (is_base_type(proto->type_define))
 						{
 							if (proto->values != NULL)
@@ -1286,9 +1332,11 @@ type_instance* type_instance_create(type_def* td)
 	return inst;
 }
 
+extern type_instance xlnag_object;
+
 var* type_instance_get_field(type_instance* inst, const char* name)
 {
-	if (inst == NULL || inst->type == NULL || name == NULL) return NULL;
+	if (inst == NULL || (!gc_is_managed(inst) && inst != &xlnag_object) || inst->type == NULL || name == NULL) return NULL;
 	int slot = type_def_find_field_slot(inst->type, name);
 	if (slot >= 0 && (uint32_t)slot < inst->field_count)
 	{
@@ -1299,13 +1347,13 @@ var* type_instance_get_field(type_instance* inst, const char* name)
 
 var* type_instance_get_field_by_slot(type_instance* inst, int slot)
 {
-	if (inst == NULL || slot < 0 || (uint32_t)slot >= inst->field_count) return NULL;
+	if (inst == NULL || (!gc_is_managed(inst) && inst != &xlnag_object) || slot < 0 || (uint32_t)slot >= inst->field_count) return NULL;
 	return &inst->fields[slot];
 }
 
 int type_instance_get_id(type_instance* inst)
 {
-	if (inst == NULL) return -1;
+	if (inst == NULL || (!gc_is_managed(inst) && inst != &xlnag_object)) return -1;
 	if (inst->id > 0) return inst->id;
 	var* f = type_instance_get_field(inst, "id");
 	if (f != NULL && f->value_int != NULL) return *f->value_int;
@@ -1349,7 +1397,23 @@ bool is_base_type(type_def* t)
 
 void* install_memory(var* target_var)
 {
-	return install_memory_with_type(target_var->type_define, target_var->size);
+	if (target_var == NULL) return NULL;
+	int count = target_var->size > 0 ? target_var->size : 1;
+	target_var->size = count;
+	if (count == 1)
+	{
+		if (target_var->type_define == T_INT ||
+		    target_var->type_define == T_LONG ||
+		    target_var->type_define == T_FLOAT ||
+		    target_var->type_define == T_BOOL)
+		{
+			target_var->inline_val.raw_primitive = 0;
+			target_var->values = &target_var->inline_val;
+			return target_var->values;
+		}
+	}
+	target_var->values = install_memory_with_type(target_var->type_define, target_var->size);
+	return target_var->values;
 }
 
 static void init_instance_prop_obj(var* instance_prop)

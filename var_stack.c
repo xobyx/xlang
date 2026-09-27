@@ -58,7 +58,7 @@ void var_clean_stack(var_stack* s)
 					}
 				}
 			}
-			if (bi->type_define != T_FUNC && bi->values != NULL && gc_is_managed(bi->values))
+			if (bi->type_define != T_FUNC && bi->values != NULL && bi->values != &bi->inline_val && gc_is_managed(bi->values))
 			{
 				gc_free_any(bi->values);
 				bi->values = NULL;
@@ -111,7 +111,7 @@ void free_temp_var(var* bi)
 			}
 		}
 	}
-	if (bi->type_define != T_FUNC && bi->values != NULL && gc_is_managed(bi->values))
+	if (bi->type_define != T_FUNC && bi->values != NULL && bi->values != &bi->inline_val && gc_is_managed(bi->values))
 	{
 		gc_free_any(bi->values);
 		bi->values = NULL;

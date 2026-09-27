@@ -605,29 +605,18 @@ void x_json_stringify(fcall* fc)
 		if (arg != NULL)
 		{
 			/* Check if argument is a Map or List object */
+			int id = -1;
 			if (arg->value_type_instsance != NULL)
 			{
-				int id = type_instance_get_id(arg->value_type_instsance);
-				if (id > 0)
-				{
-					if (arg->type_define != NULL && strcmp(arg->type_define->type_name, "List") == 0)
-					{
-						stringify_list(&sb, id);
-					}
-					else
-					{
-						stringify_map(&sb, id);
-					}
-				}
-				else
-				{
-					buf_append(&sb, "{}");
-				}
+				id = type_instance_get_id(arg->value_type_instsance);
 			}
-			else if (arg->value_int != NULL && arg->type_define != NULL && !is_base_type(arg->type_define))
+			if (id <= 0 && arg->value_int != NULL)
 			{
-				int id = *arg->value_int;
-				if (arg->type_define->type_name != NULL && strcmp(arg->type_define->type_name, "List") == 0)
+				id = *arg->value_int;
+			}
+			if (id > 0)
+			{
+				if (arg->type_define != NULL && strcmp(arg->type_define->type_name, "List") == 0)
 				{
 					stringify_list(&sb, id);
 				}
