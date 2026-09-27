@@ -1,0 +1,1193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>xlang - Complete Language Specification & Architecture Guide</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0a0d14;
+      --bg-secondary: #101522;
+      --bg-tertiary: #171f33;
+      --bg-card: rgba(23, 31, 51, 0.7);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-hover: rgba(0, 210, 255, 0.4);
+      --accent-cyan: #00d2ff;
+      --accent-purple: #7952ff;
+      --accent-pink: #f72585;
+      --accent-green: #00f5d4;
+      --accent-amber: #ffb703;
+      --text-main: #e2e8f0;
+      --text-muted: #94a3b8;
+      --text-bright: #ffffff;
+      --code-bg: #07090e;
+      --sidebar-width: 290px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      line-height: 1.65;
+      display: flex;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: var(--bg-primary);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--accent-cyan);
+    }
+
+    /* Sidebar Navigation */
+    #sidebar {
+      width: var(--sidebar-width);
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border-color);
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      display: flex;
+      flex-direction: column;
+      z-index: 100;
+      backdrop-filter: blur(16px);
+    }
+
+    .sidebar-header {
+      padding: 24px 20px;
+      border-bottom: 1px solid var(--border-color);
+      background: linear-gradient(180deg, rgba(0,210,255,0.06) 0%, transparent 100%);
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-badge {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      color: white;
+      font-size: 20px;
+      box-shadow: 0 4px 15px rgba(0, 210, 255, 0.35);
+    }
+
+    .logo-text h1 {
+      font-size: 19px;
+      font-weight: 700;
+      color: var(--text-bright);
+      letter-spacing: -0.5px;
+    }
+
+    .logo-text span {
+      font-size: 11px;
+      color: var(--accent-cyan);
+      text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: 1px;
+    }
+
+    .search-box {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .search-box input {
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      color: var(--text-main);
+      font-size: 13px;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .search-box input:focus {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 10px rgba(0, 210, 255, 0.2);
+    }
+
+    .nav-links {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 12px;
+    }
+
+    .nav-category {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin: 16px 10px 8px 10px;
+    }
+
+    .nav-link {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .nav-link:hover {
+      color: var(--text-bright);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .nav-link.active {
+      color: var(--accent-cyan);
+      background: rgba(0, 210, 255, 0.1);
+      font-weight: 600;
+      border-left: 3px solid var(--accent-cyan);
+    }
+
+    .nav-link svg {
+      width: 16px;
+      height: 16px;
+      opacity: 0.7;
+    }
+
+    /* Main Content Area */
+    #content {
+      margin-left: var(--sidebar-width);
+      flex: 1;
+      padding: 40px 60px;
+      max-width: 1280px;
+    }
+
+    /* Hero Banner */
+    .hero {
+      position: relative;
+      background: linear-gradient(135deg, rgba(16, 21, 34, 0.9) 0%, rgba(23, 31, 51, 0.7) 100%);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 48px;
+      margin-bottom: 48px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      top: -100px;
+      right: -100px;
+      width: 300px;
+      height: 300px;
+      background: radial-gradient(circle, rgba(0,210,255,0.2) 0%, transparent 70%);
+      filter: blur(40px);
+    }
+
+    .hero h1 {
+      font-size: 38px;
+      font-weight: 800;
+      color: var(--text-bright);
+      letter-spacing: -1px;
+      margin-bottom: 12px;
+      background: linear-gradient(135deg, #ffffff 40%, var(--accent-cyan) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero p {
+      font-size: 17px;
+      color: var(--text-muted);
+      max-width: 800px;
+      margin-bottom: 24px;
+    }
+
+    .hero-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .tag.cyan { border-color: rgba(0,210,255,0.4); color: var(--accent-cyan); }
+    .tag.purple { border-color: rgba(121,82,255,0.4); color: var(--accent-purple); }
+    .tag.green { border-color: rgba(0,245,212,0.4); color: var(--accent-green); }
+    .tag.amber { border-color: rgba(255,183,3,0.4); color: var(--accent-amber); }
+
+    /* Section Styling */
+    section {
+      margin-bottom: 64px;
+      scroll-margin-top: 40px;
+    }
+
+    h2 {
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--text-bright);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 12px;
+    }
+
+    h2::before {
+      content: "";
+      width: 4px;
+      height: 22px;
+      background: var(--accent-cyan);
+      border-radius: 2px;
+      display: inline-block;
+    }
+
+    h3 {
+      font-size: 19px;
+      font-weight: 600;
+      color: var(--text-bright);
+      margin: 28px 0 12px 0;
+    }
+
+    h4 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--accent-cyan);
+      margin: 18px 0 8px 0;
+    }
+
+    p {
+      color: var(--text-main);
+      margin-bottom: 16px;
+    }
+
+    /* Feature Grid */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      gap: 20px;
+      margin: 20px 0;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 20px;
+      margin: 20px 0;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 24px;
+      backdrop-filter: blur(12px);
+      transition: all 0.25s ease;
+    }
+
+    .card:hover {
+      border-color: var(--border-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+    }
+
+    .card-icon {
+      width: 42px;
+      height: 42px;
+      background: var(--bg-tertiary);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      color: var(--accent-cyan);
+      border: 1px solid var(--border-color);
+    }
+
+    .card h4 {
+      font-size: 16px;
+      color: var(--text-bright);
+      margin: 0 0 8px 0;
+    }
+
+    .card p {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 0;
+    }
+
+    /* Diagram Styling */
+    .diagram-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 28px;
+      margin: 24px 0;
+      overflow-x: auto;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    }
+
+    .diagram-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--accent-cyan);
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .diagram-svg {
+      width: 100%;
+      height: auto;
+      display: block;
+      margin: 0 auto;
+    }
+
+    /* Code Blocks & Tabs */
+    .code-container {
+      background: var(--code-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      margin: 18px 0;
+      overflow: hidden;
+    }
+
+    .code-header {
+      background: rgba(255,255,255,0.03);
+      border-bottom: 1px solid var(--border-color);
+      padding: 10px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .code-title {
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .copy-btn {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+
+    .copy-btn:hover {
+      color: var(--accent-cyan);
+      border-color: var(--accent-cyan);
+    }
+
+    pre {
+      padding: 18px;
+      overflow-x: auto;
+      font-family: 'Fira Code', monospace;
+      font-size: 13.5px;
+      line-height: 1.6;
+      color: #d1d5db;
+    }
+
+    code {
+      font-family: 'Fira Code', monospace;
+    }
+
+    p code, li code, td code {
+      background: var(--bg-tertiary);
+      color: var(--accent-cyan);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12.5px;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    /* Syntax Highlighting Tokens */
+    .kw { color: #f72585; font-weight: 600; }
+    .ty { color: #00d2ff; font-weight: 500; }
+    .fn { color: #7952ff; font-weight: 600; }
+    .st { color: #00f5d4; }
+    .num { color: #ffb703; }
+    .cm { color: #64748b; font-style: italic; }
+    .op { color: #e2e8f0; }
+
+    /* Tables */
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+      margin: 20px 0;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      background: var(--bg-card);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 13.5px;
+    }
+
+    th {
+      background: var(--bg-tertiary);
+      color: var(--text-bright);
+      font-weight: 600;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    td {
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-main);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background: rgba(255,255,255,0.02);
+    }
+
+    /* Tabs Component */
+    .tabs-wrapper {
+      margin: 20px 0;
+    }
+
+    .tab-buttons {
+      display: flex;
+      gap: 4px;
+      background: var(--bg-secondary);
+      padding: 6px 6px 0 6px;
+      border-radius: 10px 10px 0 0;
+      border: 1px solid var(--border-color);
+      border-bottom: none;
+    }
+
+    .tab-btn {
+      padding: 8px 18px;
+      background: transparent;
+      border: none;
+      border-radius: 6px 6px 0 0;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .tab-btn.active {
+      background: var(--code-bg);
+      color: var(--accent-cyan);
+      border-top: 2px solid var(--accent-cyan);
+    }
+
+    .tab-content {
+      display: none;
+      background: var(--code-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 0 0 10px 10px;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Badges & Callouts */
+    .callout {
+      padding: 18px 22px;
+      border-radius: 10px;
+      margin: 20px 0;
+      border-left: 4px solid;
+      background: rgba(23, 31, 51, 0.6);
+    }
+
+    .callout.info {
+      border-color: var(--accent-cyan);
+      background: rgba(0, 210, 255, 0.05);
+    }
+
+    .callout.tip {
+      border-color: var(--accent-green);
+      background: rgba(0, 245, 212, 0.05);
+    }
+
+    .callout.warning {
+      border-color: var(--accent-amber);
+      background: rgba(255, 183, 3, 0.05);
+    }
+
+    .callout-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: var(--text-bright);
+    }
+
+    /* Responsive */
+    @media (max-width: 992px) {
+      #sidebar { transform: translateX(-100%); transition: transform 0.3s ease; }
+      #sidebar.open { transform: translateX(0); }
+      #content { margin-left: 0; padding: 24px; }
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Sidebar Navigation -->
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo-container">
+        <div class="logo-badge">X</div>
+        <div class="logo-text">
+          <h1>xlang</h1>
+          <span>Language Specification</span>
+        </div>
+      </div>
+    </div>
+    <div class="search-box">
+      <input type="text" id="navSearch" placeholder="Filter topics... (e.g. LLVM, Map, socket)">
+    </div>
+    <nav class="nav-links" id="navList">
+      <div class="nav-category">Overview</div>
+      <a href="#intro" class="nav-link active">Introduction & Philosophy</a>
+      <a href="#architecture" class="nav-link">Tri-Engine Architecture</a>
+
+      <div class="nav-category">Language Basics</div>
+      <a href="#lexical" class="nav-link">Lexical Structure & Keywords</a>
+      <a href="#type-system" class="nav-link">Type System & Memory</a>
+      <a href="#operators" class="nav-link">Operators & Expressions</a>
+      <a href="#control-flow" class="nav-link">Control Flow & Loops</a>
+
+      <div class="nav-category">Object Orientation</div>
+      <a href="#oop" class="nav-link">Classes & Inheritance</a>
+      <a href="#modules" class="nav-link">Modules & Imports</a>
+
+      <div class="nav-category">Standard Library</div>
+      <a href="#stdlib-strings" class="nav-link">String Manipulation</a>
+      <a href="#stdlib-collections" class="nav-link">List & Map Collections</a>
+      <a href="#stdlib-networking" class="nav-link">Socket Networking</a>
+      <a href="#stdlib-system" class="nav-link">System & File I/O</a>
+      <a href="#stdlib-gc" class="nav-link">Garbage Collection</a>
+
+      <div class="nav-category">Compilers & Tooling</div>
+      <a href="#llvm-backend" class="nav-link">LLVM AOT & Clang Pipeline</a>
+      <a href="#vm-engine" class="nav-link">Bytecode VM & Chunk Format</a>
+      <a href="#cli-reference" class="nav-link">CLI Commands & Tooling</a>
+      <a href="#case-study" class="nav-link">Case Study: HTTP Server</a>
+    </nav>
+  </aside>
+
+  <!-- Main Content -->
+  <main id="content">
+
+    <!-- Hero Header -->
+    <div class="hero">
+      <h1>The xlang Programming Language</h1>
+      <p>A multi-paradigm, systems-capable scripting and compiled language featuring a Unified Tri-Engine Execution Model: Tree-Walk Interpreter, Stack-Based Bytecode VM, and LLVM Native AOT Compilation.</p>
+      <div class="hero-tags">
+        <span class="tag cyan">⚡ Standalone ELF 64-bit Binaries</span>
+        <span class="tag purple">📦 Single-Inheritance OOP</span>
+        <span class="tag green">🌐 Native Berkeley Sockets</span>
+        <span class="tag amber">🔄 Mark & Sweep GC + Tagged Values</span>
+      </div>
+    </div>
+
+    <!-- Section 1: Intro -->
+    <section id="intro">
+      <h2>1. Introduction & Philosophy</h2>
+      <p><strong>xlang</strong> was designed from first principles in ANSI C to bridge the gap between dynamic ergonomic scripting and deterministic native systems performance. Whether developing microservices, parsing complex protocols, running algorithmic pipelines, or emitting optimized machine code, xlang offers seamless transitions across three execution paradigms without changing a single line of source code.</p>
+
+      <div class="grid-3">
+        <div class="card">
+          <div class="card-icon">⚡</div>
+          <h4>Zero-Overhead Semantics</h4>
+          <p>Strict structural layouts and primitive inlining allow direct translation from high-level syntax into LLVM Intermediate Representation without runtime reflection overhead.</p>
+        </div>
+        <div class="card">
+          <div class="card-icon">🧩</div>
+          <h4>Orthogonal OOP Model</h4>
+          <p>Classes support member variables, overloaded constructors, single inheritance, instance methods, and static methods with single-pass struct alignment.</p>
+        </div>
+        <div class="card">
+          <div class="card-icon">🌐</div>
+          <h4>Built-in Networking</h4>
+          <p>First-class Berkeley sockets support high-performance TCP server daemons, client requests, UDP datagrams, and timeouts directly in user code.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 2: Architecture -->
+    <section id="architecture">
+      <h2>2. Tri-Engine Execution Architecture</h2>
+      <p>The core innovation of xlang is its <strong>Unified Compilation Pipeline</strong>. The frontend parses source files into an AST Arena. From that unified AST representation, xlang can execute in three distinct ways:</p>
+
+      <!-- SVG Architecture Diagram -->
+      <div class="diagram-card">
+        <div class="diagram-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          Figure 2.1: Unified Multi-Tier Compilation & Execution Pipeline
+        </div>
+        <svg class="diagram-svg" viewBox="0 0 960 480" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="960" height="480" rx="12" fill="#0d111a"/>
+          
+          <!-- Source File -->
+          <rect x="40" y="200" width="140" height="80" rx="8" fill="#171f33" stroke="#00d2ff" stroke-width="2"/>
+          <text x="110" y="235" fill="#ffffff" font-family="'Inter', sans-serif" font-weight="700" font-size="14" text-anchor="middle">Source File</text>
+          <text x="110" y="255" fill="#00d2ff" font-family="'Fira Code', monospace" font-size="12" text-anchor="middle">*.xb</text>
+
+          <!-- Arrow to Frontend -->
+          <path d="M180 240 L230 240" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+
+          <!-- Frontend Group -->
+          <rect x="230" y="140" width="220" height="200" rx="10" fill="#101522" stroke="#2d3748" stroke-dasharray="4 4"/>
+          <text x="340" y="165" fill="#94a3b8" font-family="'Inter', sans-serif" font-weight="600" font-size="12" text-anchor="middle">FRONTEND PIPELINE</text>
+          
+          <rect x="250" y="185" width="180" height="50" rx="6" fill="#171f33" stroke="#2d3748"/>
+          <text x="340" y="215" fill="#e2e8f0" font-family="'Inter', sans-serif" font-size="12" text-anchor="middle">Lexer & Token Stream</text>
+
+          <rect x="250" y="255" width="180" height="65" rx="6" fill="#171f33" stroke="#7952ff" stroke-width="1.5"/>
+          <text x="340" y="283" fill="#ffffff" font-family="'Inter', sans-serif" font-weight="600" font-size="13" text-anchor="middle">AST Arena</text>
+          <text x="340" y="303" fill="#94a3b8" font-family="'Fira Code', monospace" font-size="11" text-anchor="middle">xast_parser.c</text>
+
+          <!-- Branch Arrows -->
+          <path d="M430 280 C480 280, 480 90, 540 90" stroke="#00f5d4" stroke-width="2" fill="none"/>
+          <path d="M430 280 C480 280, 480 240, 540 240" stroke="#7952ff" stroke-width="2" fill="none"/>
+          <path d="M430 280 C480 280, 480 390, 540 390" stroke="#00d2ff" stroke-width="2" fill="none"/>
+
+          <!-- Target 1: Tree Walk -->
+          <g transform="translate(540, 50)">
+            <rect width="360" height="80" rx="8" fill="#171f33" stroke="#00f5d4" stroke-width="1.5"/>
+            <text x="20" y="30" fill="#00f5d4" font-family="'Inter', sans-serif" font-weight="700" font-size="13">1. Tree-Walk Interpreter</text>
+            <text x="20" y="52" fill="#94a3b8" font-family="'Inter', sans-serif" font-size="12">Direct AST node-stream walker (parse.c, calc.c)</text>
+            <text x="20" y="68" fill="#64748b" font-family="'Fira Code', monospace" font-size="11">Zero compile latency | Dynamic REPL mode</text>
+          </g>
+
+          <!-- Target 2: Bytecode VM -->
+          <g transform="translate(540, 200)">
+            <rect width="360" height="80" rx="8" fill="#171f33" stroke="#7952ff" stroke-width="1.5"/>
+            <text x="20" y="30" fill="#7952ff" font-family="'Inter', sans-serif" font-weight="700" font-size="13">2. Bytecode Compiler & Virtual Machine</text>
+            <text x="20" y="52" fill="#94a3b8" font-family="'Inter', sans-serif" font-size="12">Compiles to .xbc bytecode; runs on stack-based VM (xvm.c)</text>
+            <text x="20" y="68" fill="#64748b" font-family="'Fira Code', monospace" font-size="11">Fast startup | Compact portable distribution</text>
+          </g>
+
+          <!-- Target 3: LLVM AOT -->
+          <g transform="translate(540, 350)">
+            <rect width="360" height="90" rx="8" fill="#171f33" stroke="#00d2ff" stroke-width="2"/>
+            <text x="20" y="30" fill="#00d2ff" font-family="'Inter', sans-serif" font-weight="700" font-size="13">3. LLVM Native AOT Compiler</text>
+            <text x="20" y="50" fill="#94a3b8" font-family="'Inter', sans-serif" font-size="12">Emits typed LLVM IR (.ll) -> Clang -O2 + xllvm_rt.o</text>
+            <text x="20" y="70" fill="#00d2ff" font-family="'Fira Code', monospace" font-size="11">Produces Standalone ELF 64-bit Executables</text>
+          </g>
+        </svg>
+      </div>
+
+      <div class="tabs-wrapper">
+        <div class="tab-buttons">
+          <button class="tab-btn active" onclick="switchTab(event, 'tab-tree')">Tree-Walk Mode</button>
+          <button class="tab-btn" onclick="switchTab(event, 'tab-vm')">Virtual Machine Mode</button>
+          <button class="tab-btn" onclick="switchTab(event, 'tab-llvm')">Native AOT Mode (LLVM)</button>
+        </div>
+
+        <div id="tab-tree" class="tab-content active">
+          <pre><code><span class="cm"># Execute directly via AST Interpreter (instant execution, zero build step)</span>
+$ ./bin/Release/xlang examples/http_server/server_daemon.xb</code></pre>
+        </div>
+
+        <div id="tab-vm" class="tab-content">
+          <pre><code><span class="cm"># Compile script into compact binary bytecode (.xbc)</span>
+$ ./bin/Release/xlang -c examples/http_server/server_daemon.xb -o server.xbc
+
+<span class="cm"># Execute bytecode using the high-performance stack VM</span>
+$ ./bin/Release/xlang --vm server.xbc</code></pre>
+        </div>
+
+        <div id="tab-llvm" class="tab-content">
+          <pre><code><span class="cm"># 1. Inspect generated LLVM IR:</span>
+$ ./bin/Release/xlang examples/http_server/server_daemon.xb --emit-llvm
+
+<span class="cm"># 2. Build directly into an optimized standalone ELF 64-bit binary via Clang:</span>
+$ ./bin/Release/xlang build examples/http_server/server_daemon.xb -o server_daemon_bin
+
+<span class="cm"># 3. Run the standalone binary directly (zero xlang dependency):</span>
+$ ./server_daemon_bin</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 3: Lexical & Syntax -->
+    <section id="lexical">
+      <h2>3. Lexical Structure & Grammar</h2>
+      <p>The grammar of xlang is clean and readable, resembling a blend of Python and modern C/Java with strong typing annotations.</p>
+
+      <div class="grid-2">
+        <div>
+          <h4>Comments & Terminators</h4>
+          <p>Single-line comments start with <code>#</code>. Semicolons are optional; statements can be terminated by newlines or <code>;</code>.</p>
+          <div class="code-container">
+            <div class="code-header">
+              <span class="code-title">syntax_basics.xb</span>
+              <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+            </div>
+            <pre><code><span class="cm"># This is a comment</span>
+<span class="ty">int</span> a = <span class="num">10</span>; <span class="ty">int</span> b = <span class="num">20</span>  <span class="cm"># Inline comment</span>
+<span class="ty">string</span> msg = <span class="st">"Hello, xlang!"</span>
+<span class="fn">println</span>(msg)</code></pre>
+          </div>
+        </div>
+
+        <div>
+          <h4>Reserved Keywords (11 Total)</h4>
+          <div class="table-container">
+            <table>
+              <thead><tr><th>Keyword</th><th>Usage</th></tr></thead>
+              <tbody>
+                <tr><td><code>if</code>, <code>eif</code>, <code>else</code></td><td>Conditional branches (<code>eif</code> = else if)</td></tr>
+                <tr><td><code>while</code>, <code>do</code></td><td>While & Do-While loops</td></tr>
+                <tr><td><code>for</code></td><td>3-part loop or stepper</td></tr>
+                <tr><td><code>break</code>, <code>continue</code></td><td>Loop flow interruption</td></tr>
+                <tr><td><code>return</code></td><td>Function exit & value return</td></tr>
+                <tr><td><code>class</code></td><td>User-defined object types</td></tr>
+                <tr><td><code>static</code></td><td>Static class members</td></tr>
+                <tr><td><code>import</code></td><td>Modular file inclusion</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 4: Type System -->
+    <section id="type-system">
+      <h2>4. Type System & Memory Architecture</h2>
+      <p>xlang provides both strictly-typed primitives and an ergonomic generic <code>var</code> container, paired with an optimized memory representation.</p>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>LLVM Equivalent</th>
+              <th>Size</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><code>int</code></td><td><code>i32</code></td><td>4 bytes</td><td>32-bit signed two's complement integer</td></tr>
+            <tr><td><code>long</code></td><td><code>i64</code></td><td>8 bytes</td><td>64-bit signed integer</td></tr>
+            <tr><td><code>float</code> / <code>double</code></td><td><code>double</code></td><td>8 bytes</td><td>IEEE-754 double precision floating point</td></tr>
+            <tr><td><code>bool</code></td><td><code>i1</code></td><td>1 byte</td><td>Boolean logical literal (<code>true</code> or <code>false</code>)</td></tr>
+            <tr><td><code>char</code></td><td><code>i8</code></td><td>1 byte</td><td>ASCII character representation</td></tr>
+            <tr><td><code>string</code></td><td><code>i8*</code></td><td>8 bytes (ptr)</td><td>Null-terminated dynamic heap string</td></tr>
+            <tr><td><code>Class*</code></td><td><code>%struct.T*</code></td><td>8 bytes (ptr)</td><td>Heap-allocated object reference</td></tr>
+            <tr><td><code>var</code></td><td><code>XValue</code> / Tagged</td><td>16 bytes</td><td>Dynamic tagged union (primitives inlined)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- SVG Type System Memory Layout -->
+      <div class="diagram-card">
+        <div class="diagram-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+          Figure 4.1: Tagged Value Architecture (16-Byte Compact Union)
+        </div>
+        <svg class="diagram-svg" viewBox="0 0 880 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="880" height="180" rx="10" fill="#0d111a"/>
+          
+          <!-- Outer 16-byte var box -->
+          <rect x="40" y="35" width="800" height="110" rx="8" fill="#171f33" stroke="#00d2ff" stroke-width="1.5"/>
+          <text x="440" y="25" fill="#94a3b8" font-family="'Inter', sans-serif" font-weight="700" font-size="12" text-anchor="middle">16-BYTE TAGGED VALUE (types.h / var struct)</text>
+
+          <!-- Type Discriminator -->
+          <rect x="55" y="55" width="160" height="70" rx="6" fill="#101522" stroke="#f72585" stroke-width="1.5"/>
+          <text x="135" y="85" fill="#f72585" font-family="'Inter', sans-serif" font-weight="700" font-size="13" text-anchor="middle">int type (4B)</text>
+          <text x="135" y="105" fill="#94a3b8" font-family="'Fira Code', monospace" font-size="11" text-anchor="middle">Tag: INT, FLT, STR...</text>
+
+          <!-- Flags & Metadata -->
+          <rect x="230" y="55" width="150" height="70" rx="6" fill="#101522" stroke="#2d3748"/>
+          <text x="305" y="85" fill="#e2e8f0" font-family="'Inter', sans-serif" font-weight="600" font-size="13" text-anchor="middle">uint32_t flags (4B)</text>
+          <text x="305" y="105" fill="#64748b" font-family="'Fira Code', monospace" font-size="11" text-anchor="middle">GC Mark / Const</text>
+
+          <!-- Inlined Payload Union -->
+          <rect x="395" y="55" width="430" height="70" rx="6" fill="#101522" stroke="#00f5d4" stroke-width="1.5"/>
+          <text x="610" y="80" fill="#00f5d4" font-family="'Inter', sans-serif" font-weight="700" font-size="13" text-anchor="middle">Inlined Payload Union (8 Bytes)</text>
+          <text x="610" y="105" fill="#94a3b8" font-family="'Fira Code', monospace" font-size="11" text-anchor="middle">int64_t i_val | double f_val | char* str_ptr | void* obj_ptr</text>
+        </svg>
+      </div>
+    </section>
+
+    <!-- Section 5: Control Flow -->
+    <section id="control-flow">
+      <h2>5. Control Flow & Loops</h2>
+      <p>xlang supports conditional branching and three loop styles: standard <code>while</code>, <code>do-while</code>, and flexible <code>for</code> loops.</p>
+
+      <div class="grid-2">
+        <div class="code-container">
+          <div class="code-header">
+            <span class="code-title">conditionals.xb</span>
+            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code><span class="ty">int</span> score = <span class="num">85</span>
+
+<span class="kw">if</span> (score >= <span class="num">90</span>) {
+    <span class="fn">println</span>(<span class="st">"Grade: A"</span>)
+} <span class="kw">eif</span> (score >= <span class="num">80</span>) {
+    <span class="fn">println</span>(<span class="st">"Grade: B"</span>)
+} <span class="kw">else</span> {
+    <span class="fn">println</span>(<span class="st">"Grade: C or below"</span>)
+}</code></pre>
+        </div>
+
+        <div class="code-container">
+          <div class="code-header">
+            <span class="code-title">loops.xb</span>
+            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code><span class="cm"># Standard C-style 3-expression for-loop</span>
+<span class="kw">for</span> (<span class="ty">int</span> i = <span class="num">0</span>; i < <span class="num">5</span>; i = i + <span class="num">1</span>) {
+    <span class="fn">println</span>(i)
+}
+
+<span class="cm"># Do-While Loop</span>
+<span class="ty">int</span> count = <span class="num">0</span>
+<span class="kw">do</span> {
+    count = count + <span class="num">1</span>
+} <span class="kw">while</span> (count < <span class="num">3</span>)</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 6: OOP -->
+    <section id="oop">
+      <h2>6. Object-Oriented Programming & Inheritance</h2>
+      <p>Classes in xlang are first-class constructs with automatic memory allocation, constructors with parameter overloading, single inheritance, instance fields, and instance/static methods.</p>
+
+      <!-- SVG OOP Inheritance Layout -->
+      <div class="diagram-card">
+        <div class="diagram-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Figure 6.1: Memory Layout & Field Inheritance Offset Map
+        </div>
+        <svg class="diagram-svg" viewBox="0 0 880 230" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="880" height="230" rx="10" fill="#0d111a"/>
+
+          <!-- Base Class: Map -->
+          <rect x="50" y="40" width="340" height="150" rx="8" fill="#171f33" stroke="#7952ff" stroke-width="1.5"/>
+          <text x="220" y="70" fill="#ffffff" font-family="'Inter', sans-serif" font-weight="700" font-size="14" text-anchor="middle">Base Class: Map</text>
+          
+          <rect x="70" y="90" width="300" height="40" rx="4" fill="#101522" stroke="#2d3748"/>
+          <text x="85" y="115" fill="#7952ff" font-family="'Fira Code', monospace" font-size="12">Offset 0: int id</text>
+          <text x="350" y="115" fill="#94a3b8" font-family="'Inter', sans-serif" font-size="11" text-anchor="end">4 Bytes</text>
+
+          <rect x="70" y="135" width="300" height="40" rx="4" fill="#101522" stroke="#2d3748"/>
+          <text x="85" y="160" fill="#64748b" font-family="'Fira Code', monospace" font-size="12">Methods: put(), get(), clear()</text>
+
+          <!-- Inheritance Arrow -->
+          <path d="M390 115 L470 115" stroke="#00d2ff" stroke-width="2" marker-end="url(#arrow)"/>
+          <text x="430" y="105" fill="#00d2ff" font-family="'Inter', sans-serif" font-weight="600" font-size="11" text-anchor="middle">inherits</text>
+
+          <!-- Derived Class: HashMap -->
+          <rect x="480" y="40" width="350" height="150" rx="8" fill="#171f33" stroke="#00d2ff" stroke-width="2"/>
+          <text x="655" y="70" fill="#ffffff" font-family="'Inter', sans-serif" font-weight="700" font-size="14" text-anchor="middle">Derived Class: HashMap(Map)</text>
+
+          <rect x="500" y="90" width="310" height="40" rx="4" fill="#101522" stroke="#7952ff" stroke-dasharray="3 3"/>
+          <text x="515" y="115" fill="#7952ff" font-family="'Fira Code', monospace" font-size="12">Offset 0: int id (Inherited)</text>
+          <text x="790" y="115" fill="#94a3b8" font-family="'Inter', sans-serif" font-size="11" text-anchor="end">From Map</text>
+
+          <rect x="500" y="135" width="310" height="40" rx="4" fill="#101522" stroke="#00d2ff"/>
+          <text x="515" y="160" fill="#00d2ff" font-family="'Fira Code', monospace" font-size="12">Constructor: HashMap() -> id=map_new()</text>
+        </svg>
+      </div>
+
+      <div class="code-container">
+        <div class="code-header">
+          <span class="code-title">oop_demonstration.xb</span>
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+        </div>
+        <pre><code><span class="kw">class</span> <span class="ty">Shape</span>() {
+    <span class="ty">string</span> name
+    <span class="fn">Shape</span>(<span class="ty">string</span> n) {
+        name = n
+    }
+    <span class="ty">void</span> <span class="fn">describe</span>() {
+        <span class="fn">println</span>(<span class="st">"Shape: "</span> + name)
+    }
+}
+
+<span class="kw">class</span> <span class="ty">Rectangle</span>(<span class="ty">Shape</span>) {
+    <span class="ty">int</span> width
+    <span class="ty">int</span> height
+
+    <span class="fn">Rectangle</span>(<span class="ty">int</span> w, <span class="ty">int</span> h) {
+        name = <span class="st">"Rectangle"</span>
+        width = w
+        height = h
+    }
+
+    <span class="ty">int</span> <span class="fn">area</span>() {
+        <span class="kw">return</span> width * height
+    }
+}
+
+<span class="ty">Rectangle</span> rect = <span class="kw">new</span> <span class="fn">Rectangle</span>(<span class="num">10</span>, <span class="num">20</span>)
+rect.<span class="fn">describe</span>()  <span class="cm"># Output: Shape: Rectangle (dispatches to base method)</span>
+<span class="fn">println</span>(rect.<span class="fn">area</span>())      <span class="cm"># Output: 200</span></code></pre>
+      </div>
+    </section>
+
+    <!-- Section 7: Standard Library -->
+    <section id="stdlib-collections">
+      <h2>7. Standard Library Modules</h2>
+      <p>xlang includes built-in standard modules for high-performance collections, Berkeley sockets, strings, filesystem operations, and runtime diagnostics.</p>
+
+      <div class="grid-2">
+        <!-- List & Map -->
+        <div class="card">
+          <div class="card-icon">🗂️</div>
+          <h4>Dynamic Collections: List & Map</h4>
+          <p>Dynamically resizable hash maps and sequential lists capable of storing heterogeneous data with zero manual allocation.</p>
+          <div class="code-container" style="margin-top:12px">
+            <pre><code><span class="kw">import</span> <span class="st">"list.xb"</span>
+<span class="kw">import</span> <span class="st">"map.xb"</span>
+
+<span class="ty">List</span> names = <span class="kw">new</span> <span class="fn">List</span>()
+names.<span class="fn">add</span>(<span class="st">"Alice"</span>)
+names.<span class="fn">add</span>(<span class="st">"Bob"</span>)
+<span class="fn">println</span>(names.<span class="fn">get</span>(<span class="num">0</span>)) <span class="cm"># Alice</span>
+
+<span class="ty">Map</span> config = <span class="kw">new</span> <span class="fn">Map</span>()
+config.<span class="fn">put</span>(<span class="st">"host"</span>, <span class="st">"127.0.0.1"</span>)
+config.<span class="fn">put_int</span>(<span class="st">"port"</span>, <span class="num">8080</span>)
+<span class="fn">println</span>(config.<span class="fn">get</span>(<span class="st">"host"</span>))</code></pre>
+          </div>
+        </div>
+
+        <!-- Sockets -->
+        <div class="card">
+          <div class="card-icon">🌐</div>
+          <h4>Berkeley Sockets & Networking</h4>
+          <p>Full TCP and UDP networking suite with reuse-addr, timeout controls, and non-blocking capability.</p>
+          <div class="code-container" style="margin-top:12px">
+            <pre><code><span class="kw">import</span> <span class="st">"socket.xb"</span>
+
+<span class="ty">int</span> fd = <span class="fn">socket_create</span>(<span class="st">"tcp"</span>)
+<span class="fn">socket_set_reuseaddr</span>(fd, <span class="num">1</span>)
+<span class="fn">socket_bind</span>(fd, <span class="st">"127.0.0.1"</span>, <span class="num">8080</span>)
+<span class="fn">socket_listen</span>(fd, <span class="num">32</span>)
+
+<span class="ty">int</span> client = <span class="fn">socket_accept</span>(fd)
+<span class="ty">string</span> req = <span class="fn">socket_recv</span>(client, <span class="num">4096</span>)
+<span class="fn">socket_send</span>(client, <span class="st">"HTTP/1.1 200 OK\r\n\r\nHello"</span>)
+<span class="fn">socket_close</span>(client)</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 8: LLVM Backend -->
+    <section id="llvm-backend">
+      <h2>8. LLVM AOT Native Compiler Pipeline</h2>
+      <p>The LLVM backend translates high-level xlang code directly into strongly typed LLVM IR and leverages <code>clang -O2</code> to compile native, standalone ELF 64-bit binaries.</p>
+
+      <div class="callout tip">
+        <div class="callout-title">💡 Pure Native C ABI Linkage</div>
+        Unlike other interpreted scripting languages, xlang's compiled executables do not bundle a heavy interpreter or virtual machine. They link against a compact 20KB C ABI runtime bridge (<code>xllvm_rt.o</code>) that provides direct POSIX/libc bindings.
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>xlang Expression</th>
+              <th>Emitted LLVM Instruction</th>
+              <th>Behavior</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>a + b</code> (strings)</td>
+              <td><code>call i8* @_str_concat(i8*, i8*)</code></td>
+              <td>Heap-allocates and concatenates two strings</td>
+            </tr>
+            <tr>
+              <td><code>str == "text"</code></td>
+              <td><code>call i32 @str_eq(i8*, i8*) == 1</code></td>
+              <td>Exact byte-for-byte content comparison</td>
+            </tr>
+            <tr>
+              <td><code>obj.method()</code></td>
+              <td><code>call %ret @Class_method(%struct.C* %this, ...)</code></td>
+              <td>Direct C ABI dispatch; bitcasts <code>%this</code> on inheritance</td>
+            </tr>
+            <tr>
+              <td><code>s.len()</code></td>
+              <td><code>call i32 @_len(i8* %s)</code></td>
+              <td>Calculates string length via runtime helper</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Section 9: CLI Reference -->
+    <section id="cli-reference">
+      <h2>9. CLI Reference & Build Tooling</h2>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Command Option</th>
+              <th>Description</th>
+              <th>Example</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><code>xlang &lt;file.xb&gt;</code></td><td>Runs file using the interactive Tree-Walk Interpreter</td><td><code>xlang app.xb</code></td></tr>
+            <tr><td><code>xlang -c &lt;file.xb&gt; -o &lt;out.xbc&gt;</code></td><td>Compiles source file into VM bytecode chunk</td><td><code>xlang -c app.xb -o app.xbc</code></td></tr>
+            <tr><td><code>xlang --vm &lt;file.xbc&gt;</code></td><td>Executes binary bytecode file using the Virtual Machine</td><td><code>xlang --vm app.xbc</code></td></tr>
+            <tr><td><code>xlang &lt;file.xb&gt; --emit-llvm</code></td><td>Emits human-readable LLVM Intermediate Representation (.ll)</td><td><code>xlang app.xb --emit-llvm</code></td></tr>
+            <tr><td><code>xlang build &lt;file.xb&gt; -o &lt;bin&gt;</code></td><td>Compiles directly to an optimized native ELF binary via Clang</td><td><code>xlang build app.xb -o my_app</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Section 10: Full Case Study -->
+    <section id="case-study">
+      <h2>10. Complete Real-World Example: Native HTTP Daemon</h2>
+      <p>The following program demonstrates classes, dynamic collections, sockets, string processing, and health diagnostics compiled into a standalone native binary:</p>
+
+      <div class="code-container">
+        <div class="code-header">
+          <span class="code-title">examples/http_server/server_daemon.xb</span>
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+        </div>
+        <pre><code><span class="kw">import</span> <span class="st">"server.xb"</span>
+<span class="kw">import</span> <span class="st">"sys.xb"</span>
+
+<span class="fn">println</span>(<span class="st">"=================================================="</span>)
+<span class="fn">println</span>(<span class="st">"       xlang HTTP Web Server is Running!          "</span>)
+<span class="fn">println</span>(<span class="st">"=================================================="</span>)
+<span class="fn">println</span>(<span class="st">"Listening on http://127.0.0.1:8080"</span>)
+
+<span class="ty">HttpServer</span> srv = <span class="kw">new</span> <span class="fn">HttpServer</span>()
+<span class="ty">int</span> status = srv.<span class="fn">init</span>(<span class="st">"127.0.0.1"</span>, <span class="num">8080</span>)
+
+<span class="kw">while</span> (srv.is_running != <span class="num">0</span>) {
+    srv.<span class="fn">accept_and_serve</span>()
+}
+
+srv.<span class="fn">close</span>()</code></pre>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // Tab Switching
+    function switchTab(e, tabId) {
+      const container = e.target.closest('.tabs-wrapper');
+      container.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      container.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+      e.target.classList.add('active');
+      document.getElementById(tabId).classList.add('active');
+    }
+
+    // Code Copy
+    function copyCode(btn) {
+      const pre = btn.closest('.code-container').querySelector('pre');
+      navigator.clipboard.writeText(pre.innerText).then(() => {
+        const originalText = btn.innerText;
+        btn.innerText = 'Copied!';
+        btn.style.color = '#00f5d4';
+        btn.style.borderColor = '#00f5d4';
+        setTimeout(() => {
+          btn.innerText = originalText;
+          btn.style.color = '';
+          btn.style.borderColor = '';
+        }, 2000);
+      });
+    }
+
+    // Search / Topic Filter
+    document.getElementById('navSearch').addEventListener('input', function(e) {
+      const term = e.target.value.toLowerCase();
+      document.querySelectorAll('#navList .nav-link').forEach(link => {
+        const text = link.textContent.toLowerCase();
+        link.style.display = text.includes(term) ? 'flex' : 'none';
+      });
+    });
+
+    // Active Section Tracking
+    window.addEventListener('scroll', () => {
+      const sections = document.querySelectorAll('section');
+      const navLinks = document.querySelectorAll('.nav-link');
+      let current = '';
+
+      sections.forEach(sec => {
+        const top = sec.offsetTop - 100;
+        if (pageYOffset >= top) {
+          current = sec.getAttribute('id');
+        }
+      });
+
+      navLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === '#' + current) {
+          link.classList.add('active');
+        }
+      });
+    });
+  </script>
+</body>
+</html>
