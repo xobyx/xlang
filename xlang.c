@@ -25,6 +25,7 @@ __  __   ___   | |__    _   _  __  __
 #include "xir.h"
 #include "xir_compiler.h"
 #include "xvm.h"
+#include "xllvm.h"
 #include <ctype.h>
 #include "arena.h"
 clock_t t;
@@ -455,6 +456,8 @@ int main(const int argc, char** argv)
 	bool flag_vm = false;
 	bool flag_trace_vm = false;
 	bool flag_view = false;
+	bool flag_emit_llvm = false;
+	bool flag_build = false;
 	const char* script_path = NULL;
 	int script_idx = -1;
 
@@ -463,6 +466,14 @@ int main(const int argc, char** argv)
 		if (strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--compile") == 0)
 		{
 			flag_compile = true;
+		}
+		else if (strcmp(argv[i], "--emit-llvm") == 0 || strcmp(argv[i], "-S") == 0)
+		{
+			flag_emit_llvm = true;
+		}
+		else if (strcmp(argv[i], "build") == 0 || strcmp(argv[i], "--build") == 0)
+		{
+			flag_build = true;
 		}
 		else if (strcmp(argv[i], "-o") == 0)
 		{
@@ -501,10 +512,13 @@ int main(const int argc, char** argv)
 		else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0)
 		{
 			printf("xlang 0.4.0 - Language & Runtime\n");
-			printf("Usage: xlang [options] <script.xb | bytecode.xbc> [args...]\n\n");
+			printf("Usage: xlang [options] <script.xb | bytecode.xbc> [args...]\n");
+			printf("       xlang build <script.xb> [-o <binary>]\n\n");
 			printf("Options:\n");
 			printf("  -c, --compile   Compile script to bytecode (.xbc)\n");
-			printf("  -o <file>       Specify output bytecode file path\n");
+			printf("  -o <file>       Specify output file path (bytecode, LLVM IR, or binary)\n");
+			printf("  --emit-llvm, -S Emit textual LLVM IR (.ll) for script\n");
+			printf("  build           Compile script to standalone native binary via LLVM\n");
 			printf("  --dump-ast      Parse script and display Structured AST\n");
 			printf("  --dump-ir       Compile/load bytecode and disassemble\n");
 			printf("  --vm            Execute script using the Bytecode Virtual Machine\n");
@@ -584,7 +598,7 @@ int main(const int argc, char** argv)
 	xdiag_set_current_file(script_path);
 	xdiag_set_source_code(buff);
 
-	if (flag_dump_ast || flag_dump_ir || flag_vm || flag_compile || flag_view)
+	if (flag_dump_ast || flag_dump_ir || flag_vm || flag_compile || flag_view || flag_emit_llvm || flag_build)
 	{
 		g_parse_only = true;
 		print_parse_log = 0;
@@ -632,6 +646,116 @@ int main(const int argc, char** argv)
 		free(buff);
 		clean_memory();
 		return ok ? 0 : 1;
+	}
+
+	if (flag_emit_llvm)
+	{
+		xdiag_reset_error_count();
+		AstArena* arena = ast_arena_create(64 * 1024);
+		start_parse_lines(buff, false);
+		AstProgram* prog = xast_parse_node_stream(arena, nodes->root, NULL);
+		if (xdiag_get_error_count() > 0 || prog == NULL)
+		{
+			ast_arena_destroy(arena);
+			free(buff);
+			clean_memory();
+			return 1;
+		}
+
+		char out_path_buf[512] = {0};
+		const char* target_out = output_bc_path;
+		if (!target_out)
+		{
+			snprintf(out_path_buf, sizeof(out_path_buf), "%s", script_path);
+			char* dot = strrchr(out_path_buf, '.');
+			if (dot) strcpy(dot, ".ll");
+			else strcat(out_path_buf, ".ll");
+			target_out = out_path_buf;
+		}
+
+		XLLVMConfig cfg = xllvm_default_config();
+		bool ok = xllvm_emit_file(prog, script_path, target_out, &cfg);
+		if (ok)
+		{
+			printf("Emitted LLVM IR '%s' -> '%s'\n", script_path, target_out);
+		}
+		else
+		{
+			fprintf(stderr, "Failed to write LLVM IR to '%s'\n", target_out);
+		}
+		ast_arena_destroy(arena);
+		free(buff);
+		clean_memory();
+		return ok ? 0 : 1;
+	}
+
+	if (flag_build)
+	{
+		xdiag_reset_error_count();
+		AstArena* arena = ast_arena_create(64 * 1024);
+		start_parse_lines(buff, false);
+		AstProgram* prog = xast_parse_node_stream(arena, nodes->root, NULL);
+		if (xdiag_get_error_count() > 0 || prog == NULL)
+		{
+			ast_arena_destroy(arena);
+			free(buff);
+			clean_memory();
+			return 1;
+		}
+
+		char ll_path[512] = {0};
+		snprintf(ll_path, sizeof(ll_path), "%s.ll", script_path);
+
+		char bin_path_buf[512] = {0};
+		const char* bin_target = output_bc_path;
+		if (!bin_target)
+		{
+			snprintf(bin_path_buf, sizeof(bin_path_buf), "%s", script_path);
+			char* dot = strrchr(bin_path_buf, '.');
+			if (dot) *dot = '\0';
+			bin_target = bin_path_buf;
+		}
+
+		XLLVMConfig cfg = xllvm_default_config();
+		bool ok = xllvm_emit_file(prog, script_path, ll_path, &cfg);
+		if (!ok)
+		{
+			fprintf(stderr, "Error: Failed to emit intermediate LLVM IR to '%s'\n", ll_path);
+			ast_arena_destroy(arena);
+			free(buff);
+			clean_memory();
+			return 1;
+		}
+
+		int clang_avail = system("which clang > /dev/null 2>&1");
+		if (clang_avail != 0)
+		{
+			printf("Emitted LLVM IR: %s\n", ll_path);
+			fprintf(stderr, "Note: 'clang' compiler not found in PATH to assemble native binary '%s'.\n", bin_target);
+			fprintf(stderr, "You can compile the generated LLVM IR manually using:\n");
+			fprintf(stderr, "  clang -O2 %s -lm -o %s\n", ll_path, bin_target);
+			ast_arena_destroy(arena);
+			free(buff);
+			clean_memory();
+			return 1;
+		}
+
+		char compile_cmd[1280];
+		snprintf(compile_cmd, sizeof(compile_cmd), "clang -O2 -Wno-override-module \"%s\" -lm -o \"%s\"", ll_path, bin_target);
+		int compile_res = system(compile_cmd);
+		if (compile_res == 0)
+		{
+			printf("Successfully built native binary: %s\n", bin_target);
+		}
+		else
+		{
+			fprintf(stderr, "Error: Native compilation command failed with exit code %d\n", compile_res);
+		}
+
+		ast_arena_destroy(arena);
+		free(buff);
+		clean_memory();
+		return (compile_res == 0) ? 0 : 1;
 	}
 
 	if (flag_dump_ast)
