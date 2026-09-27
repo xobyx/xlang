@@ -13,6 +13,8 @@ extern "C" {
 typedef struct XLLVMConfig {
 	bool optimize_tail_calls;
 	bool emit_comments;
+	bool is_release;        /* True for release mode */
+	bool enable_asserts;    /* True to emit assert() checks, false to elide them */
 	const char* target_triple;
 	const char* data_layout;
 } XLLVMConfig;

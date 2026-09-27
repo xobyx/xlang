@@ -1,0 +1,12 @@
+// Test assertion behavior:
+// In debug mode, failing assertions must abort.
+// In release mode, assertions must be completely elided and execution must continue.
+
+int x = 42
+assert(x == 42, "x should be 42")
+
+// This assertion intentionally checks a false condition.
+// In release builds, this must have NO effect and not fail.
+assert(false, "this assertion should be elided in release mode")
+
+print("RELEASE_ASSERT_ELIDED_PASS")

@@ -1012,8 +1012,25 @@ void int_add(fcall* fcall)
 	fcall->_return.size = 1;
 }
 
+static bool s_assert_enabled = true;
+
+void set_assert_enabled(bool enabled)
+{
+	s_assert_enabled = enabled;
+}
+
+bool is_assert_enabled(void)
+{
+	return s_assert_enabled;
+}
+
 void xassert(fcall* fcall)
 {
+	if (!s_assert_enabled)
+	{
+		return;
+	}
+
 	if (fcall == NULL || fcall->parm_count_c < 1)
 	{
 		fprintf(stderr, "Assertion failed: assert requires at least 1 argument\n");

@@ -24,6 +24,67 @@ char* substr(const char* s, int start, int len);
 char* chr(int code);
 int index_of(const char* s, const char* needle);
 int str_eq(const char* s1, const char* s2);
+int starts_with(const char* s, const char* prefix);
+int ends_with(const char* s, const char* suffix);
+int regex_match(const char* s, const char* pattern);
+char* regex_find(const char* s, const char* pattern);
+char* regex_replace(const char* s, const char* pattern, const char* repl);
+int str_split(const char* s, const char* delim);
+
+/* Math Operations */
+double math_sqrt(double x);
+double math_pow(double base, double exp);
+double math_abs(double x);
+double math_min(double a, double b);
+double math_max(double a, double b);
+double math_floor(double x);
+double math_ceil(double x);
+double math_round(double x);
+double math_sin(double x);
+double math_cos(double x);
+double math_tan(double x);
+double math_log(double x);
+
+/* File Operations */
+char* file_read_all(const char* path);
+int file_write_all(const char* path, const char* content);
+int file_append(const char* path, const char* content);
+int file_exists(const char* path);
+int file_size(const char* path);
+int file_remove(const char* path);
+int file_open(const char* path, const char* mode);
+char* file_read(int fd, int bytes);
+int file_write(int fd, const char* data);
+int file_close(int fd);
+
+/* Directory Operations */
+void* dir_list(const char* path);
+int dir_create(const char* path);
+int dir_exists(const char* path);
+int dir_remove(const char* path);
+
+/* Process Operations */
+char* proc_capture(const char* cmd);
+void* proc_run(const char* cmd);
+
+/* DateTime Operations */
+int datetime_now(void);
+char* datetime_format(int ts, const char* fmt);
+int datetime_year(int ts);
+int datetime_month(int ts);
+int datetime_day(int ts);
+int datetime_hour(int ts);
+int datetime_minute(int ts);
+int datetime_second(int ts);
+int datetime_clock_ms(void);
+
+/* JSON Operations */
+int json_is_valid(const char* str);
+void* json_parse(const char* str);
+char* json_stringify(void* m);
+
+/* HTTP Operations */
+char* http_get(const char* url);
 
 /* Map Operations */
 int map_new(void);
@@ -53,6 +114,7 @@ int list_get_int(int id, int index);
 double list_get_float(int id, int index);
 int list_set(int id, int index, const char* val);
 int list_set_int(int id, int index, int val);
+int list_set_float(int id, int index, double val);
 int list_remove_at(int id, int index);
 int list_size(int id);
 int list_clear(int id);
@@ -90,7 +152,7 @@ int system_setenv(const char* name, const char* val);
 
 /* GC Operations */
 int gc_collect(void);
-int gc_allocated_bytes(void) ;
+int gc_allocated_bytes(void);
 int gc_total_objects(void);
 int gc_enable(void);
 int gc_disable(void);

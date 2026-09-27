@@ -1,3 +1,13 @@
+/* strdup() is POSIX (not standard C); request it explicitly so <string.h>
+ * actually declares it. Must come before any system header is included,
+ * otherwise glibc may have already locked in its feature-test macros.
+ * Without this, in strict -std=c11 mode strdup() is implicitly declared as
+ * returning int, silently truncating the returned pointer on 64-bit targets
+ * -- undefined behavior, not just a warning. */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "xllvm.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,11 +47,19 @@ typedef struct LLVMFieldDesc {
 	int slot;
 } LLVMFieldDesc;
 
+typedef struct LLVMStaticFieldDesc {
+	char name[64];
+	char type_name[32];
+	char llvm_type[128];
+} LLVMStaticFieldDesc;
+
 typedef struct LLVMClassDesc {
 	char name[64];
 	char base_name[64];
 	LLVMFieldDesc fields[MAX_FIELDS_PER_CLASS];
 	int field_count;
+	LLVMStaticFieldDesc static_fields[MAX_FIELDS_PER_CLASS];
+	int static_field_count;
 } LLVMClassDesc;
 
 typedef struct LLVMValue {
@@ -85,6 +103,8 @@ XLLVMConfig xllvm_default_config(void)
 	XLLVMConfig cfg;
 	cfg.optimize_tail_calls = true;
 	cfg.emit_comments = true;
+	cfg.is_release = false;
+	cfg.enable_asserts = true;
 #if defined(__x86_64__) || defined(_M_X64)
 	cfg.target_triple = "x86_64-unknown-linux-gnu";
 	cfg.data_layout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128";
@@ -117,7 +137,14 @@ static void buf_emit(XLLVMEmitter* e, const char* fmt, ...)
 			size_t new_cap = (e->code_buf_cap == 0) ? 16384 : e->code_buf_cap * 2;
 			while (new_cap < e->code_buf_len + needed + 1)
 				new_cap *= 2;
-			e->code_buf = (char*)realloc(e->code_buf, new_cap);
+			char* grown = (char*)realloc(e->code_buf, new_cap);
+			if (grown == NULL)
+			{
+				fprintf(stderr, "xllvm: fatal: out of memory growing code buffer to %zu bytes\n", new_cap);
+				free(e->code_buf);
+				exit(1);
+			}
+			e->code_buf = grown;
 			e->code_buf_cap = new_cap;
 		}
 		vsnprintf(e->code_buf + e->code_buf_len, needed + 1, fmt, args_copy);
@@ -261,14 +288,32 @@ static void escape_llvm_string(const char* in, char* out, size_t out_cap)
 static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr);
 static void emit_stmt(XLLVMEmitter* e, const AstStmt* stmt);
 
+static const AstStmt* find_function_in_stmt(const AstStmt* stmt, const char* name)
+{
+	if (!stmt || !name) return NULL;
+	if (stmt->type == AST_STMT_FUNC_DECL)
+	{
+		if (strcmp(stmt->as.func_decl.name, name) == 0) return stmt;
+		return find_function_in_stmt(stmt->as.func_decl.body, name);
+	}
+	if (stmt->type == AST_STMT_BLOCK)
+	{
+		for (int i = 0; i < stmt->as.block.stmt_count; i++)
+		{
+			const AstStmt* found = find_function_in_stmt(stmt->as.block.stmts[i], name);
+			if (found) return found;
+		}
+	}
+	return NULL;
+}
+
 static const AstStmt* find_function(XLLVMEmitter* e, const char* name)
 {
 	if (!e->prog || !name) return NULL;
 	for (int i = 0; i < e->prog->statement_count; i++)
 	{
-		const AstStmt* stmt = e->prog->statements[i];
-		if (stmt->type == AST_STMT_FUNC_DECL && strcmp(stmt->as.func_decl.name, name) == 0)
-			return stmt;
+		const AstStmt* found = find_function_in_stmt(e->prog->statements[i], name);
+		if (found) return found;
 	}
 	return NULL;
 }
@@ -278,6 +323,49 @@ static int llvm_type_align(const char* type)
 	if (type && (strchr(type, '*') != NULL || strcmp(type, "i64") == 0 || strcmp(type, "double") == 0))
 		return 8;
 	return 4;
+}
+
+static const char* resolve_builtin_callee(const char* name)
+{
+	if (!name) return NULL;
+	/* Math aliases */
+	if (strcmp(name, "abs") == 0) return "math_abs";
+	if (strcmp(name, "sqrt") == 0) return "math_sqrt";
+	if (strcmp(name, "pow") == 0) return "math_pow";
+	if (strcmp(name, "min") == 0) return "math_min";
+	if (strcmp(name, "max") == 0) return "math_max";
+	if (strcmp(name, "floor") == 0) return "math_floor";
+	if (strcmp(name, "ceil") == 0) return "math_ceil";
+	if (strcmp(name, "round") == 0) return "math_round";
+	if (strcmp(name, "sin") == 0) return "math_sin";
+	if (strcmp(name, "cos") == 0) return "math_cos";
+	if (strcmp(name, "tan") == 0) return "math_tan";
+	if (strcmp(name, "log") == 0) return "math_log";
+
+	/* Socket aliases */
+	if (strcmp(name, "socket") == 0) return "socket_create";
+	if (strcmp(name, "connect") == 0) return "socket_connect";
+	if (strcmp(name, "bind") == 0) return "socket_bind";
+	if (strcmp(name, "listen") == 0) return "socket_listen";
+	if (strcmp(name, "accept") == 0) return "socket_accept";
+	if (strcmp(name, "send") == 0) return "socket_send";
+	if (strcmp(name, "recv") == 0) return "socket_recv";
+	if (strcmp(name, "close") == 0) return "socket_close";
+	if (strcmp(name, "sendto") == 0) return "socket_sendto";
+	if (strcmp(name, "recvfrom") == 0) return "socket_recvfrom";
+
+	/* String aliases */
+	if (strcmp(name, "trim") == 0) return "_trim";
+	if (strcmp(name, "lower") == 0 || strcmp(name, "to_lower") == 0) return "_lower";
+	if (strcmp(name, "upper") == 0 || strcmp(name, "to_upper") == 0) return "_upper";
+	if (strcmp(name, "len") == 0) return "_len";
+
+	/* System aliases */
+	if (strcmp(name, "exec") == 0) return "system_exec";
+	if (strcmp(name, "getenv") == 0) return "system_getenv";
+	if (strcmp(name, "setenv") == 0) return "system_setenv";
+
+	return name;
 }
 
 static const char* get_builtin_ret_type(const char* name)
@@ -302,15 +390,50 @@ static const char* get_builtin_ret_type(const char* name)
 	    strcmp(name, "socket_recv") == 0 ||
 	    strcmp(name, "socket_recvfrom") == 0 ||
 	    strcmp(name, "system_getenv") == 0 ||
-	    strcmp(name, "get_arg") == 0)
+	    strcmp(name, "get_arg") == 0 ||
+	    strcmp(name, "file_read_all") == 0 ||
+	    strcmp(name, "file_read") == 0 ||
+	    strcmp(name, "regex_find") == 0 ||
+	    strcmp(name, "regex_replace") == 0 ||
+	    strcmp(name, "proc_capture") == 0 ||
+	    strcmp(name, "datetime_format") == 0 ||
+	    strcmp(name, "json_stringify") == 0 ||
+	    strcmp(name, "http_get") == 0)
 	{
 		return "i8*";
 	}
 
 	if (strcmp(name, "map_get_float") == 0 ||
-	    strcmp(name, "list_get_float") == 0)
+	    strcmp(name, "list_get_float") == 0 ||
+	    strcmp(name, "math_sqrt") == 0 ||
+	    strcmp(name, "math_pow") == 0 ||
+	    strcmp(name, "math_abs") == 0 ||
+	    strcmp(name, "math_min") == 0 ||
+	    strcmp(name, "math_max") == 0 ||
+	    strcmp(name, "math_floor") == 0 ||
+	    strcmp(name, "math_ceil") == 0 ||
+	    strcmp(name, "math_round") == 0 ||
+	    strcmp(name, "math_sin") == 0 ||
+	    strcmp(name, "math_cos") == 0 ||
+	    strcmp(name, "math_tan") == 0 ||
+	    strcmp(name, "math_log") == 0)
 	{
 		return "double";
+	}
+
+	if (strcmp(name, "dir_list") == 0)
+	{
+		return "%struct.List*";
+	}
+
+	if (strcmp(name, "json_parse") == 0)
+	{
+		return "%struct.Map*";
+	}
+
+	if (strcmp(name, "proc_run") == 0)
+	{
+		return "%struct.ProcessResult*";
 	}
 
 	if (strcmp(name, "map_new") == 0 ||
@@ -331,6 +454,7 @@ static const char* get_builtin_ret_type(const char* name)
 	    strcmp(name, "list_get_int") == 0 ||
 	    strcmp(name, "list_set") == 0 ||
 	    strcmp(name, "list_set_int") == 0 ||
+	    strcmp(name, "list_set_float") == 0 ||
 	    strcmp(name, "list_remove_at") == 0 ||
 	    strcmp(name, "list_size") == 0 ||
 	    strcmp(name, "list_clear") == 0 ||
@@ -354,6 +478,30 @@ static const char* get_builtin_ret_type(const char* name)
 	    strcmp(name, "get_argc") == 0 ||
 	    strcmp(name, "system_exec") == 0 ||
 	    strcmp(name, "system_setenv") == 0 ||
+	    strcmp(name, "file_write_all") == 0 ||
+	    strcmp(name, "file_append") == 0 ||
+	    strcmp(name, "file_exists") == 0 ||
+	    strcmp(name, "file_size") == 0 ||
+	    strcmp(name, "file_remove") == 0 ||
+	    strcmp(name, "file_open") == 0 ||
+	    strcmp(name, "file_write") == 0 ||
+	    strcmp(name, "file_close") == 0 ||
+	    strcmp(name, "dir_create") == 0 ||
+	    strcmp(name, "dir_exists") == 0 ||
+	    strcmp(name, "dir_remove") == 0 ||
+	    strcmp(name, "starts_with") == 0 ||
+	    strcmp(name, "ends_with") == 0 ||
+	    strcmp(name, "regex_match") == 0 ||
+	    strcmp(name, "str_split") == 0 ||
+	    strcmp(name, "datetime_now") == 0 ||
+	    strcmp(name, "datetime_year") == 0 ||
+	    strcmp(name, "datetime_month") == 0 ||
+	    strcmp(name, "datetime_day") == 0 ||
+	    strcmp(name, "datetime_hour") == 0 ||
+	    strcmp(name, "datetime_minute") == 0 ||
+	    strcmp(name, "datetime_second") == 0 ||
+	    strcmp(name, "datetime_clock_ms") == 0 ||
+	    strcmp(name, "json_is_valid") == 0 ||
 	    strcmp(name, "gc_collect") == 0 ||
 	    strcmp(name, "gc_allocated_bytes") == 0 ||
 	    strcmp(name, "gc_total_objects") == 0 ||
@@ -374,15 +522,117 @@ static const char* get_builtin_ret_type(const char* name)
 static const char* get_builtin_param_type(const char* name, int p)
 {
 	if (!name) return "i32";
-	if (strcmp(name, "_len") == 0 ||
-	    strcmp(name, "_trim") == 0 ||
-	    strcmp(name, "_lower") == 0 ||
-	    strcmp(name, "_upper") == 0 ||
-	    strcmp(name, "socket_create") == 0 ||
-	    strcmp(name, "system_exec") == 0 ||
-	    strcmp(name, "system_getenv") == 0)
+	if (strcmp(name, "math_sqrt") == 0 ||
+	    strcmp(name, "math_abs") == 0 ||
+	    strcmp(name, "math_floor") == 0 ||
+	    strcmp(name, "math_ceil") == 0 ||
+	    strcmp(name, "math_round") == 0 ||
+	    strcmp(name, "math_sin") == 0 ||
+	    strcmp(name, "math_cos") == 0 ||
+	    strcmp(name, "math_tan") == 0 ||
+	    strcmp(name, "math_log") == 0)
+	{
+		return "double";
+	}
+	else if (strcmp(name, "math_pow") == 0 ||
+	         strcmp(name, "math_min") == 0 ||
+	         strcmp(name, "math_max") == 0)
+	{
+		return "double";
+	}
+	else if (strcmp(name, "_len") == 0 ||
+	         strcmp(name, "_trim") == 0 ||
+	         strcmp(name, "_lower") == 0 ||
+	         strcmp(name, "_upper") == 0 ||
+	         strcmp(name, "socket_create") == 0 ||
+	         strcmp(name, "system_exec") == 0 ||
+	         strcmp(name, "system_getenv") == 0 ||
+	         strcmp(name, "file_read_all") == 0 ||
+	         strcmp(name, "file_exists") == 0 ||
+	         strcmp(name, "file_size") == 0 ||
+	         strcmp(name, "file_remove") == 0 ||
+	         strcmp(name, "dir_create") == 0 ||
+	         strcmp(name, "dir_exists") == 0 ||
+	         strcmp(name, "dir_remove") == 0 ||
+	         strcmp(name, "dir_list") == 0 ||
+	         strcmp(name, "proc_capture") == 0 ||
+	         strcmp(name, "proc_run") == 0 ||
+	         strcmp(name, "json_is_valid") == 0 ||
+	         strcmp(name, "json_parse") == 0 ||
+	         strcmp(name, "http_get") == 0)
 	{
 		if (p == 0) return "i8*";
+	}
+	else if (strcmp(name, "file_write_all") == 0 ||
+	         strcmp(name, "file_append") == 0 ||
+	         strcmp(name, "file_open") == 0 ||
+	         strcmp(name, "starts_with") == 0 ||
+	         strcmp(name, "ends_with") == 0 ||
+	         strcmp(name, "regex_match") == 0 ||
+	         strcmp(name, "regex_find") == 0 ||
+	         strcmp(name, "str_split") == 0)
+	{
+		return "i8*";
+	}
+	else if (strcmp(name, "regex_replace") == 0)
+	{
+		return "i8*";
+	}
+	else if (strcmp(name, "file_read") == 0 ||
+	         strcmp(name, "file_close") == 0 ||
+	         strcmp(name, "datetime_year") == 0 ||
+	         strcmp(name, "datetime_month") == 0 ||
+	         strcmp(name, "datetime_day") == 0 ||
+	         strcmp(name, "datetime_hour") == 0 ||
+	         strcmp(name, "datetime_minute") == 0 ||
+	         strcmp(name, "datetime_second") == 0)
+	{
+		return "i32";
+	}
+	else if (strcmp(name, "file_write") == 0)
+	{
+		if (p == 0) return "i32";
+		return "i8*";
+	}
+	else if (strcmp(name, "datetime_format") == 0)
+	{
+		if (p == 0) return "i32";
+		return "i8*";
+	}
+	else if (strcmp(name, "json_stringify") == 0)
+	{
+		return "%struct.Map*";
+	}
+	else if (strcmp(name, "list_set_float") == 0)
+	{
+		if (p == 0 || p == 1) return "i32";
+		return "double";
+	}
+	else if (strcmp(name, "list_add_int") == 0)
+	{
+		if (p == 0) return "i32";
+		if (p == 1) return "i32";
+	}
+	else if (strcmp(name, "list_add_float") == 0)
+	{
+		if (p == 0) return "i32";
+		if (p == 1) return "double";
+	}
+	else if (strcmp(name, "list_get_float") == 0)
+	{
+		if (p == 0) return "i32";
+		if (p == 1) return "i32";
+	}
+	else if (strcmp(name, "map_put_float") == 0)
+	{
+		if (p == 0) return "i32";
+		if (p == 1) return "i8*";
+		if (p == 2) return "double";
+	}
+	else if (strcmp(name, "map_get_float") == 0)
+	{
+		if (p == 0) return "i32";
+		if (p == 1) return "i8*";
 	}
 	else if (strcmp(name, "substr") == 0)
 	{
@@ -408,13 +658,20 @@ static const char* get_builtin_param_type(const char* name, int p)
 		if (p == 1) return "i8*";
 		if (p == 2) return "i32";
 	}
+	else if (strcmp(name, "socket_sendto") == 0)
+	{
+		if (p == 0) return "i32";
+		if (p == 1) return "i8*";
+		if (p == 2) return "i8*";
+		if (p == 3) return "i32";
+	}
 	else if (strcmp(name, "map_put") == 0 || strcmp(name, "map_set") == 0)
 	{
 		if (p == 0) return "i32";
 		if (p == 1) return "i8*";
 		if (p == 2) return "i8*";
 	}
-	else if (strcmp(name, "map_get") == 0 || strcmp(name, "map_has") == 0 || strcmp(name, "map_remove") == 0 || strcmp(name, "map_contains") == 0)
+	else if (strcmp(name, "map_get") == 0 || strcmp(name, "map_get_int") == 0 || strcmp(name, "map_has") == 0 || strcmp(name, "map_remove") == 0 || strcmp(name, "map_contains") == 0)
 	{
 		if (p == 0) return "i32";
 		if (p == 1) return "i8*";
@@ -424,12 +681,6 @@ static const char* get_builtin_param_type(const char* name, int p)
 		if (p == 0) return "i32";
 		if (p == 1) return "i8*";
 		if (p == 2) return "i32";
-	}
-	else if (strcmp(name, "map_put_float") == 0)
-	{
-		if (p == 0) return "i32";
-		if (p == 1) return "i8*";
-		if (p == 2) return "double";
 	}
 	else if (strcmp(name, "list_add") == 0 || strcmp(name, "list_contains") == 0 || strcmp(name, "list_index_of") == 0)
 	{
@@ -452,7 +703,10 @@ static const char* get_builtin_param_type(const char* name, int p)
 
 static bool is_global_builtin(const char* name)
 {
-	return get_builtin_ret_type(name) != NULL;
+	if (!name) return false;
+	if (get_builtin_ret_type(name) != NULL) return true;
+	const char* canonical = resolve_builtin_callee(name);
+	return (canonical != name && get_builtin_ret_type(canonical) != NULL);
 }
 
 static const AstStmt* find_class_method_defining_class(XLLVMEmitter* e, const char* class_name, const char* method_name, int arity, char* out_defining_class, size_t out_sz)
@@ -636,6 +890,12 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 	case AST_EXPR_IDENTIFIER:
 		{
 			const char* name = expr->as.identifier_name;
+			if (strcmp(name, "this") == 0 && e->current_class != NULL)
+			{
+				snprintf(val.repr, sizeof(val.repr), "%%this");
+				snprintf(val.type, sizeof(val.type), "%%struct.%s*", e->current_class->name);
+				return val;
+			}
 			LLVMLocalVar* local = find_local(e, name);
 			if (local != NULL)
 			{
@@ -677,6 +937,113 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 	case AST_EXPR_ASSIGN:
 		{
 			LLVMValue rhs = emit_expr(e, expr->as.assign.value);
+			const char* op = expr->as.assign.op;
+			if (op && strcmp(op, "=") != 0)
+			{
+				LLVMValue cur_lhs = emit_expr(e, expr->as.assign.target);
+				if (strcmp(op, "+=") == 0)
+				{
+					if (strcmp(cur_lhs.type, "i8*") == 0 || strcmp(rhs.type, "i8*") == 0)
+					{
+						cur_lhs = coerce_value(e, cur_lhs, "i8*");
+						rhs = coerce_value(e, rhs, "i8*");
+						int t = new_temp_id(e);
+						buf_emit(e, "  %%t%d = call i8* @_str_concat(i8* %s, i8* %s)\n", t, cur_lhs.repr, rhs.repr);
+						snprintf(rhs.repr, sizeof(rhs.repr), "%%t%d", t);
+						strcpy(rhs.type, "i8*");
+					}
+					else if (strcmp(cur_lhs.type, "double") == 0 || strcmp(rhs.type, "double") == 0)
+					{
+						cur_lhs = coerce_value(e, cur_lhs, "double");
+						rhs = coerce_value(e, rhs, "double");
+						int t = new_temp_id(e);
+						buf_emit(e, "  %%t%d = fadd double %s, %s\n", t, cur_lhs.repr, rhs.repr);
+						snprintf(rhs.repr, sizeof(rhs.repr), "%%t%d", t);
+						strcpy(rhs.type, "double");
+					}
+					else
+					{
+						cur_lhs = coerce_value(e, cur_lhs, "i32");
+						rhs = coerce_value(e, rhs, "i32");
+						int t = new_temp_id(e);
+						buf_emit(e, "  %%t%d = add nsw i32 %s, %s\n", t, cur_lhs.repr, rhs.repr);
+						snprintf(rhs.repr, sizeof(rhs.repr), "%%t%d", t);
+						strcpy(rhs.type, "i32");
+					}
+				}
+				else if (strcmp(op, "-=") == 0)
+				{
+					if (strcmp(cur_lhs.type, "double") == 0 || strcmp(rhs.type, "double") == 0)
+					{
+						cur_lhs = coerce_value(e, cur_lhs, "double");
+						rhs = coerce_value(e, rhs, "double");
+						int t = new_temp_id(e);
+						buf_emit(e, "  %%t%d = fsub double %s, %s\n", t, cur_lhs.repr, rhs.repr);
+						snprintf(rhs.repr, sizeof(rhs.repr), "%%t%d", t);
+						strcpy(rhs.type, "double");
+					}
+					else
+					{
+						cur_lhs = coerce_value(e, cur_lhs, "i32");
+						rhs = coerce_value(e, rhs, "i32");
+						int t = new_temp_id(e);
+						buf_emit(e, "  %%t%d = sub nsw i32 %s, %s\n", t, cur_lhs.repr, rhs.repr);
+						snprintf(rhs.repr, sizeof(rhs.repr), "%%t%d", t);
+						strcpy(rhs.type, "i32");
+					}
+				}
+				else if (strcmp(op, "*=") == 0)
+				{
+					if (strcmp(cur_lhs.type, "double") == 0 || strcmp(rhs.type, "double") == 0)
+					{
+						cur_lhs = coerce_value(e, cur_lhs, "double");
+						rhs = coerce_value(e, rhs, "double");
+						int t = new_temp_id(e);
+						buf_emit(e, "  %%t%d = fmul double %s, %s\n", t, cur_lhs.repr, rhs.repr);
+						snprintf(rhs.repr, sizeof(rhs.repr), "%%t%d", t);
+						strcpy(rhs.type, "double");
+					}
+					else
+					{
+						cur_lhs = coerce_value(e, cur_lhs, "i32");
+						rhs = coerce_value(e, rhs, "i32");
+						int t = new_temp_id(e);
+						buf_emit(e, "  %%t%d = mul nsw i32 %s, %s\n", t, cur_lhs.repr, rhs.repr);
+						snprintf(rhs.repr, sizeof(rhs.repr), "%%t%d", t);
+						strcpy(rhs.type, "i32");
+					}
+				}
+				else if (strcmp(op, "/=") == 0)
+				{
+					if (strcmp(cur_lhs.type, "double") == 0 || strcmp(rhs.type, "double") == 0)
+					{
+						cur_lhs = coerce_value(e, cur_lhs, "double");
+						rhs = coerce_value(e, rhs, "double");
+						int t = new_temp_id(e);
+						buf_emit(e, "  %%t%d = fdiv double %s, %s\n", t, cur_lhs.repr, rhs.repr);
+						snprintf(rhs.repr, sizeof(rhs.repr), "%%t%d", t);
+						strcpy(rhs.type, "double");
+					}
+					else
+					{
+						cur_lhs = coerce_value(e, cur_lhs, "i32");
+						rhs = coerce_value(e, rhs, "i32");
+						int t = new_temp_id(e);
+						buf_emit(e, "  %%t%d = sdiv i32 %s, %s\n", t, cur_lhs.repr, rhs.repr);
+						snprintf(rhs.repr, sizeof(rhs.repr), "%%t%d", t);
+						strcpy(rhs.type, "i32");
+					}
+				}
+				else if (strcmp(op, "%=") == 0)
+				{
+					cur_lhs = coerce_value(e, cur_lhs, "i32");
+					rhs = coerce_value(e, rhs, "i32");
+					int t = new_temp_id(e);
+					buf_emit(e, "  %%t%d = srem i32 %s, %s\n", t, cur_lhs.repr, rhs.repr);
+					snprintf(rhs.repr, sizeof(rhs.repr), "%%t%d", t);
+					strcpy(rhs.type, "i32");
+				}
+			}
 			if (expr->as.assign.target->type == AST_EXPR_IDENTIFIER)
 			{
 				const char* name = expr->as.assign.target->as.identifier_name;
@@ -711,8 +1078,30 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 			}
 			else if (expr->as.assign.target->type == AST_EXPR_MEMBER)
 			{
-				LLVMValue obj = emit_expr(e, expr->as.assign.target->as.member.object);
 				const char* member_name = expr->as.assign.target->as.member.member_name;
+				if (expr->as.assign.target->as.member.object &&
+				    expr->as.assign.target->as.member.object->type == AST_EXPR_IDENTIFIER)
+				{
+					const char* id_name = expr->as.assign.target->as.member.object->as.identifier_name;
+					for (int c = 0; c < e->class_count; c++)
+					{
+						if (strcmp(e->classes[c].name, id_name) == 0)
+						{
+							for (int sf = 0; sf < e->classes[c].static_field_count; sf++)
+							{
+								if (strcmp(e->classes[c].static_fields[sf].name, member_name) == 0)
+								{
+									const char* fty = e->classes[c].static_fields[sf].llvm_type;
+									rhs = coerce_value(e, rhs, fty);
+									buf_emit(e, "  store %s %s, %s* @%s_%s, align %d\n",
+									         fty, rhs.repr, fty, e->classes[c].name, member_name, llvm_type_align(fty));
+									return rhs;
+								}
+							}
+						}
+					}
+				}
+				LLVMValue obj = emit_expr(e, expr->as.assign.target->as.member.object);
 				/* Extract struct class name from type e.g. %struct.Point* */
 				char cname[64] = {0};
 				if (strncmp(obj.type, "%struct.", 8) == 0)
@@ -741,6 +1130,63 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 							}
 						}
 					}
+				}
+			}
+			else if (expr->as.assign.target->type == AST_EXPR_INDEX)
+			{
+				LLVMValue obj = emit_expr(e, expr->as.assign.target->as.index.target);
+				LLVMValue idx = emit_expr(e, expr->as.assign.target->as.index.index);
+				if (strncmp(obj.type, "%struct.", 8) == 0 && strstr(obj.type, "List") != NULL)
+				{
+					int t_id_ptr = new_temp_id(e);
+					int t_id = new_temp_id(e);
+					buf_emit(e, "  %%t%d = getelementptr inbounds %%struct.List, %s %s, i32 0, i32 0\n",
+					         t_id_ptr, obj.type, obj.repr);
+					buf_emit(e, "  %%t%d = load i32, i32* %%t%d, align 4\n", t_id, t_id_ptr);
+					idx = coerce_value(e, idx, "i32");
+					if (strcmp(rhs.type, "i8*") == 0)
+					{
+						buf_emit(e, "  call i32 @list_set(i32 %%t%d, i32 %s, i8* %s)\n",
+						         t_id, idx.repr, rhs.repr);
+					}
+					else if (strcmp(rhs.type, "double") == 0)
+					{
+						buf_emit(e, "  call i32 @list_set_float(i32 %%t%d, i32 %s, double %s)\n",
+						         t_id, idx.repr, rhs.repr);
+					}
+					else
+					{
+						rhs = coerce_value(e, rhs, "i32");
+						buf_emit(e, "  call i32 @list_set_int(i32 %%t%d, i32 %s, i32 %s)\n",
+						         t_id, idx.repr, rhs.repr);
+					}
+					return rhs;
+				}
+				else if (strncmp(obj.type, "%struct.", 8) == 0 && strstr(obj.type, "Map") != NULL)
+				{
+					int t_id_ptr = new_temp_id(e);
+					int t_id = new_temp_id(e);
+					buf_emit(e, "  %%t%d = getelementptr inbounds %%struct.Map, %s %s, i32 0, i32 0\n",
+					         t_id_ptr, obj.type, obj.repr);
+					buf_emit(e, "  %%t%d = load i32, i32* %%t%d, align 4\n", t_id, t_id_ptr);
+					idx = coerce_value(e, idx, "i8*");
+					if (strcmp(rhs.type, "i8*") == 0)
+					{
+						buf_emit(e, "  call i32 @map_put(i32 %%t%d, i8* %s, i8* %s)\n",
+						         t_id, idx.repr, rhs.repr);
+					}
+					else if (strcmp(rhs.type, "double") == 0)
+					{
+						buf_emit(e, "  call i32 @map_put_float(i32 %%t%d, i8* %s, double %s)\n",
+						         t_id, idx.repr, rhs.repr);
+					}
+					else
+					{
+						rhs = coerce_value(e, rhs, "i32");
+						buf_emit(e, "  call i32 @map_put_int(i32 %%t%d, i8* %s, i32 %s)\n",
+						         t_id, idx.repr, rhs.repr);
+					}
+					return rhs;
 				}
 			}
 			return rhs;
@@ -828,15 +1274,19 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 			}
 
 			bool is_float = (strcmp(left.type, "double") == 0 || strcmp(right.type, "double") == 0);
-			if (is_float)
-			{
-				left = coerce_value(e, left, "double");
-				right = coerce_value(e, right, "double");
-			}
-			else
-			{
-				left = coerce_value(e, left, "i32");
-				right = coerce_value(e, right, "i32");
+			bool is_logical = (expr->as.binary.op == BINOP_AND || expr->as.binary.op == BINOP_OR);
+
+			if (!is_logical) {
+				if (is_float)
+				{
+					left = coerce_value(e, left, "double");
+					right = coerce_value(e, right, "double");
+				}
+				else
+				{
+					left = coerce_value(e, left, "i32");
+					right = coerce_value(e, right, "i32");
+				}
 			}
 
 			int t = new_temp_id(e);
@@ -1010,6 +1460,12 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 			/* Builtin: assert(condition, message) */
 			if (strcmp(callee, "assert") == 0 && argc >= 1)
 			{
+				if (!e->config.enable_asserts)
+				{
+					strcpy(val.repr, "0");
+					strcpy(val.type, "i32");
+					return val;
+				}
 				LLVMValue cond = emit_expr(e, expr->as.call.args[0]);
 				cond = coerce_value(e, cond, "i1");
 				char msg_repr[256];
@@ -1044,7 +1500,12 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 			}
 
 			/* General User Function Call */
+			const char* canonical_callee = resolve_builtin_callee(callee);
 			const AstStmt* fn_decl = find_function(e, callee);
+			if (!fn_decl && is_global_builtin(canonical_callee))
+			{
+				callee = canonical_callee;
+			}
 			const char* ret_llvm = "i32";
 			if (fn_decl)
 			{
@@ -1182,11 +1643,20 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 					break;
 				}
 			}
-			size_t alloc_bytes = cd ? (cd->field_count > 0 ? cd->field_count * 8 : 8) : 64;
 
+			/* Compute the allocation size using LLVM's own struct layout
+			 * instead of a hand-rolled "field_count * 8" guess, which does
+			 * not actually track LLVM's real field padding/alignment rules
+			 * and could under- or over-allocate if the field type mix
+			 * changes. The `getelementptr null, i32 1` / `ptrtoint` pair is
+			 * the standard idiom for "sizeof" in LLVM IR. */
+			int t_size_ptr = new_temp_id(e);
+			int t_size = new_temp_id(e);
 			int t_raw = new_temp_id(e);
 			int t_obj = new_temp_id(e);
-			buf_emit(e, "  %%t%d = call i8* @malloc(i64 %zu)\n", t_raw, alloc_bytes);
+			buf_emit(e, "  %%t%d = getelementptr %%struct.%s, %%struct.%s* null, i32 1\n", t_size_ptr, cname, cname);
+			buf_emit(e, "  %%t%d = ptrtoint %%struct.%s* %%t%d to i64\n", t_size, cname, t_size_ptr);
+			buf_emit(e, "  %%t%d = call i8* @malloc(i64 %%t%d)\n", t_raw, t_size);
 			buf_emit(e, "  %%t%d = bitcast i8* %%t%d to %%struct.%s*\n", t_obj, t_raw, cname);
 
 			/* Find AST class declaration for default field inits & nested class inits */
@@ -1255,16 +1725,21 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 			{
 				char ctor_sym[128];
 				get_method_symbol_name(e, cname, cname, expr->as.new_expr.arg_count, ctor_sym, sizeof(ctor_sym));
-				buf_emit(e, "  call void @%s(%%struct.%s* %%t%d", ctor_sym, cname, t_obj);
-				for (int a = 0; a < expr->as.new_expr.arg_count; a++)
+				LLVMValue evaluated_ctor_args[32];
+				int ctor_argc = expr->as.new_expr.arg_count;
+				for (int a = 0; a < ctor_argc && a < 32; a++)
 				{
-					LLVMValue arg_val = emit_expr(e, expr->as.new_expr.args[a]);
+					evaluated_ctor_args[a] = emit_expr(e, expr->as.new_expr.args[a]);
 					if (a < ctor->as.func_decl.param_count)
 					{
 						const char* pty = xlang_type_to_llvm(e, ctor->as.func_decl.params[a].type_name);
-						arg_val = coerce_value(e, arg_val, pty);
+						evaluated_ctor_args[a] = coerce_value(e, evaluated_ctor_args[a], pty);
 					}
-					buf_emit(e, ", %s %s", arg_val.type, arg_val.repr);
+				}
+				buf_emit(e, "  call void @%s(%%struct.%s* %%t%d", ctor_sym, cname, t_obj);
+				for (int a = 0; a < ctor_argc && a < 32; a++)
+				{
+					buf_emit(e, ", %s %s", evaluated_ctor_args[a].type, evaluated_ctor_args[a].repr);
 				}
 				buf_emit(e, ")\n");
 			}
@@ -1371,7 +1846,7 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 					buf_emit(e, "  %s = call i8* @_trim(i8* %s)\n", val.repr, obj.repr);
 					return val;
 				}
-				if (strcmp(mname, "lower") == 0)
+				if (strcmp(mname, "lower") == 0 || strcmp(mname, "to_lower") == 0)
 				{
 					int t = new_temp_id(e);
 					snprintf(val.repr, sizeof(val.repr), "%%t%d", t);
@@ -1379,7 +1854,7 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 					buf_emit(e, "  %s = call i8* @_lower(i8* %s)\n", val.repr, obj.repr);
 					return val;
 				}
-				if (strcmp(mname, "upper") == 0)
+				if (strcmp(mname, "upper") == 0 || strcmp(mname, "to_upper") == 0)
 				{
 					int t = new_temp_id(e);
 					snprintf(val.repr, sizeof(val.repr), "%%t%d", t);
@@ -1399,7 +1874,7 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 					buf_emit(e, "  %s = call i8* @substr(i8* %s, i32 %s, i32 %s)\n", val.repr, obj.repr, a0.repr, a1.repr);
 					return val;
 				}
-				if ((strcmp(mname, "index_of") == 0 || strcmp(mname, "indexOf") == 0) && argc >= 1)
+				if ((strcmp(mname, "index_of") == 0 || strcmp(mname, "indexOf") == 0 || strcmp(mname, "find") == 0) && argc >= 1)
 				{
 					LLVMValue a0 = emit_expr(e, expr->as.method_call.args[0]);
 					a0 = coerce_value(e, a0, "i8*");
@@ -1407,6 +1882,75 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 					snprintf(val.repr, sizeof(val.repr), "%%t%d", t);
 					strcpy(val.type, "i32");
 					buf_emit(e, "  %s = call i32 @index_of(i8* %s, i8* %s)\n", val.repr, obj.repr, a0.repr);
+					return val;
+				}
+				if (strcmp(mname, "starts_with") == 0 && argc >= 1)
+				{
+					LLVMValue a0 = emit_expr(e, expr->as.method_call.args[0]);
+					a0 = coerce_value(e, a0, "i8*");
+					int t = new_temp_id(e);
+					snprintf(val.repr, sizeof(val.repr), "%%t%d", t);
+					strcpy(val.type, "i32");
+					buf_emit(e, "  %s = call i32 @starts_with(i8* %s, i8* %s)\n", val.repr, obj.repr, a0.repr);
+					return val;
+				}
+				if (strcmp(mname, "ends_with") == 0 && argc >= 1)
+				{
+					LLVMValue a0 = emit_expr(e, expr->as.method_call.args[0]);
+					a0 = coerce_value(e, a0, "i8*");
+					int t = new_temp_id(e);
+					snprintf(val.repr, sizeof(val.repr), "%%t%d", t);
+					strcpy(val.type, "i32");
+					buf_emit(e, "  %s = call i32 @ends_with(i8* %s, i8* %s)\n", val.repr, obj.repr, a0.repr);
+					return val;
+				}
+				if (strcmp(mname, "regex_match") == 0 && argc >= 1)
+				{
+					LLVMValue a0 = emit_expr(e, expr->as.method_call.args[0]);
+					a0 = coerce_value(e, a0, "i8*");
+					int t = new_temp_id(e);
+					snprintf(val.repr, sizeof(val.repr), "%%t%d", t);
+					strcpy(val.type, "i32");
+					buf_emit(e, "  %s = call i32 @regex_match(i8* %s, i8* %s)\n", val.repr, obj.repr, a0.repr);
+					return val;
+				}
+				if (strcmp(mname, "regex_find") == 0 && argc >= 1)
+				{
+					LLVMValue a0 = emit_expr(e, expr->as.method_call.args[0]);
+					a0 = coerce_value(e, a0, "i8*");
+					int t = new_temp_id(e);
+					snprintf(val.repr, sizeof(val.repr), "%%t%d", t);
+					strcpy(val.type, "i8*");
+					buf_emit(e, "  %s = call i8* @regex_find(i8* %s, i8* %s)\n", val.repr, obj.repr, a0.repr);
+					return val;
+				}
+				if (strcmp(mname, "regex_replace") == 0 && argc >= 2)
+				{
+					LLVMValue a0 = emit_expr(e, expr->as.method_call.args[0]);
+					LLVMValue a1 = emit_expr(e, expr->as.method_call.args[1]);
+					a0 = coerce_value(e, a0, "i8*");
+					a1 = coerce_value(e, a1, "i8*");
+					int t = new_temp_id(e);
+					snprintf(val.repr, sizeof(val.repr), "%%t%d", t);
+					strcpy(val.type, "i8*");
+					buf_emit(e, "  %s = call i8* @regex_replace(i8* %s, i8* %s, i8* %s)\n", val.repr, obj.repr, a0.repr, a1.repr);
+					return val;
+				}
+				if (strcmp(mname, "split") == 0 && argc >= 1)
+				{
+					LLVMValue a0 = emit_expr(e, expr->as.method_call.args[0]);
+					a0 = coerce_value(e, a0, "i8*");
+					int t_lid = new_temp_id(e);
+					buf_emit(e, "  %%t%d = call i32 @str_split(i8* %s, i8* %s)\n", t_lid, obj.repr, a0.repr);
+					int t_raw = new_temp_id(e);
+					int t_cast = new_temp_id(e);
+					int t_field = new_temp_id(e);
+					buf_emit(e, "  %%t%d = call i8* @malloc(i64 4)\n", t_raw);
+					buf_emit(e, "  %%t%d = bitcast i8* %%t%d to %%struct.List*\n", t_cast, t_raw);
+					buf_emit(e, "  %%t%d = getelementptr inbounds %%struct.List, %%struct.List* %%t%d, i32 0, i32 0\n", t_field, t_cast);
+					buf_emit(e, "  store i32 %%t%d, i32* %%t%d, align 4\n", t_lid, t_field);
+					snprintf(val.repr, sizeof(val.repr), "%%t%d", t_cast);
+					strcpy(val.type, "%struct.List*");
 					return val;
 				}
 			}
@@ -1508,8 +2052,31 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 
 	case AST_EXPR_MEMBER:
 		{
-			LLVMValue obj = emit_expr(e, expr->as.member.object);
 			const char* member_name = expr->as.member.member_name;
+			if (expr->as.member.object && expr->as.member.object->type == AST_EXPR_IDENTIFIER)
+			{
+				const char* id_name = expr->as.member.object->as.identifier_name;
+				for (int c = 0; c < e->class_count; c++)
+				{
+					if (strcmp(e->classes[c].name, id_name) == 0)
+					{
+						for (int sf = 0; sf < e->classes[c].static_field_count; sf++)
+						{
+							if (strcmp(e->classes[c].static_fields[sf].name, member_name) == 0)
+							{
+								int t_val = new_temp_id(e);
+								const char* fty = e->classes[c].static_fields[sf].llvm_type;
+								buf_emit(e, "  %%t%d = load %s, %s* @%s_%s, align %d\n",
+								         t_val, fty, fty, e->classes[c].name, member_name, llvm_type_align(fty));
+								snprintf(val.repr, sizeof(val.repr), "%%t%d", t_val);
+								snprintf(val.type, sizeof(val.type), "%s", fty);
+								return val;
+							}
+						}
+					}
+				}
+			}
+			LLVMValue obj = emit_expr(e, expr->as.member.object);
 			char cname[64] = {0};
 			if (strncmp(obj.type, "%struct.", 8) == 0)
 			{
@@ -1543,6 +2110,86 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 			return val;
 		}
 
+	case AST_EXPR_LIST:
+		{
+			int t_lid = new_temp_id(e);
+			buf_emit(e, "  %%t%d = call i32 @list_new()\n", t_lid);
+			for (int i = 0; i < expr->as.list.element_count; i++)
+			{
+				LLVMValue elem = emit_expr(e, expr->as.list.elements[i]);
+				if (strcmp(elem.type, "i8*") == 0)
+				{
+					buf_emit(e, "  call i32 @list_add(i32 %%t%d, i8* %s)\n", t_lid, elem.repr);
+				}
+				else if (strcmp(elem.type, "double") == 0)
+				{
+					buf_emit(e, "  call i32 @list_add_float(i32 %%t%d, double %s)\n", t_lid, elem.repr);
+				}
+				else
+				{
+					elem = coerce_value(e, elem, "i32");
+					buf_emit(e, "  call i32 @list_add_int(i32 %%t%d, i32 %s)\n", t_lid, elem.repr);
+				}
+			}
+			int t_raw = new_temp_id(e);
+			int t_cast = new_temp_id(e);
+			int t_field = new_temp_id(e);
+			buf_emit(e, "  %%t%d = call i8* @malloc(i64 4)\n", t_raw);
+			buf_emit(e, "  %%t%d = bitcast i8* %%t%d to %%struct.List*\n", t_cast, t_raw);
+			buf_emit(e, "  %%t%d = getelementptr inbounds %%struct.List, %%struct.List* %%t%d, i32 0, i32 0\n", t_field, t_cast);
+			buf_emit(e, "  store i32 %%t%d, i32* %%t%d, align 4\n", t_lid, t_field);
+			snprintf(val.repr, sizeof(val.repr), "%%t%d", t_cast);
+			strcpy(val.type, "%struct.List*");
+			return val;
+		}
+
+	case AST_EXPR_INDEX:
+		{
+			LLVMValue obj = emit_expr(e, expr->as.index.target);
+			LLVMValue idx = emit_expr(e, expr->as.index.index);
+			if (strncmp(obj.type, "%struct.", 8) == 0 && strstr(obj.type, "List") != NULL)
+			{
+				int t_id_ptr = new_temp_id(e);
+				int t_id = new_temp_id(e);
+				int t_res = new_temp_id(e);
+				buf_emit(e, "  %%t%d = getelementptr inbounds %%struct.List, %s %s, i32 0, i32 0\n",
+				         t_id_ptr, obj.type, obj.repr);
+				buf_emit(e, "  %%t%d = load i32, i32* %%t%d, align 4\n", t_id, t_id_ptr);
+				idx = coerce_value(e, idx, "i32");
+				buf_emit(e, "  %%t%d = call i32 @list_get_int(i32 %%t%d, i32 %s)\n",
+				         t_res, t_id, idx.repr);
+				snprintf(val.repr, sizeof(val.repr), "%%t%d", t_res);
+				strcpy(val.type, "i32");
+				return val;
+			}
+			else if (strncmp(obj.type, "%struct.", 8) == 0 && strstr(obj.type, "Map") != NULL)
+			{
+				int t_id_ptr = new_temp_id(e);
+				int t_id = new_temp_id(e);
+				int t_res = new_temp_id(e);
+				buf_emit(e, "  %%t%d = getelementptr inbounds %%struct.Map, %s %s, i32 0, i32 0\n",
+				         t_id_ptr, obj.type, obj.repr);
+				buf_emit(e, "  %%t%d = load i32, i32* %%t%d, align 4\n", t_id, t_id_ptr);
+				idx = coerce_value(e, idx, "i8*");
+				buf_emit(e, "  %%t%d = call i8* @map_get(i32 %%t%d, i8* %s)\n",
+				         t_res, t_id, idx.repr);
+				snprintf(val.repr, sizeof(val.repr), "%%t%d", t_res);
+				strcpy(val.type, "i8*");
+				return val;
+			}
+			else if (strcmp(obj.type, "i8*") == 0)
+			{
+				idx = coerce_value(e, idx, "i32");
+				int t_res = new_temp_id(e);
+				buf_emit(e, "  %%t%d = call i8* @substr(i8* %s, i32 %s, i32 1)\n",
+				         t_res, obj.repr, idx.repr);
+				snprintf(val.repr, sizeof(val.repr), "%%t%d", t_res);
+				strcpy(val.type, "i8*");
+				return val;
+			}
+			return val;
+		}
+
 	default:
 		break;
 	}
@@ -1560,38 +2207,45 @@ static void emit_stmt(XLLVMEmitter* e, const AstStmt* stmt)
 	switch (stmt->type)
 	{
 	case AST_STMT_VAR_DECL:
-		{
-			const char* var_name = stmt->as.var_decl.var_name;
-			const char* ty_name = stmt->as.var_decl.type_name;
-			const char* lty = xlang_type_to_llvm(e, ty_name);
+	{
+    const char* var_name = stmt->as.var_decl.var_name;
+    const char* ty_name = stmt->as.var_decl.type_name;
+    const char* lty = xlang_type_to_llvm(e, ty_name);
 
-			/* Unique alloca register */
-			char alloca_name[64];
-			snprintf(alloca_name, sizeof(alloca_name), "%%%s.%d", var_name, new_temp_id(e));
-			buf_emit(e, "  %s = alloca %s, align 8\n", alloca_name, lty);
-			add_local(e, var_name, lty, alloca_name);
+    /* Look up the hoisted alloca */
+    LLVMLocalVar* local = find_local(e, var_name);
+    if (local == NULL)
+    {
+        /* Fallback: emit alloca inline (shouldn't happen if hoist worked) */
+        char alloca_name[64];
+        snprintf(alloca_name, sizeof(alloca_name), "%%%s.%d",
+                 var_name, new_temp_id(e));
+        buf_emit(e, "  %s = alloca %s, align 8\n", alloca_name, lty);
+        add_local(e, var_name, lty, alloca_name);
+        local = find_local(e, var_name);
+    }
+    const char* alloca_name = local->alloca_reg;
 
-			if (stmt->as.var_decl.init_expr != NULL)
-			{
-				LLVMValue init_val = emit_expr(e, stmt->as.var_decl.init_expr);
-				init_val = coerce_value(e, init_val, lty);
-				buf_emit(e, "  store %s %s, %s* %s, align 8\n",
-				         lty, init_val.repr, lty, alloca_name);
-			}
-			else
-			{
-				/* Zero initialize default */
-				if (strcmp(lty, "i32") == 0)
-					buf_emit(e, "  store i32 0, i32* %s, align 4\n", alloca_name);
-				else if (strcmp(lty, "double") == 0)
-					buf_emit(e, "  store double 0.0, double* %s, align 8\n", alloca_name);
-				else if (strcmp(lty, "i1") == 0)
-					buf_emit(e, "  store i1 false, i1* %s, align 1\n", alloca_name);
-				else
-					buf_emit(e, "  store %s null, %s* %s, align 8\n", lty, lty, alloca_name);
-			}
-			break;
-		}
+    if (stmt->as.var_decl.init_expr != NULL)
+    {
+        LLVMValue init_val = emit_expr(e, stmt->as.var_decl.init_expr);
+        init_val = coerce_value(e, init_val, lty);
+        buf_emit(e, "  store %s %s, %s* %s, align 8\n",
+                 lty, init_val.repr, lty, alloca_name);
+    }
+    else
+    {
+        if (strcmp(lty, "i32") == 0)
+            buf_emit(e, "  store i32 0, i32* %s, align 4\n", alloca_name);
+        else if (strcmp(lty, "double") == 0)
+            buf_emit(e, "  store double 0.0, double* %s, align 8\n", alloca_name);
+        else if (strcmp(lty, "i1") == 0)
+            buf_emit(e, "  store i1 false, i1* %s, align 1\n", alloca_name);
+        else
+            buf_emit(e, "  store %s null, %s* %s, align 8\n", lty, lty, alloca_name);
+    }
+    break;
+	}
 
 	case AST_STMT_EXPR:
 		emit_expr(e, stmt->as.expr);
@@ -1688,6 +2342,44 @@ static void emit_stmt(XLLVMEmitter* e, const AstStmt* stmt)
 			{
 				buf_emit(e, "  br label %%%s\n\n", cond_lbl);
 			}
+			e->current_loop = loop.enclosing;
+
+			buf_emit(e, "%s:\n", end_lbl);
+			e->current_block_terminated = false;
+			break;
+		}
+
+	case AST_STMT_DO_WHILE:
+		{
+			int lbl_id = new_label_id(e);
+			char cond_lbl[32], body_lbl[32], end_lbl[32];
+			snprintf(cond_lbl, sizeof(cond_lbl), "dowhile.cond.%d", lbl_id);
+			snprintf(body_lbl, sizeof(body_lbl), "dowhile.body.%d", lbl_id);
+			snprintf(end_lbl, sizeof(end_lbl), "dowhile.end.%d", lbl_id);
+
+			buf_emit(e, "  br label %%%s\n\n", body_lbl);
+			buf_emit(e, "%s:\n", body_lbl);
+
+			LLVMLoop loop;
+			snprintf(loop.cond_label, sizeof(loop.cond_label), "%s", cond_lbl);
+			snprintf(loop.step_label, sizeof(loop.step_label), "%s", cond_lbl);
+			snprintf(loop.end_label, sizeof(loop.end_label), "%s", end_lbl);
+			loop.enclosing = e->current_loop;
+			e->current_loop = &loop;
+
+			e->current_block_terminated = false;
+			emit_stmt(e, stmt->as.do_while_stmt.body);
+			if (!e->current_block_terminated)
+			{
+				buf_emit(e, "  br label %%%s\n\n", cond_lbl);
+			}
+
+			/* Condition check */
+			buf_emit(e, "%s:\n", cond_lbl);
+			LLVMValue cond = emit_expr(e, stmt->as.do_while_stmt.condition);
+			cond = coerce_value(e, cond, "i1");
+			buf_emit(e, "  br i1 %s, label %%%s, label %%%s\n\n", cond.repr, body_lbl, end_lbl);
+
 			e->current_loop = loop.enclosing;
 
 			buf_emit(e, "%s:\n", end_lbl);
@@ -1796,6 +2488,151 @@ static void emit_stmt(XLLVMEmitter* e, const AstStmt* stmt)
 		}
 		break;
 
+	case AST_STMT_FOR_IN:
+		{
+			LLVMValue coll_val = emit_expr(e, stmt->as.for_in.collection);
+			int coll_kind = 0; /* 0: list, 1: map, 2: str */
+			if (strncmp(coll_val.type, "%struct.", 8) == 0 && strstr(coll_val.type, "Map") != NULL)
+				coll_kind = 1;
+			else if (strcmp(coll_val.type, "i8*") == 0)
+				coll_kind = 2;
+
+			int t_coll_id = 0;
+			int t_len = new_temp_id(e);
+			if (coll_kind == 0)
+			{
+				/* List */
+				int t_id_ptr = new_temp_id(e);
+				t_coll_id = new_temp_id(e);
+				buf_emit(e, "  %%t%d = getelementptr inbounds %%struct.List, %s %s, i32 0, i32 0\n",
+				         t_id_ptr, coll_val.type, coll_val.repr);
+				buf_emit(e, "  %%t%d = load i32, i32* %%t%d, align 4\n", t_coll_id, t_id_ptr);
+				buf_emit(e, "  %%t%d = call i32 @list_size(i32 %%t%d)\n", t_len, t_coll_id);
+			}
+			else if (coll_kind == 1)
+			{
+				/* Map */
+				int t_id_ptr = new_temp_id(e);
+				int t_mid = new_temp_id(e);
+				t_coll_id = new_temp_id(e); /* keys list id */
+				buf_emit(e, "  %%t%d = getelementptr inbounds %%struct.Map, %s %s, i32 0, i32 0\n",
+				         t_id_ptr, coll_val.type, coll_val.repr);
+				buf_emit(e, "  %%t%d = load i32, i32* %%t%d, align 4\n", t_mid, t_id_ptr);
+				buf_emit(e, "  %%t%d = call i32 @map_keys_list(i32 %%t%d)\n", t_coll_id, t_mid);
+				buf_emit(e, "  %%t%d = call i32 @list_size(i32 %%t%d)\n", t_len, t_coll_id);
+			}
+			else
+			{
+				/* String */
+				buf_emit(e, "  %%t%d = call i32 @_len(i8* %s)\n", t_len, coll_val.repr);
+			}
+
+			const char* item_llvm_type = "i32";
+			if (coll_kind == 1 || coll_kind == 2)
+			{
+				item_llvm_type = "i8*";
+			}
+			else if (stmt->as.for_in.collection->type == AST_EXPR_LIST &&
+			         stmt->as.for_in.collection->as.list.element_count > 0 &&
+			         stmt->as.for_in.collection->as.list.elements[0]->type == AST_EXPR_LITERAL_STRING)
+			{
+				item_llvm_type = "i8*";
+			}
+
+			enter_scope(e);
+
+			/* Allocate index variable */
+			int t_idx_alloc = new_temp_id(e);
+			char idx_reg[32];
+			snprintf(idx_reg, sizeof(idx_reg), "%%t%d", t_idx_alloc);
+			buf_emit(e, "  %s = alloca i32, align 4\n", idx_reg);
+			buf_emit(e, "  store i32 0, i32* %s, align 4\n", idx_reg);
+
+			/* Allocate item variable */
+			char item_addr[64];
+			snprintf(item_addr, sizeof(item_addr), "%%%s.forin", stmt->as.for_in.item_var);
+			buf_emit(e, "  %s = alloca %s, align %d\n", item_addr, item_llvm_type, llvm_type_align(item_llvm_type));
+			add_local(e, stmt->as.for_in.item_var, item_llvm_type, item_addr);
+
+			int lbl_id = new_label_id(e);
+			char cond_lbl[32], body_lbl[32], step_lbl[32], end_lbl[32];
+			snprintf(cond_lbl, sizeof(cond_lbl), "forin.cond.%d", lbl_id);
+			snprintf(body_lbl, sizeof(body_lbl), "forin.body.%d", lbl_id);
+			snprintf(step_lbl, sizeof(step_lbl), "forin.step.%d", lbl_id);
+			snprintf(end_lbl, sizeof(end_lbl), "forin.end.%d", lbl_id);
+
+			buf_emit(e, "  br label %%%s\n\n", cond_lbl);
+			buf_emit(e, "%s:\n", cond_lbl);
+
+			int t_cur_idx = new_temp_id(e);
+			int t_cmp = new_temp_id(e);
+			buf_emit(e, "  %%t%d = load i32, i32* %s, align 4\n", t_cur_idx, idx_reg);
+			buf_emit(e, "  %%t%d = icmp slt i32 %%t%d, %%t%d\n", t_cmp, t_cur_idx, t_len);
+			buf_emit(e, "  br i1 %%t%d, label %%%s, label %%%s\n\n", t_cmp, body_lbl, end_lbl);
+
+			/* Body */
+			buf_emit(e, "%s:\n", body_lbl);
+			LLVMLoop loop;
+			snprintf(loop.cond_label, sizeof(loop.cond_label), "%s", cond_lbl);
+			snprintf(loop.step_label, sizeof(loop.step_label), "%s", step_lbl);
+			snprintf(loop.end_label, sizeof(loop.end_label), "%s", end_lbl);
+			loop.enclosing = e->current_loop;
+			e->current_loop = &loop;
+
+			/* Fetch item */
+			int t_elem = new_temp_id(e);
+			if (coll_kind == 0)
+			{
+				if (strcmp(item_llvm_type, "i8*") == 0)
+				{
+					buf_emit(e, "  %%t%d = call i8* @list_get(i32 %%t%d, i32 %%t%d)\n", t_elem, t_coll_id, t_cur_idx);
+					buf_emit(e, "  store i8* %%t%d, i8** %s, align %d\n", t_elem, item_addr, llvm_type_align(item_llvm_type));
+				}
+				else
+				{
+					buf_emit(e, "  %%t%d = call i32 @list_get_int(i32 %%t%d, i32 %%t%d)\n", t_elem, t_coll_id, t_cur_idx);
+					buf_emit(e, "  store i32 %%t%d, i32* %s, align 4\n", t_elem, item_addr);
+				}
+			}
+			else if (coll_kind == 1)
+			{
+				buf_emit(e, "  %%t%d = call i8* @list_get(i32 %%t%d, i32 %%t%d)\n", t_elem, t_coll_id, t_cur_idx);
+				buf_emit(e, "  store i8* %%t%d, i8** %s, align %d\n", t_elem, item_addr, llvm_type_align(item_llvm_type));
+			}
+			else
+			{
+				buf_emit(e, "  %%t%d = call i8* @substr(i8* %s, i32 %%t%d, i32 1)\n", t_elem, coll_val.repr, t_cur_idx);
+				buf_emit(e, "  store i8* %%t%d, i8** %s, align %d\n", t_elem, item_addr, llvm_type_align(item_llvm_type));
+			}
+
+			e->current_block_terminated = false;
+			emit_stmt(e, stmt->as.for_in.body);
+			if (!e->current_block_terminated)
+			{
+				buf_emit(e, "  br label %%%s\n\n", step_lbl);
+			}
+
+			/* Step */
+			buf_emit(e, "%s:\n", step_lbl);
+			int t_step_idx = new_temp_id(e);
+			int t_next_idx = new_temp_id(e);
+			buf_emit(e, "  %%t%d = load i32, i32* %s, align 4\n", t_step_idx, idx_reg);
+			buf_emit(e, "  %%t%d = add nsw i32 %%t%d, 1\n", t_next_idx, t_step_idx);
+			buf_emit(e, "  store i32 %%t%d, i32* %s, align 4\n", t_next_idx, idx_reg);
+			buf_emit(e, "  br label %%%s\n\n", cond_lbl);
+
+			e->current_loop = loop.enclosing;
+			exit_scope(e);
+
+			buf_emit(e, "%s:\n", end_lbl);
+			e->current_block_terminated = false;
+			break;
+		}
+
+	case AST_STMT_FUNC_DECL:
+	case AST_STMT_CLASS_DECL:
+		break;
+
 	default:
 		break;
 	}
@@ -1804,9 +2641,29 @@ static void emit_stmt(XLLVMEmitter* e, const AstStmt* stmt)
 /* -------------------------------------------------------------------------
  * Top-Level Discovery & Class Struct Collection
  * ------------------------------------------------------------------------- */
-static void resolve_class_inheritance(XLLVMEmitter* e, LLVMClassDesc* cd)
+static void resolve_class_inheritance_impl(XLLVMEmitter* e, LLVMClassDesc* cd, const char** chain, int chain_len)
 {
 	if (cd->base_name[0] == '\0') return;
+
+	/* Detect inheritance cycles (A : B, B : A, or longer chains) instead of
+	 * recursing until the stack overflows. */
+	for (int i = 0; i < chain_len; i++)
+	{
+		if (strcmp(chain[i], cd->name) == 0)
+		{
+			fprintf(stderr, "xllvm: error: circular class inheritance detected involving '%s'\n", cd->name);
+			return;
+		}
+	}
+	if (chain_len >= MAX_CLASSES)
+	{
+		fprintf(stderr, "xllvm: error: class inheritance chain too deep at '%s'\n", cd->name);
+		return;
+	}
+	const char* new_chain[MAX_CLASSES];
+	memcpy(new_chain, chain, chain_len * sizeof(const char*));
+	new_chain[chain_len] = cd->name;
+
 	LLVMClassDesc* base = NULL;
 	for (int i = 0; i < e->class_count; i++)
 	{
@@ -1817,7 +2674,7 @@ static void resolve_class_inheritance(XLLVMEmitter* e, LLVMClassDesc* cd)
 		}
 	}
 	if (!base) return;
-	resolve_class_inheritance(e, base);
+	resolve_class_inheritance_impl(e, base, new_chain, chain_len + 1);
 
 	/* Check if base fields already copied */
 	if (base->field_count > 0 && cd->field_count + base->field_count <= MAX_FIELDS_PER_CLASS)
@@ -1845,6 +2702,12 @@ static void resolve_class_inheritance(XLLVMEmitter* e, LLVMClassDesc* cd)
 	}
 }
 
+static void resolve_class_inheritance(XLLVMEmitter* e, LLVMClassDesc* cd)
+{
+	const char* chain[MAX_CLASSES];
+	resolve_class_inheritance_impl(e, cd, chain, 0);
+}
+
 static void collect_classes(XLLVMEmitter* e)
 {
 	e->class_count = 0;
@@ -1853,6 +2716,17 @@ static void collect_classes(XLLVMEmitter* e)
 		const AstStmt* stmt = e->prog->statements[i];
 		if (stmt->type == AST_STMT_CLASS_DECL)
 		{
+			bool class_already = false;
+			for (int c = 0; c < e->class_count; c++)
+			{
+				if (strcmp(e->classes[c].name, stmt->as.class_decl.name) == 0)
+				{
+					class_already = true;
+					break;
+				}
+			}
+			if (class_already) continue;
+
 			if (e->class_count < MAX_CLASSES)
 			{
 				LLVMClassDesc* cd = &e->classes[e->class_count++];
@@ -1863,19 +2737,33 @@ static void collect_classes(XLLVMEmitter* e)
 					cd->base_name[0] = '\0';
 
 				cd->field_count = 0;
+				cd->static_field_count = 0;
 				for (int m = 0; m < stmt->as.class_decl.member_count; m++)
 				{
 					const AstStmt* mem = stmt->as.class_decl.members[m];
 					if (mem->type == AST_STMT_VAR_DECL)
 					{
-						if (cd->field_count < MAX_FIELDS_PER_CLASS)
+						if (mem->as.var_decl.is_static)
 						{
-							LLVMFieldDesc* fd = &cd->fields[cd->field_count];
-							snprintf(fd->name, sizeof(fd->name), "%s", mem->as.var_decl.var_name);
-							snprintf(fd->type_name, sizeof(fd->type_name), "%s", mem->as.var_decl.type_name ? mem->as.var_decl.type_name : "int");
-							snprintf(fd->llvm_type, sizeof(fd->llvm_type), "%s", xlang_type_to_llvm(e, fd->type_name));
-							fd->slot = cd->field_count;
-							cd->field_count++;
+							if (cd->static_field_count < MAX_FIELDS_PER_CLASS)
+							{
+								LLVMStaticFieldDesc* sfd = &cd->static_fields[cd->static_field_count++];
+								snprintf(sfd->name, sizeof(sfd->name), "%s", mem->as.var_decl.var_name);
+								snprintf(sfd->type_name, sizeof(sfd->type_name), "%s", mem->as.var_decl.type_name ? mem->as.var_decl.type_name : "int");
+								snprintf(sfd->llvm_type, sizeof(sfd->llvm_type), "%s", xlang_type_to_llvm(e, sfd->type_name));
+							}
+						}
+						else
+						{
+							if (cd->field_count < MAX_FIELDS_PER_CLASS)
+							{
+								LLVMFieldDesc* fd = &cd->fields[cd->field_count];
+								snprintf(fd->name, sizeof(fd->name), "%s", mem->as.var_decl.var_name);
+								snprintf(fd->type_name, sizeof(fd->type_name), "%s", mem->as.var_decl.type_name ? mem->as.var_decl.type_name : "int");
+								snprintf(fd->llvm_type, sizeof(fd->llvm_type), "%s", xlang_type_to_llvm(e, fd->type_name));
+								fd->slot = cd->field_count;
+								cd->field_count++;
+							}
 						}
 					}
 				}
@@ -1889,9 +2777,105 @@ static void collect_classes(XLLVMEmitter* e)
 	}
 }
 
-/* -------------------------------------------------------------------------
- * Function Definition CodeGen
- * ------------------------------------------------------------------------- */
+#define MAX_EMITTED_FUNCS 512
+static char s_emitted_funcs[MAX_EMITTED_FUNCS][128];
+static int s_emitted_funcs_count = 0;
+
+/* Clears the emitted-function dedup table. Must be called once at the start
+ * of every xllvm_emit_program() invocation (see call site) so state from a
+ * prior compile never leaks into the next one. */
+static void xllvm_reset_emitted_funcs(void)
+{
+	s_emitted_funcs_count = 0;
+}
+
+static void hoist_local_allocas(XLLVMEmitter* e, const AstStmt* stmt)
+{
+    if (!stmt) return;
+    switch (stmt->type)
+    {
+    case AST_STMT_VAR_DECL:
+    {
+        const char* var_name = stmt->as.var_decl.var_name;
+        const char* ty_name  = stmt->as.var_decl.type_name;
+        const char* lty      = xlang_type_to_llvm(e, ty_name);
+
+        /* Skip if already declared in an enclosing scope of this function */
+        if (find_local(e, var_name) != NULL) break;
+
+        char alloca_name[64];
+        snprintf(alloca_name, sizeof(alloca_name), "%%%s.%d",
+                 var_name, new_temp_id(e));
+        buf_emit(e, "  %s = alloca %s, align 8\n", alloca_name, lty);
+        add_local(e, var_name, lty, alloca_name);
+        break;
+    }
+    case AST_STMT_BLOCK:
+        e->scope_depth++;
+        for (int i = 0; i < stmt->as.block.stmt_count; i++)
+            hoist_local_allocas(e, stmt->as.block.stmts[i]);
+        e->scope_depth--;
+        break;
+
+    case AST_STMT_IF:
+        e->scope_depth++;
+        hoist_local_allocas(e, stmt->as.if_stmt.then_branch);
+        e->scope_depth--;
+        if (stmt->as.if_stmt.else_branch) {
+            e->scope_depth++;
+            hoist_local_allocas(e, stmt->as.if_stmt.else_branch);
+            e->scope_depth--;
+        }
+        break;
+
+    case AST_STMT_WHILE:
+        e->scope_depth++;
+        hoist_local_allocas(e, stmt->as.while_stmt.body);
+        e->scope_depth--;
+        break;
+
+    case AST_STMT_DO_WHILE:
+        e->scope_depth++;
+        hoist_local_allocas(e, stmt->as.do_while_stmt.body);
+        e->scope_depth--;
+        break;
+
+    case AST_STMT_FOR_C:
+        e->scope_depth++;
+        hoist_local_allocas(e, stmt->as.for_c.init);
+        hoist_local_allocas(e, stmt->as.for_c.body);
+        e->scope_depth--;
+        break;
+
+    case AST_STMT_FOR_IN:
+        e->scope_depth++;
+        hoist_local_allocas(e, stmt->as.for_in.body);
+        e->scope_depth--;
+        break;
+
+    default:
+        break;
+    }
+}
+
+static void emit_function(XLLVMEmitter* e, const AstStmt* fn_stmt, const char* class_prefix);
+
+static void emit_nested_functions(XLLVMEmitter* e, const AstStmt* stmt)
+{
+	if (!stmt) return;
+	if (stmt->type == AST_STMT_FUNC_DECL)
+	{
+		emit_function(e, stmt, NULL);
+	}
+	else if (stmt->type == AST_STMT_BLOCK)
+	{
+		for (int i = 0; i < stmt->as.block.stmt_count; i++)
+		{
+			emit_nested_functions(e, stmt->as.block.stmts[i]);
+		}
+	}
+}
+
 static void emit_function(XLLVMEmitter* e, const AstStmt* fn_stmt, const char* class_prefix)
 {
 	const char* fn_name = fn_stmt->as.func_decl.name;
@@ -1910,6 +2894,28 @@ static void emit_function(XLLVMEmitter* e, const AstStmt* fn_stmt, const char* c
 		snprintf(full_name, sizeof(full_name), "_user_main");
 	else
 		snprintf(full_name, sizeof(full_name), "%s", fn_name);
+
+	/* Check if already emitted */
+	for (int i = 0; i < s_emitted_funcs_count; i++)
+	{
+		if (strcmp(s_emitted_funcs[i], full_name) == 0)
+			return;
+	}
+	if (s_emitted_funcs_count < MAX_EMITTED_FUNCS)
+	{
+		snprintf(s_emitted_funcs[s_emitted_funcs_count++], sizeof(s_emitted_funcs[0]), "%s", full_name);
+	}
+	else
+	{
+		/* Table full: we can no longer detect duplicate emission of this (or
+		 * later) functions, which can produce a module with duplicate LLVM
+		 * symbol definitions. Surface this loudly instead of failing silently
+		 * at link time with a confusing "duplicate symbol" error. */
+		fprintf(stderr, "xllvm: warning: function dedup table exceeded (%d), "
+		                 "duplicate definitions of '%s' may be emitted; "
+		                 "increase MAX_EMITTED_FUNCS\n",
+		        MAX_EMITTED_FUNCS, full_name);
+	}
 
 	/* Reset locals for function body */
 	e->local_count = 0;
@@ -1938,19 +2944,25 @@ static void emit_function(XLLVMEmitter* e, const AstStmt* fn_stmt, const char* c
 	/* Store parameters in allocas */
 	for (int p = 0; p < fn_stmt->as.func_decl.param_count; p++)
 	{
-		const char* pname = fn_stmt->as.func_decl.params[p].name;
-		const char* pty = xlang_type_to_llvm(e, fn_stmt->as.func_decl.params[p].type_name);
-		char addr_name[64];
-		snprintf(addr_name, sizeof(addr_name), "%%%s.addr", pname);
-		buf_emit(e, "  %s = alloca %s, align 8\n", addr_name, pty);
-		buf_emit(e, "  store %s %%%s, %s* %s, align 8\n", pty, pname, pty, addr_name);
-		add_local(e, pname, pty, addr_name);
+    const char* pname = fn_stmt->as.func_decl.params[p].name;
+    const char* pty = xlang_type_to_llvm(e, fn_stmt->as.func_decl.params[p].type_name);
+    char addr_name[64];
+    snprintf(addr_name, sizeof(addr_name), "%%%s.addr", pname);
+    buf_emit(e, "  %s = alloca %s, align 8\n", addr_name, pty);
+    buf_emit(e, "  store %s %%%s, %s* %s, align 8\n", pty, pname, pty, addr_name);
+    add_local(e, pname, pty, addr_name);
+	}
+
+	/* NEW: hoist all local var allocas into the entry block */
+	if (fn_stmt->as.func_decl.body != NULL)
+	{
+    hoist_local_allocas(e, fn_stmt->as.func_decl.body);
 	}
 
 	/* Emit body */
 	if (fn_stmt->as.func_decl.body != NULL)
 	{
-		emit_stmt(e, fn_stmt->as.func_decl.body);
+    emit_stmt(e, fn_stmt->as.func_decl.body);
 	}
 
 	/* Implicit return if missing */
@@ -1969,7 +2981,14 @@ static void emit_function(XLLVMEmitter* e, const AstStmt* fn_stmt, const char* c
 	}
 
 	buf_emit(e, "}\n\n");
+
+	/* Emit any nested function declarations */
+	if (fn_stmt->as.func_decl.body != NULL)
+	{
+		emit_nested_functions(e, fn_stmt->as.func_decl.body);
+	}
 }
+
 
 /* -------------------------------------------------------------------------
  * Main Program Emission Entrypoint
@@ -1984,6 +3003,14 @@ bool xllvm_emit_program(const AstProgram* prog, const char* source_file, FILE* o
 	emitter.prog = prog;
 	emitter.source_file = source_file ? source_file : "input.xb";
 	emitter.config = config ? *config : xllvm_default_config();
+
+	/* s_emitted_funcs is function-local static state used to dedupe function
+	 * emission within a single program. It must be reset here, otherwise a
+	 * second call to xllvm_emit_program() in the same process (e.g. compiling
+	 * more than one file, or running from a test harness) would see every
+	 * function name as "already emitted" from the previous run and silently
+	 * skip emitting any function bodies. */
+	xllvm_reset_emitted_funcs();
 
 	collect_classes(&emitter);
 
@@ -2009,6 +3036,34 @@ bool xllvm_emit_program(const AstProgram* prog, const char* source_file, FILE* o
 			fprintf(out, "i8"); /* Empty struct gets 1-byte filler */
 		fprintf(out, " }\n");
 	}
+	bool has_list_class = false;
+	bool has_map_class = false;
+	bool has_proc_class = false;
+	for (int i = 0; i < emitter.class_count; i++)
+	{
+		if (strcmp(emitter.classes[i].name, "List") == 0) has_list_class = true;
+		if (strcmp(emitter.classes[i].name, "Map") == 0 || strcmp(emitter.classes[i].name, "HashMap") == 0) has_map_class = true;
+		if (strcmp(emitter.classes[i].name, "ProcessResult") == 0) has_proc_class = true;
+	}
+	if (!has_list_class) fprintf(out, "%%struct.List = type { i32 }\n");
+	if (!has_map_class) fprintf(out, "%%struct.Map = type { i32 }\n");
+	if (!has_proc_class) fprintf(out, "%%struct.ProcessResult = type { i8*, i32 }\n");
+
+	/* Global definitions for static fields */
+	for (int i = 0; i < emitter.class_count; i++)
+	{
+		LLVMClassDesc* cd = &emitter.classes[i];
+		for (int sf = 0; sf < cd->static_field_count; sf++)
+		{
+			const char* fty = cd->static_fields[sf].llvm_type;
+			const char* init_val = "0";
+			if (strcmp(fty, "double") == 0) init_val = "0.0";
+			else if (strchr(fty, '*') != NULL) init_val = "null";
+			fprintf(out, "@%s_%s = global %s %s, align %d\n",
+			        cd->name, cd->static_fields[sf].name, fty, init_val, llvm_type_align(fty));
+		}
+	}
+	fprintf(out, "@base = global i32 0, align 4\n\n");
 	if (emitter.class_count > 0)
 		fprintf(out, "\n");
 
@@ -2100,101 +3155,229 @@ bool xllvm_emit_program(const AstProgram* prog, const char* source_file, FILE* o
 	if (emitter.string_constant_count > 0)
 		fprintf(out, "\n");
 
-	/* 5. Runtime Intrinsics & C Library Declarations */
-	fprintf(out, "declare i32 @printf(i8*, ...)\n");
-	fprintf(out, "declare i32 @puts(i8*)\n");
-	fprintf(out, "declare void @exit(i32)\n");
-	fprintf(out, "declare i8* @malloc(i64)\n");
-	fprintf(out, "declare void @free(i8*)\n");
-	fprintf(out, "declare i8* @gc_malloc(i64, i32)\n");
-	fprintf(out, "declare i8* @gc_calloc(i64, i64, i32)\n");
-	fprintf(out, "declare i32 @strcmp(i8*, i8*)\n");
-	fprintf(out, "declare void @xllvm_rt_init(i32, i8**)\n\n");
+	/* 5. Runtime Intrinsics & C Library Declarations
+	 *
+	 * Each runtime function is data (return type, name, param list), not
+	 * hand-written LLVM syntax -- the "declare ..." text is built once below
+	 * instead of being typed out (and kept in sync by hand) for every line.
+	 * Adding a new runtime function is a one-line table entry, and there is no
+	 * literal "%" to get right/wrong since types are substituted via "%s",
+	 * never embedded in the format string itself. */
+	typedef struct { const char* ret_type; const char* name; const char* params; } XLLVMRuntimeFunc;
+	typedef struct { const char* header; const XLLVMRuntimeFunc* funcs; size_t count; } XLLVMRuntimeGroup;
 
-	fprintf(out, "; String Helpers\n");
-	fprintf(out, "declare i8* @_str_concat(i8*, i8*)\n");
-	fprintf(out, "declare i8* @_str_from_int(i32)\n");
-	fprintf(out, "declare i8* @_str_from_float(double)\n");
-	fprintf(out, "declare i32 @_len(i8*)\n");
-	fprintf(out, "declare i8* @_trim(i8*)\n");
-	fprintf(out, "declare i8* @_lower(i8*)\n");
-	fprintf(out, "declare i8* @_upper(i8*)\n");
-	fprintf(out, "declare i8* @substr(i8*, i32, i32)\n");
-	fprintf(out, "declare i8* @chr(i32)\n");
-	fprintf(out, "declare i32 @index_of(i8*, i8*)\n");
-	fprintf(out, "declare i32 @str_eq(i8*, i8*)\n\n");
+	static const XLLVMRuntimeFunc s_rt_group0[] = {
+		{ "i32", "printf", "i8*, ..." },
+		{ "i32", "puts", "i8*" },
+		{ "void", "exit", "i32" },
+		{ "i8*", "malloc", "i64" },
+		{ "void", "free", "i8*" },
+		{ "i8*", "gc_malloc", "i64, i32" },
+		{ "i8*", "gc_calloc", "i64, i64, i32" },
+		{ "i32", "strcmp", "i8*, i8*" },
+		{ "void", "xllvm_rt_init", "i32, i8**" },
+	};
 
-	fprintf(out, "; Map Operations\n");
-	fprintf(out, "declare i32 @map_new()\n");
-	fprintf(out, "declare i32 @map_put(i32, i8*, i8*)\n");
-	fprintf(out, "declare i32 @map_put_int(i32, i8*, i32)\n");
-	fprintf(out, "declare i32 @map_put_float(i32, i8*, double)\n");
-	fprintf(out, "declare i8* @map_get(i32, i8*)\n");
-	fprintf(out, "declare i32 @map_get_int(i32, i8*)\n");
-	fprintf(out, "declare double @map_get_float(i32, i8*)\n");
-	fprintf(out, "declare i32 @map_has(i32, i8*)\n");
-	fprintf(out, "declare i32 @map_remove(i32, i8*)\n");
-	fprintf(out, "declare i32 @map_size(i32)\n");
-	fprintf(out, "declare i32 @map_clear(i32)\n");
-	fprintf(out, "declare i8* @map_keys(i32)\n");
-	fprintf(out, "declare i8* @map_values(i32)\n");
-	fprintf(out, "declare i8* @map_to_string(i32)\n");
-	fprintf(out, "declare i32 @map_free(i32)\n");
-	fprintf(out, "declare i32 @map_keys_list(i32)\n\n");
+	static const XLLVMRuntimeFunc s_rt_strings[] = {
+		{ "i8*", "_str_concat", "i8*, i8*" },
+		{ "i8*", "_str_from_int", "i32" },
+		{ "i8*", "_str_from_float", "double" },
+		{ "i32", "_len", "i8*" },
+		{ "i8*", "_trim", "i8*" },
+		{ "i8*", "_lower", "i8*" },
+		{ "i8*", "_upper", "i8*" },
+		{ "i8*", "substr", "i8*, i32, i32" },
+		{ "i8*", "chr", "i32" },
+		{ "i32", "index_of", "i8*, i8*" },
+		{ "i32", "str_eq", "i8*, i8*" },
+	};
 
-	fprintf(out, "; List Operations\n");
-	fprintf(out, "declare i32 @list_new()\n");
-	fprintf(out, "declare i32 @list_add(i32, i8*)\n");
-	fprintf(out, "declare i32 @list_add_int(i32, i32)\n");
-	fprintf(out, "declare i32 @list_add_float(i32, double)\n");
-	fprintf(out, "declare i8* @list_get(i32, i32)\n");
-	fprintf(out, "declare i32 @list_get_int(i32, i32)\n");
-	fprintf(out, "declare double @list_get_float(i32, i32)\n");
-	fprintf(out, "declare i32 @list_set(i32, i32, i8*)\n");
-	fprintf(out, "declare i32 @list_set_int(i32, i32, i32)\n");
-	fprintf(out, "declare i32 @list_remove_at(i32, i32)\n");
-	fprintf(out, "declare i32 @list_size(i32)\n");
-	fprintf(out, "declare i32 @list_clear(i32)\n");
-	fprintf(out, "declare i32 @list_contains(i32, i8*)\n");
-	fprintf(out, "declare i32 @list_contains_int(i32, i32)\n");
-	fprintf(out, "declare i32 @list_index_of(i32, i8*)\n");
-	fprintf(out, "declare i32 @list_index_of_int(i32, i32)\n");
-	fprintf(out, "declare i8* @list_pop(i32)\n");
-	fprintf(out, "declare i32 @list_pop_int(i32)\n");
-	fprintf(out, "declare i8* @list_join(i32, i8*)\n");
-	fprintf(out, "declare i8* @list_to_string(i32)\n");
-	fprintf(out, "declare i32 @list_free(i32)\n\n");
+	static const XLLVMRuntimeFunc s_rt_maps[] = {
+		{ "i32", "map_new", "" },
+		{ "i32", "map_put", "i32, i8*, i8*" },
+		{ "i32", "map_put_int", "i32, i8*, i32" },
+		{ "i32", "map_put_float", "i32, i8*, double" },
+		{ "i8*", "map_get", "i32, i8*" },
+		{ "i32", "map_get_int", "i32, i8*" },
+		{ "double", "map_get_float", "i32, i8*" },
+		{ "i32", "map_has", "i32, i8*" },
+		{ "i32", "map_remove", "i32, i8*" },
+		{ "i32", "map_size", "i32" },
+		{ "i32", "map_clear", "i32" },
+		{ "i8*", "map_keys", "i32" },
+		{ "i8*", "map_values", "i32" },
+		{ "i8*", "map_to_string", "i32" },
+		{ "i32", "map_free", "i32" },
+		{ "i32", "map_keys_list", "i32" },
+	};
 
-	fprintf(out, "; Socket Operations\n");
-	fprintf(out, "declare i32 @socket_create(i8*)\n");
-	fprintf(out, "declare i32 @socket_connect(i32, i8*, i32)\n");
-	fprintf(out, "declare i32 @socket_bind(i32, i8*, i32)\n");
-	fprintf(out, "declare i32 @socket_listen(i32, i32)\n");
-	fprintf(out, "declare i32 @socket_accept(i32)\n");
-	fprintf(out, "declare i32 @socket_send(i32, i8*)\n");
-	fprintf(out, "declare i8* @socket_recv(i32, i32)\n");
-	fprintf(out, "declare i32 @socket_close(i32)\n");
-	fprintf(out, "declare i32 @socket_set_timeout(i32, i32)\n");
-	fprintf(out, "declare i32 @socket_set_reuseaddr(i32, i32)\n");
-	fprintf(out, "declare i32 @socket_sendto(i32, i8*, i8*, i32)\n");
-	fprintf(out, "declare i8* @socket_recvfrom(i32, i32)\n\n");
+	static const XLLVMRuntimeFunc s_rt_lists[] = {
+		{ "i32", "list_new", "" },
+		{ "i32", "list_add", "i32, i8*" },
+		{ "i32", "list_add_int", "i32, i32" },
+		{ "i32", "list_add_float", "i32, double" },
+		{ "i8*", "list_get", "i32, i32" },
+		{ "i32", "list_get_int", "i32, i32" },
+		{ "double", "list_get_float", "i32, i32" },
+		{ "i32", "list_set", "i32, i32, i8*" },
+		{ "i32", "list_set_int", "i32, i32, i32" },
+		{ "i32", "list_set_float", "i32, i32, double" },
+		{ "i32", "list_remove_at", "i32, i32" },
+		{ "i32", "list_size", "i32" },
+		{ "i32", "list_clear", "i32" },
+		{ "i32", "list_contains", "i32, i8*" },
+		{ "i32", "list_contains_int", "i32, i32" },
+		{ "i32", "list_index_of", "i32, i8*" },
+		{ "i32", "list_index_of_int", "i32, i32" },
+		{ "i8*", "list_pop", "i32" },
+		{ "i32", "list_pop_int", "i32" },
+		{ "i8*", "list_join", "i32, i8*" },
+		{ "i8*", "list_to_string", "i32" },
+		{ "i32", "list_free", "i32" },
+	};
 
-	fprintf(out, "; System Operations\n");
-	fprintf(out, "declare i32 @clock_ms()\n");
-	fprintf(out, "declare i32 @get_argc()\n");
-	fprintf(out, "declare i8* @get_arg(i32)\n");
-	fprintf(out, "declare i32 @system_exec(i8*)\n");
-	fprintf(out, "declare i8* @system_getenv(i8*)\n");
-	fprintf(out, "declare i32 @system_setenv(i8*, i8*)\n\n");
+	static const XLLVMRuntimeFunc s_rt_sockets[] = {
+		{ "i32", "socket_create", "i8*" },
+		{ "i32", "socket_connect", "i32, i8*, i32" },
+		{ "i32", "socket_bind", "i32, i8*, i32" },
+		{ "i32", "socket_listen", "i32, i32" },
+		{ "i32", "socket_accept", "i32" },
+		{ "i32", "socket_send", "i32, i8*" },
+		{ "i8*", "socket_recv", "i32, i32" },
+		{ "i32", "socket_close", "i32" },
+		{ "i32", "socket_set_timeout", "i32, i32" },
+		{ "i32", "socket_set_reuseaddr", "i32, i32" },
+		{ "i32", "socket_sendto", "i32, i8*, i8*, i32" },
+		{ "i8*", "socket_recvfrom", "i32, i32" },
+	};
 
-	fprintf(out, "; GC Operations\n");
-	fprintf(out, "declare i32 @gc_collect()\n");
-	fprintf(out, "declare i32 @gc_allocated_bytes()\n");
-	fprintf(out, "declare i32 @gc_total_objects()\n");
-	fprintf(out, "declare i32 @gc_enable()\n");
-	fprintf(out, "declare i32 @gc_disable()\n");
-	fprintf(out, "declare i32 @gc_set_threshold(i32)\n");
-	fprintf(out, "declare i32 @gc_dump()\n\n");
+	static const XLLVMRuntimeFunc s_rt_sys[] = {
+		{ "i32", "clock_ms", "" },
+		{ "i32", "get_argc", "" },
+		{ "i8*", "get_arg", "i32" },
+		{ "i32", "system_exec", "i8*" },
+		{ "i8*", "system_getenv", "i8*" },
+		{ "i32", "system_setenv", "i8*, i8*" },
+	};
+
+	static const XLLVMRuntimeFunc s_rt_dirs[] = {
+		{ "i32", "dir_create", "i8*" },
+		{ "i32", "dir_exists", "i8*" },
+		{ "i32", "dir_remove", "i8*" },
+		{ "%struct.List*", "dir_list", "i8*" },
+	};
+
+	static const XLLVMRuntimeFunc s_rt_files[] = {
+		{ "i8*", "file_read_all", "i8*" },
+		{ "i8*", "file_read", "i32, i32" },
+		{ "i32", "file_write_all", "i8*, i8*" },
+		{ "i32", "file_append", "i8*, i8*" },
+		{ "i32", "file_create", "i8*" },
+		{ "i32", "file_exists", "i8*" },
+		{ "i32", "file_size", "i8*" },
+		{ "i32", "file_remove", "i8*" },
+		{ "i32", "file_open", "i8*" },
+		{ "i32", "file_write", "i32, i8*" },
+		{ "i32", "file_close", "i32" },
+		{ "%struct.List*", "file_list", "i8*" },
+	};
+
+	static const XLLVMRuntimeFunc s_rt_math[] = {
+		{ "double", "math_abs", "double" },
+		{ "double", "math_sqrt", "double" },
+		{ "double", "math_pow", "double, double" },
+		{ "double", "math_min", "double, double" },
+		{ "double", "math_max", "double, double" },
+		{ "double", "math_floor", "double" },
+		{ "double", "math_ceil", "double" },
+		{ "double", "math_round", "double" },
+		{ "double", "math_sin", "double" },
+		{ "double", "math_cos", "double" },
+		{ "double", "math_tan", "double" },
+		{ "double", "math_log", "double" },
+	};
+
+	static const XLLVMRuntimeFunc s_rt_gc[] = {
+		{ "i32", "gc_collect", "" },
+		{ "i32", "gc_allocated_bytes", "" },
+		{ "i32", "gc_total_objects", "" },
+		{ "i32", "gc_enable", "" },
+		{ "i32", "gc_disable", "" },
+		{ "i32", "gc_set_threshold", "i32" },
+		{ "i32", "gc_dump", "" },
+	};
+
+	static const XLLVMRuntimeFunc s_rt_proc[] = {
+		{ "i8*", "proc_capture", "i8*" },
+		{ "%struct.ProcessResult*", "proc_run", "i8*" },
+	};
+
+	static const XLLVMRuntimeFunc s_rt_regex[] = {
+		{ "i32", "starts_with", "i8*, i8*" },
+		{ "i32", "ends_with", "i8*, i8*" },
+		{ "i32", "regex_match", "i8*, i8*" },
+		{ "i8*", "regex_find", "i8*, i8*" },
+		{ "i8*", "regex_replace", "i8*, i8*, i8*" },
+		{ "i32", "str_split", "i8*, i8*" },
+	};
+
+	static const XLLVMRuntimeFunc s_rt_datetime[] = {
+		{ "i32", "datetime_now", "" },
+		{ "i32", "datetime_year", "i32" },
+		{ "i32", "datetime_month", "i32" },
+		{ "i32", "datetime_day", "i32" },
+		{ "i32", "datetime_hour", "i32" },
+		{ "i32", "datetime_minute", "i32" },
+		{ "i32", "datetime_second", "i32" },
+		{ "i8*", "datetime_format", "i32, i8*" },
+		{ "i32", "datetime_clock_ms", "" },
+	};
+
+	static const XLLVMRuntimeFunc s_rt_json[] = {
+		{ "i32", "json_is_valid", "i8*" },
+		{ "%struct.Map*", "json_parse", "i8*" },
+		{ "i8*", "json_stringify", "%struct.Map*" },
+	};
+
+	static const XLLVMRuntimeFunc s_rt_http[] = {
+		{ "i8*", "http_get", "i8*" },
+	};
+
+#define RT_GROUP(header_str, arr) { (header_str), (arr), sizeof(arr) / sizeof((arr)[0]) }
+
+	static const XLLVMRuntimeGroup s_rt_groups[] = {
+		RT_GROUP(NULL, s_rt_group0),
+		RT_GROUP("; String Helpers", s_rt_strings),
+		RT_GROUP("; Map Operations", s_rt_maps),
+		RT_GROUP("; List Operations", s_rt_lists),
+		RT_GROUP("; Socket Operations", s_rt_sockets),
+		RT_GROUP("; System Operations", s_rt_sys),
+		RT_GROUP("; Directory Operations", s_rt_dirs),
+		RT_GROUP("; File Operations", s_rt_files),
+		RT_GROUP("; Math Operations", s_rt_math),
+		RT_GROUP("; GC Operations", s_rt_gc),
+		RT_GROUP("; Process Operations", s_rt_proc),
+		RT_GROUP("; Regex & String Operations", s_rt_regex),
+		RT_GROUP("; DateTime Operations", s_rt_datetime),
+		RT_GROUP("; JSON Operations", s_rt_json),
+		RT_GROUP("; HTTP Operations", s_rt_http),
+	};
+#undef RT_GROUP
+
+	for (size_t g = 0; g < sizeof(s_rt_groups) / sizeof(s_rt_groups[0]); g++)
+	{
+		const XLLVMRuntimeGroup* grp = &s_rt_groups[g];
+		if (grp->header != NULL && grp->header[0] != '\0')
+		{
+			fprintf(out, "%s\n", grp->header);
+		}
+		for (size_t f = 0; f < grp->count; f++)
+		{
+			const XLLVMRuntimeFunc* fn = &grp->funcs[f];
+			fprintf(out, "declare %s @%s(%s)\n", fn->ret_type, fn->name, fn->params ? fn->params : "");
+		}
+		fprintf(out, "\n");
+	}
 
 	/* 6. Write Functions IR */
 	fprintf(out, "%s", functions_ir);

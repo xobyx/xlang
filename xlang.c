@@ -466,6 +466,8 @@ int main(const int argc, char** argv)
 	bool flag_view = false;
 	bool flag_emit_llvm = false;
 	bool flag_build = false;
+	bool flag_release = false;
+	bool flag_debug = false;
 	const char* script_path = NULL;
 	int script_idx = -1;
 
@@ -482,6 +484,14 @@ int main(const int argc, char** argv)
 		else if (strcmp(argv[i], "build") == 0 || strcmp(argv[i], "--build") == 0)
 		{
 			flag_build = true;
+		}
+		else if (strcmp(argv[i], "--release") == 0)
+		{
+			flag_release = true;
+		}
+		else if (strcmp(argv[i], "--debug") == 0 || strcmp(argv[i], "-g") == 0)
+		{
+			flag_debug = true;
 		}
 		else if (strcmp(argv[i], "--jit") == 0)
 		{
@@ -525,12 +535,14 @@ int main(const int argc, char** argv)
 		{
 			printf("xlang 0.4.0 - Language & Runtime\n");
 			printf("Usage: xlang [options] <script.xb | bytecode.xbc> [args...]\n");
-			printf("       xlang build <script.xb> [-o <binary>]\n\n");
+			printf("       xlang build [--debug|--release] <script.xb> [-o <binary>]\n\n");
 			printf("Options:\n");
 			printf("  -c, --compile   Compile script to bytecode (.xbc)\n");
 			printf("  -o <file>       Specify output file path (bytecode, LLVM IR, or binary)\n");
 			printf("  --emit-llvm, -S Emit textual LLVM IR (.ll) for script\n");
 			printf("  build           Compile script to standalone native binary via LLVM\n");
+			printf("  --debug, -g     Build debug binary with assertions and debug symbols (default)\n");
+			printf("  --release       Build optimized release binary with assertions elided\n");
 			printf("  --jit           Execute script via in-process LLVM ORC JIT\n");
 			printf("  --dump-ast      Parse script and display Structured AST\n");
 			printf("  --dump-ir       Compile/load bytecode and disassemble\n");
@@ -549,6 +561,11 @@ int main(const int argc, char** argv)
 			script_idx = i;
 		}
 	}
+
+	if (flag_release)
+		set_assert_enabled(false);
+	else
+		set_assert_enabled(true);
 
 	if (script_path == NULL)
 	{
@@ -682,6 +699,16 @@ int main(const int argc, char** argv)
 		}
 
 		XLLVMConfig cfg = xllvm_default_config();
+		if (flag_release)
+		{
+			cfg.is_release = true;
+			cfg.enable_asserts = false;
+		}
+		else if (flag_debug)
+		{
+			cfg.is_release = false;
+			cfg.enable_asserts = true;
+		}
 		bool ok = xllvm_emit_file(prog, script_path, target_out, &cfg);
 		if (ok)
 		{
@@ -722,7 +749,11 @@ int main(const int argc, char** argv)
 			bin_target = bin_path_buf;
 		}
 
+		bool is_release_build = flag_release;
 		XLLVMConfig cfg = xllvm_default_config();
+		cfg.is_release = is_release_build;
+		cfg.enable_asserts = !is_release_build;
+
 		bool ok = xllvm_emit_file(prog, script_path, ll_path, &cfg);
 		if (!ok)
 		{
@@ -747,26 +778,43 @@ int main(const int argc, char** argv)
 		}
 
 		const char* rt_obj = NULL;
-		if (access("obj/Release/xllvm_rt.o", R_OK) == 0)
-			rt_obj = "obj/Release/xllvm_rt.o";
-		else if (access("bin/Release/xllvm_rt.o", R_OK) == 0)
-			rt_obj = "bin/Release/xllvm_rt.o";
-		else if (access("obj/Debug/xllvm_rt.o", R_OK) == 0)
-			rt_obj = "obj/Debug/xllvm_rt.o";
-		else if (access("bin/Debug/xllvm_rt.o", R_OK) == 0)
-			rt_obj = "bin/Debug/xllvm_rt.o";
-		else if (access("/usr/local/lib/xlang/xllvm_rt.o", R_OK) == 0)
-			rt_obj = "/usr/local/lib/xlang/xllvm_rt.o";
+		if (is_release_build)
+		{
+			if (access("obj/Release/xllvm_rt.o", R_OK) == 0)
+				rt_obj = "obj/Release/xllvm_rt.o";
+			else if (access("bin/Release/xllvm_rt.o", R_OK) == 0)
+				rt_obj = "bin/Release/xllvm_rt.o";
+			else if (access("/usr/local/lib/xlang/xllvm_rt.o", R_OK) == 0)
+				rt_obj = "/usr/local/lib/xlang/xllvm_rt.o";
+			else if (access("obj/Debug/xllvm_rt.o", R_OK) == 0)
+				rt_obj = "obj/Debug/xllvm_rt.o";
+			else if (access("bin/Debug/xllvm_rt.o", R_OK) == 0)
+				rt_obj = "bin/Debug/xllvm_rt.o";
+		}
+		else
+		{
+			if (access("obj/Debug/xllvm_rt.o", R_OK) == 0)
+				rt_obj = "obj/Debug/xllvm_rt.o";
+			else if (access("bin/Debug/xllvm_rt.o", R_OK) == 0)
+				rt_obj = "bin/Debug/xllvm_rt.o";
+			else if (access("obj/Release/xllvm_rt.o", R_OK) == 0)
+				rt_obj = "obj/Release/xllvm_rt.o";
+			else if (access("bin/Release/xllvm_rt.o", R_OK) == 0)
+				rt_obj = "bin/Release/xllvm_rt.o";
+			else if (access("/usr/local/lib/xlang/xllvm_rt.o", R_OK) == 0)
+				rt_obj = "/usr/local/lib/xlang/xllvm_rt.o";
+		}
 
+		const char* opt_flags = is_release_build ? "-O2 -s" : "-g -O0";
 		char compile_cmd[1280];
 		if (rt_obj)
-			snprintf(compile_cmd, sizeof(compile_cmd), "clang -O2 -Wno-override-module \"%s\" \"%s\" -lm -o \"%s\"", ll_path, rt_obj, bin_target);
+			snprintf(compile_cmd, sizeof(compile_cmd), "clang %s -Wno-override-module \"%s\" \"%s\" -L. -lpcre -lm -o \"%s\"", opt_flags, ll_path, rt_obj, bin_target);
 		else
-			snprintf(compile_cmd, sizeof(compile_cmd), "clang -O2 -Wno-override-module \"%s\" -lm -o \"%s\"", ll_path, bin_target);
+			snprintf(compile_cmd, sizeof(compile_cmd), "clang %s -Wno-override-module \"%s\" -L. -lpcre -lm -o \"%s\"", opt_flags, ll_path, bin_target);
 		int compile_res = system(compile_cmd);
 		if (compile_res == 0)
 		{
-			printf("Successfully built native binary: %s\n", bin_target);
+			printf("Successfully built native %s binary: %s\n", is_release_build ? "release" : "debug", bin_target);
 		}
 		else
 		{
@@ -979,6 +1027,7 @@ void clean_memory(void)
 		arena_destroy(g_lex_arena);
 		g_lex_arena = NULL;
 	}
+	set_assert_enabled(true);
 }
 
 void get_auto_comp(char* input, char** sugg)

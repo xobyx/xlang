@@ -4,8 +4,12 @@
 #include <string.h>
 #include <ctype.h>
 #include <time.h>
+#include <math.h>
 #include <unistd.h>
+#include <dirent.h>
 #include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <netinet/in.h>
@@ -14,6 +18,7 @@
 #include <netdb.h>
 #include <fcntl.h>
 #include <errno.h>
+#include "pcre.h"
 
 #define MAX_RT_MAPS 1024
 #define MAX_RT_LISTS 1024
@@ -161,6 +166,114 @@ int str_eq(const char* s1, const char* s2)
 	if (s1 == s2) return 1;
 	if (!s1 || !s2) return 0;
 	return strcmp(s1, s2) == 0 ? 1 : 0;
+}
+
+int starts_with(const char* s, const char* prefix)
+{
+	if (!s || !prefix) return 0;
+	size_t len_p = strlen(prefix);
+	return strncmp(s, prefix, len_p) == 0 ? 1 : 0;
+}
+
+int ends_with(const char* s, const char* suffix)
+{
+	if (!s || !suffix) return 0;
+	size_t len_s = strlen(s);
+	size_t len_suf = strlen(suffix);
+	if (len_s < len_suf) return 0;
+	return strcmp(s + (len_s - len_suf), suffix) == 0 ? 1 : 0;
+}
+
+int regex_match(const char* s, const char* pattern)
+{
+	if (!s || !pattern) return 0;
+	const char* err = NULL;
+	int erroff = 0;
+	pcre* re = pcre_compile(pattern, 0, &err, &erroff, NULL);
+	if (!re) return 0;
+	int ovector[30];
+	int rc = pcre_exec(re, NULL, s, (int)strlen(s), 0, 0, ovector, 30);
+	pcre_free(re);
+	return (rc >= 0) ? 1 : 0;
+}
+
+char* regex_find(const char* s, const char* pattern)
+{
+	if (!s || !pattern) return strdup("");
+	const char* err = NULL;
+	int erroff = 0;
+	pcre* re = pcre_compile(pattern, 0, &err, &erroff, NULL);
+	if (!re) return strdup("");
+	int ovector[30];
+	int rc = pcre_exec(re, NULL, s, (int)strlen(s), 0, 0, ovector, 30);
+	if (rc >= 0)
+	{
+		int match_len = ovector[1] - ovector[0];
+		char* res = (char*)malloc(match_len + 1);
+		if (res)
+		{
+			memcpy(res, s + ovector[0], match_len);
+			res[match_len] = '\0';
+			pcre_free(re);
+			return res;
+		}
+	}
+	pcre_free(re);
+	return strdup("");
+}
+
+char* regex_replace(const char* s, const char* pattern, const char* repl)
+{
+	if (!s || !pattern || !repl) return strdup(s ? s : "");
+	const char* err = NULL;
+	int erroff = 0;
+	pcre* re = pcre_compile(pattern, 0, &err, &erroff, NULL);
+	if (!re) return strdup(s);
+
+	int str_len = (int)strlen(s);
+	int ovector[30];
+	int offset = 0;
+	size_t cap = str_len + 64;
+	char* result = (char*)malloc(cap);
+	if (!result) { pcre_free(re); return strdup(s); }
+	int res_len = 0;
+	result[0] = '\0';
+
+	while (offset < str_len)
+	{
+		int rc = pcre_exec(re, NULL, s, str_len, offset, 0, ovector, 30);
+		if (rc < 0)
+		{
+			int rem = str_len - offset;
+			if (res_len + rem + 1 > (int)cap)
+			{
+				cap = res_len + rem + 64;
+				result = (char*)realloc(result, cap);
+			}
+			memcpy(result + res_len, s + offset, rem);
+			res_len += rem;
+			result[res_len] = '\0';
+			break;
+		}
+		int prefix_len = ovector[0] - offset;
+		int repl_len = (int)strlen(repl);
+		if (res_len + prefix_len + repl_len + 1 > (int)cap)
+		{
+			cap = res_len + prefix_len + repl_len + 64;
+			result = (char*)realloc(result, cap);
+		}
+		memcpy(result + res_len, s + offset, prefix_len);
+		res_len += prefix_len;
+		memcpy(result + res_len, repl, repl_len);
+		res_len += repl_len;
+		result[res_len] = '\0';
+
+		offset = ovector[1];
+		if (ovector[0] == ovector[1])
+			offset++;
+	}
+	pcre_free(re);
+	return result;
 }
 
 /* -------------------------------------------------------------------------
@@ -543,6 +656,17 @@ int list_set_int(int id, int index, int val)
 	return 0;
 }
 
+int list_set_float(int id, int index, double val)
+{
+	if (id <= 0 || id >= MAX_RT_LISTS || !g_lists[id].active) return -1;
+	RtList* l = &g_lists[id];
+	if (index < 0 || index >= l->count) return -1;
+	if (l->items[index].val_str) { free(l->items[index].val_str); l->items[index].val_str = NULL; }
+	l->items[index].val_float = val;
+	l->items[index].type = 3;
+	return 0;
+}
+
 int list_remove_at(int id, int index)
 {
 	if (id <= 0 || id >= MAX_RT_LISTS || !g_lists[id].active) return -1;
@@ -697,6 +821,41 @@ int list_free(int id)
 	g_lists[id].capacity = 0;
 	g_lists[id].active = false;
 	return 0;
+}
+
+int str_split(const char* s, const char* delim)
+{
+	int lid = list_new();
+	if (!s) return lid;
+	size_t dlen = delim ? strlen(delim) : 0;
+	if (dlen == 0)
+	{
+		char single[2] = {0, 0};
+		for (const char* p = s; *p != '\0'; p++)
+		{
+			single[0] = *p;
+			list_add(lid, single);
+		}
+		return lid;
+	}
+	const char* cur = s;
+	const char* found = strstr(cur, delim);
+	while (found != NULL)
+	{
+		size_t part_len = (size_t)(found - cur);
+		char* part = (char*)malloc(part_len + 1);
+		if (part)
+		{
+			memcpy(part, cur, part_len);
+			part[part_len] = '\0';
+			list_add(lid, part);
+			free(part);
+		}
+		cur = found + dlen;
+		found = strstr(cur, delim);
+	}
+	list_add(lid, cur);
+	return lid;
 }
 
 /* -------------------------------------------------------------------------
@@ -860,7 +1019,7 @@ __attribute__((weak)) int gc_allocated_bytes(void) { return 0; }
 __attribute__((weak)) int gc_total_objects(void) { return 0; }
 __attribute__((weak)) int gc_enable(void) { return 1; }
 __attribute__((weak)) int gc_disable(void) { return 0; }
-__attribute__((weak)) int gc_set_threshold(int th) { (void)th; return 0; }
+__attribute__((weak)) int gc_set_threshold(int th) { return th; }
 __attribute__((weak)) int gc_dump(void) { return 0; }
 #else
 int gc_collect(void) { return 0; }
@@ -868,6 +1027,696 @@ int gc_allocated_bytes(void) { return 0; }
 int gc_total_objects(void) { return 0; }
 int gc_enable(void) { return 1; }
 int gc_disable(void) { return 0; }
-int gc_set_threshold(int th) { (void)th; return 0; }
+int gc_set_threshold(int th) { return th; }
 int gc_dump(void) { return 0; }
 #endif
+
+/* -------------------------------------------------------------------------
+ * Math Operations
+ * ------------------------------------------------------------------------- */
+double math_sqrt(double x) { return (x >= 0.0) ? sqrt(x) : 0.0; }
+double math_pow(double base, double exp) { return pow(base, exp); }
+double math_abs(double x) { return fabs(x); }
+double math_min(double a, double b) { return fmin(a, b); }
+double math_max(double a, double b) { return fmax(a, b); }
+double math_floor(double x) { return floor(x); }
+double math_ceil(double x) { return ceil(x); }
+double math_round(double x) { return round(x); }
+double math_sin(double x) { return sin(x); }
+double math_cos(double x) { return cos(x); }
+double math_tan(double x) { return tan(x); }
+double math_log(double x) { return (x > 0.0) ? log(x) : 0.0; }
+
+/* -------------------------------------------------------------------------
+ * File Operations
+ * ------------------------------------------------------------------------- */
+#define MAX_RT_FILES 64
+static FILE* s_rt_open_files[MAX_RT_FILES] = {0};
+
+char* file_read_all(const char* path)
+{
+	if (!path || *path == '\0') return strdup("");
+	FILE* f = fopen(path, "rb");
+	if (!f) return strdup("");
+	fseek(f, 0, SEEK_END);
+	long sz = ftell(f);
+	fseek(f, 0, SEEK_SET);
+	if (sz < 0) sz = 0;
+	char* buf = (char*)malloc(sz + 1);
+	if (!buf) { fclose(f); return strdup(""); }
+	size_t n = fread(buf, 1, sz, f);
+	buf[n] = '\0';
+	fclose(f);
+	return buf;
+}
+
+int file_write_all(const char* path, const char* content)
+{
+	if (!path || *path == '\0') return -1;
+	FILE* f = fopen(path, "wb");
+	if (!f) return -1;
+	size_t len = content ? strlen(content) : 0;
+	size_t n = fwrite(content ? content : "", 1, len, f);
+	fclose(f);
+	return (int)n;
+}
+
+int file_append(const char* path, const char* content)
+{
+	if (!path || *path == '\0') return -1;
+	FILE* f = fopen(path, "ab");
+	if (!f) return -1;
+	size_t len = content ? strlen(content) : 0;
+	size_t n = fwrite(content ? content : "", 1, len, f);
+	fclose(f);
+	return (int)n;
+}
+
+int file_exists(const char* path)
+{
+	if (!path || *path == '\0') return 0;
+	FILE* f = fopen(path, "rb");
+	if (f) { fclose(f); return 1; }
+	return 0;
+}
+
+int file_size(const char* path)
+{
+	if (!path || *path == '\0') return -1;
+	FILE* f = fopen(path, "rb");
+	if (!f) return -1;
+	fseek(f, 0, SEEK_END);
+	long sz = ftell(f);
+	fclose(f);
+	return (int)sz;
+}
+
+int file_remove(const char* path)
+{
+	if (!path || *path == '\0') return -1;
+	return remove(path) == 0 ? 0 : -1;
+}
+
+int file_open(const char* path, const char* mode)
+{
+	if (!path || *path == '\0') return -1;
+	FILE* f = fopen(path, mode ? mode : "r");
+	if (!f) return -1;
+	for (int i = 1; i < MAX_RT_FILES; i++)
+	{
+		if (s_rt_open_files[i] == NULL)
+		{
+			s_rt_open_files[i] = f;
+			return i;
+		}
+	}
+	fclose(f);
+	return -1;
+}
+
+char* file_read(int fd, int bytes)
+{
+	if (fd <= 0 || fd >= MAX_RT_FILES || s_rt_open_files[fd] == NULL) return strdup("");
+	if (bytes <= 0) bytes = 4096;
+	if (bytes > 10 * 1024 * 1024) bytes = 10 * 1024 * 1024;
+	char* buf = (char*)malloc(bytes + 1);
+	if (!buf) return strdup("");
+	size_t n = fread(buf, 1, bytes, s_rt_open_files[fd]);
+	buf[n] = '\0';
+	return buf;
+}
+
+int file_write(int fd, const char* data)
+{
+	if (fd <= 0 || fd >= MAX_RT_FILES || s_rt_open_files[fd] == NULL || !data) return -1;
+	size_t len = strlen(data);
+	size_t n = fwrite(data, 1, len, s_rt_open_files[fd]);
+	fflush(s_rt_open_files[fd]);
+	return (int)n;
+}
+
+int file_close(int fd)
+{
+	if (fd <= 0 || fd >= MAX_RT_FILES || s_rt_open_files[fd] == NULL) return -1;
+	int rc = fclose(s_rt_open_files[fd]);
+	s_rt_open_files[fd] = NULL;
+	return rc == 0 ? 0 : -1;
+}
+
+/* -------------------------------------------------------------------------
+ * Directory Operations
+ * ------------------------------------------------------------------------- */
+typedef struct {
+	int id;
+} RtObjWrapper;
+
+void* dir_list(const char* path)
+{
+	int lid = list_new();
+	DIR* d = opendir((path && *path) ? path : ".");
+	if (d)
+	{
+		struct dirent* entry;
+		while ((entry = readdir(d)) != NULL)
+		{
+			if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+				continue;
+			list_add(lid, entry->d_name);
+		}
+		closedir(d);
+	}
+	RtObjWrapper* w = (RtObjWrapper*)malloc(sizeof(RtObjWrapper));
+	if (w) w->id = lid;
+	return w;
+}
+
+int dir_create(const char* path)
+{
+	if (!path || *path == '\0') return -1;
+	return mkdir(path, 0755) == 0 ? 0 : -1;
+}
+
+int dir_exists(const char* path)
+{
+	if (!path || *path == '\0') return 0;
+	struct stat st;
+	if (stat(path, &st) == 0 && S_ISDIR(st.st_mode)) return 1;
+	return 0;
+}
+
+int dir_remove(const char* path)
+{
+	if (!path || *path == '\0') return -1;
+	return rmdir(path) == 0 ? 0 : -1;
+}
+
+/* -------------------------------------------------------------------------
+ * Process Operations
+ * ------------------------------------------------------------------------- */
+typedef struct {
+	char* stdout_str;
+	int exit_code;
+} RtProcResult;
+
+char* proc_capture(const char* cmd)
+{
+	if (!cmd || *cmd == '\0') return strdup("");
+	FILE* fp = popen(cmd, "r");
+	if (!fp) return strdup("");
+	size_t cap = 1024, len = 0;
+	char* buf = (char*)malloc(cap);
+	char chunk[512];
+	while (fgets(chunk, sizeof(chunk), fp) != NULL)
+	{
+		size_t clen = strlen(chunk);
+		if (len + clen + 1 > cap)
+		{
+			cap = (len + clen + 1) * 2;
+			buf = (char*)realloc(buf, cap);
+		}
+		if (buf) { memcpy(buf + len, chunk, clen); len += clen; }
+	}
+	if (buf) buf[len] = '\0';
+	pclose(fp);
+	return buf ? buf : strdup("");
+}
+
+void* proc_run(const char* cmd)
+{
+	if (!cmd || *cmd == '\0')
+	{
+		RtProcResult* r = (RtProcResult*)malloc(sizeof(RtProcResult));
+		if (r) { r->stdout_str = strdup(""); r->exit_code = -1; }
+		return r;
+	}
+	FILE* fp = popen(cmd, "r");
+	if (!fp)
+	{
+		RtProcResult* r = (RtProcResult*)malloc(sizeof(RtProcResult));
+		if (r) { r->stdout_str = strdup(""); r->exit_code = -1; }
+		return r;
+	}
+	size_t cap = 1024, len = 0;
+	char* buf = (char*)malloc(cap);
+	char chunk[512];
+	while (fgets(chunk, sizeof(chunk), fp) != NULL)
+	{
+		size_t clen = strlen(chunk);
+		if (len + clen + 1 > cap)
+		{
+			cap = (len + clen + 1) * 2;
+			buf = (char*)realloc(buf, cap);
+		}
+		if (buf) { memcpy(buf + len, chunk, clen); len += clen; }
+	}
+	if (buf) buf[len] = '\0';
+	int status = pclose(fp);
+	int exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : status;
+
+	RtProcResult* r = (RtProcResult*)malloc(sizeof(RtProcResult));
+	if (r)
+	{
+		r->stdout_str = buf ? buf : strdup("");
+		r->exit_code = exit_code;
+	}
+	return r;
+}
+
+/* -------------------------------------------------------------------------
+ * DateTime Operations
+ * ------------------------------------------------------------------------- */
+int datetime_now(void)
+{
+	return (int)time(NULL);
+}
+
+char* datetime_format(int ts, const char* fmt)
+{
+	time_t t = (ts > 0) ? (time_t)ts : time(NULL);
+	if (!fmt || !*fmt) fmt = "%Y-%m-%d %H:%M:%S";
+	struct tm tm_info;
+	localtime_r(&t, &tm_info);
+	char buf[256];
+	size_t n = strftime(buf, sizeof(buf), fmt, &tm_info);
+	if (n == 0) buf[0] = '\0';
+	return strdup(buf);
+}
+
+int datetime_year(int ts)
+{
+	time_t t = (ts > 0) ? (time_t)ts : time(NULL);
+	struct tm tm_info;
+	localtime_r(&t, &tm_info);
+	return tm_info.tm_year + 1900;
+}
+
+int datetime_month(int ts)
+{
+	time_t t = (ts > 0) ? (time_t)ts : time(NULL);
+	struct tm tm_info;
+	localtime_r(&t, &tm_info);
+	return tm_info.tm_mon + 1;
+}
+
+int datetime_day(int ts)
+{
+	time_t t = (ts > 0) ? (time_t)ts : time(NULL);
+	struct tm tm_info;
+	localtime_r(&t, &tm_info);
+	return tm_info.tm_mday;
+}
+
+int datetime_hour(int ts)
+{
+	time_t t = (ts > 0) ? (time_t)ts : time(NULL);
+	struct tm tm_info;
+	localtime_r(&t, &tm_info);
+	return tm_info.tm_hour;
+}
+
+int datetime_minute(int ts)
+{
+	time_t t = (ts > 0) ? (time_t)ts : time(NULL);
+	struct tm tm_info;
+	localtime_r(&t, &tm_info);
+	return tm_info.tm_min;
+}
+
+int datetime_second(int ts)
+{
+	time_t t = (ts > 0) ? (time_t)ts : time(NULL);
+	struct tm tm_info;
+	localtime_r(&t, &tm_info);
+	return tm_info.tm_sec;
+}
+
+int datetime_clock_ms(void)
+{
+	return clock_ms();
+}
+
+/* -------------------------------------------------------------------------
+ * JSON Operations
+ * ------------------------------------------------------------------------- */
+typedef struct {
+	const char* src;
+	size_t pos;
+	size_t len;
+	bool has_error;
+} RtJsonParser;
+
+static void rt_json_skip_ws(RtJsonParser* p)
+{
+	while (p->pos < p->len && (p->src[p->pos] == ' ' || p->src[p->pos] == '\t' ||
+	                           p->src[p->pos] == '\n' || p->src[p->pos] == '\r'))
+		p->pos++;
+}
+
+static char rt_json_peek(RtJsonParser* p)
+{
+	rt_json_skip_ws(p);
+	return (p->pos < p->len) ? p->src[p->pos] : '\0';
+}
+
+static char rt_json_next(RtJsonParser* p)
+{
+	rt_json_skip_ws(p);
+	return (p->pos < p->len) ? p->src[p->pos++] : '\0';
+}
+
+static char* rt_json_parse_string(RtJsonParser* p)
+{
+	rt_json_skip_ws(p);
+	if (p->pos >= p->len || p->src[p->pos] != '"') { p->has_error = true; return NULL; }
+	p->pos++;
+	size_t cap = 64, len = 0;
+	char* buf = (char*)malloc(cap);
+	while (p->pos < p->len)
+	{
+		char c = p->src[p->pos++];
+		if (c == '"') { buf[len] = '\0'; return buf; }
+		if (c == '\\')
+		{
+			if (p->pos >= p->len) { p->has_error = true; free(buf); return NULL; }
+			c = p->src[p->pos++];
+			if (c == 'n') c = '\n';
+			else if (c == 't') c = '\t';
+			else if (c == 'r') c = '\r';
+		}
+		if (len + 2 > cap) { cap *= 2; buf = (char*)realloc(buf, cap); }
+		buf[len++] = c;
+	}
+	p->has_error = true;
+	free(buf);
+	return NULL;
+}
+
+static int rt_json_parse_value(RtJsonParser* p, int map_id, const char* key, int list_id);
+
+static int rt_json_parse_object(RtJsonParser* p)
+{
+	rt_json_skip_ws(p);
+	if (p->pos >= p->len || p->src[p->pos] != '{') { p->has_error = true; return -1; }
+	p->pos++;
+	int mid = map_new();
+	rt_json_skip_ws(p);
+	if (p->pos < p->len && p->src[p->pos] == '}') { p->pos++; return mid; }
+
+	while (p->pos < p->len)
+	{
+		char* key = rt_json_parse_string(p);
+		if (!key) { p->has_error = true; return mid; }
+		rt_json_skip_ws(p);
+		if (rt_json_next(p) != ':') { free(key); p->has_error = true; return mid; }
+		rt_json_parse_value(p, mid, key, -1);
+		free(key);
+		rt_json_skip_ws(p);
+		char c = rt_json_peek(p);
+		if (c == '}') { p->pos++; break; }
+		if (c == ',') { p->pos++; continue; }
+		p->has_error = true;
+		break;
+	}
+	return mid;
+}
+
+static int rt_json_parse_array(RtJsonParser* p)
+{
+	rt_json_skip_ws(p);
+	if (p->pos >= p->len || p->src[p->pos] != '[') { p->has_error = true; return -1; }
+	p->pos++;
+	int lid = list_new();
+	rt_json_skip_ws(p);
+	if (p->pos < p->len && p->src[p->pos] == ']') { p->pos++; return lid; }
+
+	while (p->pos < p->len)
+	{
+		rt_json_parse_value(p, -1, NULL, lid);
+		rt_json_skip_ws(p);
+		char c = rt_json_peek(p);
+		if (c == ']') { p->pos++; break; }
+		if (c == ',') { p->pos++; continue; }
+		p->has_error = true;
+		break;
+	}
+	return lid;
+}
+
+static int rt_json_parse_value(RtJsonParser* p, int map_id, const char* key, int list_id)
+{
+	rt_json_skip_ws(p);
+	char c = rt_json_peek(p);
+	if (c == '"')
+	{
+		char* str = rt_json_parse_string(p);
+		if (str)
+		{
+			if (map_id >= 0 && key) map_put(map_id, key, str);
+			else if (list_id >= 0) list_add(list_id, str);
+			free(str);
+		}
+		return 1;
+	}
+	if (c == '{')
+	{
+		int sub_m = rt_json_parse_object(p);
+		if (map_id >= 0 && key) map_put_int(map_id, key, sub_m);
+		else if (list_id >= 0) list_add_int(list_id, sub_m);
+		return 1;
+	}
+	if (c == '[')
+	{
+		int sub_l = rt_json_parse_array(p);
+		if (map_id >= 0 && key) map_put_int(map_id, key, sub_l);
+		else if (list_id >= 0) list_add_int(list_id, sub_l);
+		return 1;
+	}
+	if (c == 't' || c == 'f')
+	{
+		bool is_true = (c == 't');
+		p->pos += is_true ? 4 : 5;
+		if (map_id >= 0 && key) map_put(map_id, key, is_true ? "true" : "false");
+		else if (list_id >= 0) list_add_int(list_id, is_true ? 1 : 0);
+		return 1;
+	}
+	if (c == 'n')
+	{
+		p->pos += 4;
+		if (map_id >= 0 && key) map_put(map_id, key, "");
+		else if (list_id >= 0) list_add(list_id, "");
+		return 1;
+	}
+	if (isdigit((unsigned char)c) || c == '-')
+	{
+		const char* start = p->src + p->pos;
+		bool is_flt = false;
+		while (p->pos < p->len && (isdigit((unsigned char)p->src[p->pos]) || p->src[p->pos] == '.' || p->src[p->pos] == '-' || p->src[p->pos] == 'e' || p->src[p->pos] == 'E' || p->src[p->pos] == '+'))
+		{
+			if (p->src[p->pos] == '.') is_flt = true;
+			p->pos++;
+		}
+		char nbuf[64] = {0};
+		size_t nlen = (p->src + p->pos) - start;
+		if (nlen < sizeof(nbuf)) strncpy(nbuf, start, nlen);
+		if (is_flt)
+		{
+			double fv = atof(nbuf);
+			if (map_id >= 0 && key) { map_put_float(map_id, key, fv); map_put(map_id, key, nbuf); }
+			else if (list_id >= 0) list_add_float(list_id, fv);
+		}
+		else
+		{
+			int iv = atoi(nbuf);
+			if (map_id >= 0 && key) { map_put_int(map_id, key, iv); map_put(map_id, key, nbuf); }
+			else if (list_id >= 0) list_add_int(list_id, iv);
+		}
+		return 1;
+	}
+	p->has_error = true;
+	return 0;
+}
+
+int json_is_valid(const char* str)
+{
+	if (!str || *str == '\0') return 0;
+	RtJsonParser p;
+	p.src = str;
+	p.pos = 0;
+	p.len = strlen(str);
+	p.has_error = false;
+	rt_json_skip_ws(&p);
+	char c = rt_json_peek(&p);
+	if (c == '{')
+	{
+		rt_json_parse_object(&p);
+		rt_json_skip_ws(&p);
+		return (!p.has_error && p.pos == p.len) ? 1 : 0;
+	}
+	else if (c == '[')
+	{
+		rt_json_parse_array(&p);
+		rt_json_skip_ws(&p);
+		return (!p.has_error && p.pos == p.len) ? 1 : 0;
+	}
+	return 0;
+}
+
+void* json_parse(const char* str)
+{
+	if (!str || *str == '\0') return NULL;
+	RtJsonParser p;
+	p.src = str;
+	p.pos = 0;
+	p.len = strlen(str);
+	p.has_error = false;
+	rt_json_skip_ws(&p);
+	int mid = 0;
+	if (rt_json_peek(&p) == '{')
+		mid = rt_json_parse_object(&p);
+	else if (rt_json_peek(&p) == '[')
+		mid = rt_json_parse_array(&p);
+	RtObjWrapper* w = (RtObjWrapper*)malloc(sizeof(RtObjWrapper));
+	if (w) w->id = mid;
+	return w;
+}
+
+char* json_stringify(void* m)
+{
+	if (!m) return strdup("{}");
+	int mid = ((uintptr_t)m < MAX_RT_MAPS) ? (int)(uintptr_t)m : *(int*)m;
+	if (mid <= 0 || mid >= MAX_RT_MAPS || !g_maps[mid].active) return strdup("{}");
+	RtMap* map = &g_maps[mid];
+
+	size_t cap = 256;
+	char* buf = (char*)malloc(cap);
+	if (!buf) return strdup("{}");
+	strcpy(buf, "{");
+	size_t len = 1;
+
+	for (int i = 0; i < map->count; i++)
+	{
+		char entry_buf[512];
+		if (map->entries[i].type == 2)
+			snprintf(entry_buf, sizeof(entry_buf), "\"%s\": %d", map->entries[i].key, map->entries[i].val_int);
+		else if (map->entries[i].type == 3)
+			snprintf(entry_buf, sizeof(entry_buf), "\"%s\": %g", map->entries[i].key, map->entries[i].val_float);
+		else
+			snprintf(entry_buf, sizeof(entry_buf), "\"%s\": \"%s\"", map->entries[i].key, map->entries[i].val_str ? map->entries[i].val_str : "");
+
+		size_t elen = strlen(entry_buf);
+		if (len + elen + 4 > cap)
+		{
+			cap = (len + elen + 4) * 2;
+			buf = (char*)realloc(buf, cap);
+		}
+		if (i > 0) { strcat(buf, ", "); len += 2; }
+		strcat(buf, entry_buf);
+		len += elen;
+	}
+	strcat(buf, "}");
+	return buf;
+}
+
+/* -------------------------------------------------------------------------
+ * HTTP Operations
+ * ------------------------------------------------------------------------- */
+char* http_get(const char* url)
+{
+	if (!url || *url == '\0') return strdup("");
+	char host[256] = {0};
+	char path[512] = {0};
+	int port = 80;
+
+	const char* p = url;
+	if (strncmp(p, "http://", 7) == 0) p += 7;
+	else if (strncmp(p, "https://", 8) == 0) { p += 8; port = 443; }
+
+	const char* slash = strchr(p, '/');
+	const char* colon = strchr(p, ':');
+	if (colon && (!slash || colon < slash))
+	{
+		size_t hlen = (size_t)(colon - p);
+		if (hlen >= sizeof(host)) hlen = sizeof(host) - 1;
+		strncpy(host, p, hlen);
+		port = atoi(colon + 1);
+		if (slash) strncpy(path, slash, sizeof(path) - 1);
+		else strcpy(path, "/");
+	}
+	else if (slash)
+	{
+		size_t hlen = (size_t)(slash - p);
+		if (hlen >= sizeof(host)) hlen = sizeof(host) - 1;
+		strncpy(host, p, hlen);
+		strncpy(path, slash, sizeof(path) - 1);
+	}
+	else
+	{
+		strncpy(host, p, sizeof(host) - 1);
+		strcpy(path, "/");
+	}
+
+	int fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (fd < 0) return strdup("");
+
+	struct timeval tv;
+	tv.tv_sec = 5;
+	tv.tv_usec = 0;
+	setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
+	setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (const char*)&tv, sizeof(tv));
+
+	char port_str[16];
+	snprintf(port_str, sizeof(port_str), "%d", port);
+	struct addrinfo hints, *res = NULL;
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+
+	if (getaddrinfo(host, port_str, &hints, &res) != 0 || !res)
+	{
+		close(fd);
+		return strdup("");
+	}
+
+	int connected = 0;
+	for (struct addrinfo* cur = res; cur != NULL; cur = cur->ai_next)
+	{
+		if (connect(fd, cur->ai_addr, cur->ai_addrlen) == 0)
+		{
+			connected = 1;
+			break;
+		}
+	}
+	freeaddrinfo(res);
+	if (!connected)
+	{
+		close(fd);
+		return strdup("");
+	}
+
+	char req[1024];
+	snprintf(req, sizeof(req),
+	         "GET %s HTTP/1.1\r\n"
+	         "Host: %s\r\n"
+	         "User-Agent: xlang/2.0\r\n"
+	         "Connection: close\r\n"
+	         "Accept: */*\r\n\r\n",
+	         path, host);
+	send(fd, req, strlen(req), 0);
+
+	size_t cap = 4096, total = 0;
+	char* body = (char*)malloc(cap);
+	char chunk[1024];
+	ssize_t n;
+	while ((n = recv(fd, chunk, sizeof(chunk), 0)) > 0)
+	{
+		if (total + (size_t)n + 1 > cap)
+		{
+			cap = (total + (size_t)n + 1) * 2;
+			body = (char*)realloc(body, cap);
+		}
+		if (body) { memcpy(body + total, chunk, (size_t)n); total += (size_t)n; }
+	}
+	close(fd);
+	if (body) body[total] = '\0';
+	return body ? body : strdup("");
+}

@@ -1,0 +1,43 @@
+// Test Vectorcall Native Protocol, VM-Aware Builtins & Reflection
+
+// 1. Basic Assert & Print
+assert(1 == 1, "assert truthy check");
+assert(true, "assert boolean true");
+
+print("Testing Vectorcall print:", 42, "hello", true);
+print_f("Formatted print: %d %s\n", 100, "items");
+
+// 2. Reflection: typeof
+class Point {
+    int x;
+    int y;
+}
+
+Point pt = new Point();
+pt.x = 10;
+pt.y = 20;
+
+assert(typeof(42) == "int", "typeof int");
+assert(typeof(3.14) == "float", "typeof float");
+assert(typeof("hello") == "string", "typeof string");
+assert(typeof(true) == "bool", "typeof bool");
+assert(typeof(pt) == "Point", "typeof instance");
+
+// 3. Reflection: has_field, get_field, set_field
+assert(has_field(pt, "x") == true, "has_field x should be true");
+assert(has_field(pt, "y") == true, "has_field y should be true");
+assert(has_field(pt, "z") == false, "has_field z should be false");
+
+assert(get_field(pt, "x") == 10, "get_field x should be 10");
+assert(get_field(pt, "y") == 20, "get_field y should be 20");
+
+set_field(pt, "x", 99);
+assert(pt.x == 99, "direct field after set_field");
+assert(get_field(pt, "x") == 99, "get_field after set_field");
+
+// 4. eval() Dynamic Evaluation
+eval("print(\"Inside eval dynamic block!\")");
+eval("pt.y = 200;");
+assert(pt.y == 200, "eval modified caller instance field");
+
+print("All Vectorcall & Reflection tests passed successfully!");

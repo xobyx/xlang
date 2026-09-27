@@ -93,6 +93,10 @@ void xreplace(fcall* y);
 void str(fcall* d);
 void time_x(fcall* d);
 
+/* Assertion Configuration */
+void set_assert_enabled(bool enabled);
+bool is_assert_enabled(void);
+
 /* Deprecated Compatibility Aliases */
 static inline var* get_globle_var_by_name(char* name) { return get_global_var_by_name(name); }
 static inline var* fget_var_by_name_fc(char* name, fcall* y) { return get_function_var_by_name(name, y); }
