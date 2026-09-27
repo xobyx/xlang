@@ -1884,6 +1884,79 @@ static XVmResult xvm_run_loop(XVm* vm, XIrChunk* chunk)
 						break;
 					}
 				}
+				else if (receiver.type == VAL_INT)
+				{
+					if (strcmp(method_name, "add") == 0 && arg_count >= 1)
+					{
+						int64_t val = (args[0].type == VAL_INT) ? args[0].as.ival :
+						              (args[0].type == VAL_FLOAT) ? (int64_t)args[0].as.fval : 0;
+						xvm_push(vm, xval_int(receiver.as.ival + val));
+						break;
+					}
+					else if (strcmp(method_name, "to_str") == 0 || strcmp(method_name, "to_string") == 0)
+					{
+						char buf[32];
+						snprintf(buf, sizeof(buf), "%" PRId64, receiver.as.ival);
+						xvm_push(vm, xval_str(buf));
+						break;
+					}
+
+					func_deftion* int_fn = NULL;
+					for (int fi = 0; fi < T_INT->d_function_size; fi++)
+					{
+						if (T_INT->d_functions[fi].func_name != NULL &&
+						    strcmp(T_INT->d_functions[fi].func_name, method_name) == 0)
+						{
+							int_fn = &T_INT->d_functions[fi];
+							break;
+						}
+					}
+					if (int_fn != NULL && int_fn->func_code != NULL)
+					{
+						fcall fc;
+						memset(&fc, 0, sizeof(fcall));
+						fc.deftion = int_fn;
+						fc.parm_count_c = arg_count;
+
+						var ctx;
+						memset(&ctx, 0, sizeof(var));
+						ctx.type_define = T_INT;
+						int ival = (int)receiver.as.ival;
+						ctx.value_int = &ival;
+						ctx.values = &ival;
+						fc.context = &ctx;
+
+						for (int i = 0; i < arg_count; i++)
+						{
+							xvalue_to_var(args[i], &fc.func_parmeters[i]);
+						}
+
+						int_fn->func_code(&fc);
+
+						if (fc._return.type_define != NULL)
+							xvm_push(vm, var_to_xvalue(&fc._return));
+						else
+							xvm_push(vm, xval_null());
+						break;
+					}
+				}
+				else if (receiver.type == VAL_FLOAT)
+				{
+					if (strcmp(method_name, "add") == 0 && arg_count >= 1)
+					{
+						double val = (args[0].type == VAL_FLOAT) ? args[0].as.fval :
+						             (args[0].type == VAL_INT) ? (double)args[0].as.ival : 0.0;
+						xvm_push(vm, xval_float(receiver.as.fval + val));
+						break;
+					}
+					else if (strcmp(method_name, "to_str") == 0 || strcmp(method_name, "to_string") == 0)
+					{
+						char buf[32];
+						snprintf(buf, sizeof(buf), "%g", receiver.as.fval);
+						xvm_push(vm, xval_str(buf));
+						break;
+					}
+				}
 
 				xvm_push(vm, xval_null());
 				break;

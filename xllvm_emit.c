@@ -1410,6 +1410,19 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 					return val;
 				}
 			}
+			else if (strcmp(obj.type, "i32") == 0)
+			{
+				if (strcmp(mname, "add") == 0 && argc >= 1)
+				{
+					LLVMValue rhs = emit_expr(e, expr->as.method_call.args[0]);
+					rhs = coerce_value(e, rhs, "i32");
+					int t = new_temp_id(e);
+					snprintf(val.repr, sizeof(val.repr), "%%t%d", t);
+					strcpy(val.type, "i32");
+					buf_emit(e, "  %s = add nsw i32 %s, %s\n", val.repr, obj.repr, rhs.repr);
+					return val;
+				}
+			}
 
 			char cname[64] = {0};
 			if (strncmp(obj.type, "%struct.", 8) == 0)

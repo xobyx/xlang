@@ -28,10 +28,14 @@ type_stack simple_type_stack = {.top = T_FUNC, .root = T_LONG, .size = 10};
 
 void int_add(fcall* fcall)
 {
-	if (fcall->func_parmeters[0].type_define == T_INT)
-	{
-		fcall->_return.value_int = new_int(1, *fcall->context->value_int + *fcall->func_parmeters[0].value_int);
-	}
+	if (fcall == NULL || fcall->context == NULL || fcall->context->value_int == NULL) return;
+	int val = 0;
+	if (fcall->parm_count_c >= 1 && fcall->func_parmeters[0].value_int != NULL)
+		val = *fcall->func_parmeters[0].value_int;
+	fcall->_return.value_int = new_int(1, *fcall->context->value_int + val);
+	fcall->_return.values = fcall->_return.value_int;
+	fcall->_return.type_define = T_INT;
+	fcall->_return.size = 1;
 }
 
 void xassert(fcall* fcall)
