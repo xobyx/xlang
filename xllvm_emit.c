@@ -1767,6 +1767,12 @@ static void emit_stmt(XLLVMEmitter* e, const AstStmt* stmt)
 			{
 				if (strcmp(e->current_func_ret_type, "void") == 0)
 					buf_emit(e, "  ret void\n");
+				else if (strcmp(e->current_func_ret_type, "double") == 0)
+					buf_emit(e, "  ret double 0.0\n");
+				else if (strcmp(e->current_func_ret_type, "i1") == 0)
+					buf_emit(e, "  ret i1 false\n");
+				else if (strchr(e->current_func_ret_type, '*') != NULL)
+					buf_emit(e, "  ret %s null\n", e->current_func_ret_type);
 				else
 					buf_emit(e, "  ret %s 0\n", e->current_func_ret_type);
 			}
@@ -1890,6 +1896,10 @@ static void emit_function(XLLVMEmitter* e, const AstStmt* fn_stmt, const char* c
 {
 	const char* fn_name = fn_stmt->as.func_decl.name;
 	const char* ret_type_name = fn_stmt->as.func_decl.return_type ? fn_stmt->as.func_decl.return_type : "void";
+	if (class_prefix != NULL && strcmp(fn_name, class_prefix) == 0)
+	{
+		ret_type_name = "void";
+	}
 	const char* lret = xlang_type_to_llvm(e, ret_type_name);
 	snprintf(e->current_func_ret_type, sizeof(e->current_func_ret_type), "%s", lret);
 
@@ -1950,6 +1960,10 @@ static void emit_function(XLLVMEmitter* e, const AstStmt* fn_stmt, const char* c
 			buf_emit(e, "  ret void\n");
 		else if (strcmp(lret, "double") == 0)
 			buf_emit(e, "  ret double 0.0\n");
+		else if (strcmp(lret, "i1") == 0)
+			buf_emit(e, "  ret i1 false\n");
+		else if (strchr(lret, '*') != NULL)
+			buf_emit(e, "  ret %s null\n", lret);
 		else
 			buf_emit(e, "  ret %s 0\n", lret);
 	}

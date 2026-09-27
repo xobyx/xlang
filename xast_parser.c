@@ -1034,7 +1034,8 @@ static AstStmt* parse_statement(AstArena* arena, token_stream_t* s)
 
 				token_stream_skip_newlines(s);
 				AstStmt* body = parse_block(arena, s);
-				return ast_stmt_func_decl(arena, decl_name, type_name, params, param_count, body, is_static, s_current_class_name, line, col);
+				const char* ret_type = (s_current_class_name != NULL && strcmp(decl_name, s_current_class_name) == 0) ? "void" : type_name;
+				return ast_stmt_func_decl(arena, decl_name, ret_type, params, param_count, body, is_static, s_current_class_name, line, col);
 			}
 			else
 			{
