@@ -17,8 +17,9 @@ void _echo(fcall* func_call)
 
 void echo_var(var variable, int indent_level)
 {
+	if (indent_level > 4) return;
 	print_indent(indent_level);
-	printf("name:%s\n", variable.name ? variable.name : "(null)");
+	printf("name:%s\n", variable.name ? variable.name : "(value)");
 	print_indent(indent_level);
 	printf("size:%d\n", variable.size);
 
@@ -61,14 +62,15 @@ void echo_var(var variable, int indent_level)
 			printf("}\n");
 			break;
 		default:
-			printf("unimplemented %d %s", __LINE__, __FILE__);
+			print_indent(indent_level);
+			printf("value %s : [object id=%d]", variable.type_define->type_name ? variable.type_define->type_name : "object", variable.value_int ? *variable.value_int : 0);
 			break;
 		}
 	}
 	print_indent(indent_level);
 	printf(", addr = {{%p}} , {{size = %d}} \n", variable.values, variable.size);
 
-	if (variable.type_define != NULL)
+	if (variable.type_define != NULL && indent_level <= 2)
 	{
 		print_indent(indent_level);
 		printf("type define : \n");
@@ -99,19 +101,13 @@ void echo_func_def(func_deftion func_def, int indent_level)
 		printf("{\n");
 		print_indent(inner_level);
 		printf("parm index :%d , name : %s\n", i, func_def.start_func_parameters_name[i]);
+		print_indent(inner_level);
 		if (func_def.start_func_parameters[i] != NULL)
 		{
-			print_indent(inner_level);
-			printf("parm type :\n");
-			print_indent(inner_level);
-			printf("{\n");
-			echo_type_def(*func_def.start_func_parameters[i], indent_level + 3);
-			print_indent(inner_level);
-			printf("}\n");
+			printf("parm type : %s\n", func_def.start_func_parameters[i]->type_name ? func_def.start_func_parameters[i]->type_name : "(null)");
 		}
 		else
 		{
-			print_indent(inner_level);
 			printf("typedef: ANY TYPE\n");
 		}
 		print_indent(next_level);
@@ -123,46 +119,47 @@ void echo_func_def(func_deftion func_def, int indent_level)
 	printf("function code: %p \n", func_def.func_code);
 
 	print_indent(indent_level);
-	printf("return type : \n");
-	print_indent(indent_level);
-	printf("{\n");
-	if (func_def.return_type != NULL)
-		echo_type_def(*func_def.return_type, indent_level + 1);
-	print_indent(indent_level);
-	printf("}\n");
+	printf("return type : %s\n", (func_def.return_type && func_def.return_type->type_name) ? func_def.return_type->type_name : "(void)");
 }
 
 void echo_type_def(type_def type_definition, int indent_level)
 {
+	if (indent_level > 4) return;
 	print_indent(indent_level);
 	printf("type name : %s \n", type_definition.type_name ? type_definition.type_name : "(null)");
 	print_indent(indent_level);
 	printf("type id : %d \n", type_definition.type_id);
 	print_indent(indent_level);
 	printf("props count : %d\n", type_definition.property_count);
-	print_indent(indent_level);
-	printf("props :\n");
-	print_indent(indent_level);
-	printf("{\n");
-	for (int i = 0; i < type_definition.property_count; i++)
+	if (type_definition.property_count > 0 && indent_level <= 2)
 	{
-		echo_var(type_definition.properties[i], indent_level + 1);
+		print_indent(indent_level);
+		printf("props :\n");
+		print_indent(indent_level);
+		printf("{\n");
+		for (int i = 0; i < type_definition.property_count; i++)
+		{
+			echo_var(type_definition.properties[i], indent_level + 1);
+		}
+		print_indent(indent_level);
+		printf("}\n");
 	}
-	print_indent(indent_level);
-	printf("}\n");
 
 	print_indent(indent_level);
 	printf("function count : %d\n", type_definition.function_count);
-	print_indent(indent_level);
-	printf("functions : \n");
-	print_indent(indent_level);
-	printf("{\n");
-	for (int i = 0; i < type_definition.function_count; i++)
+	if (type_definition.function_count > 0 && indent_level <= 2)
 	{
-		echo_func_def(type_definition.d_functions[i], indent_level + 1);
+		print_indent(indent_level);
+		printf("functions : \n");
+		print_indent(indent_level);
+		printf("{\n");
+		for (int i = 0; i < type_definition.function_count; i++)
+		{
+			echo_func_def(type_definition.d_functions[i], indent_level + 1);
+		}
+		print_indent(indent_level);
+		printf("}\n");
 	}
-	print_indent(indent_level);
-	printf("}\n");
 }
 
 void echo_type_instance(type_instance* instance, int indent_level)
