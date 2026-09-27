@@ -20,41 +20,8 @@
 #include "xjson.h"
 #include "ximport.h"
 #include "xgc.h"
-#include "compile.h"
-#include "parse.h"
-
-void step(node** nod)
-{
-	if (nod != NULL && *nod != NULL && (*nod)->type_ != endl)
-		*nod = (*nod)->next;
-}
-
-bool eat(node** nod, enum node_type_enum next, bool must)
-{
-	if (nod == NULL || *nod == NULL || (*nod)->next == NULL)
-	{
-		if (must)
-		{
-			printf("Error : missing in line %d - c-%s:%s:%d\n", *nod ? (*nod)->line : 0, __FILE__, __func__, __LINE__);
-			exit(1);
-		}
-		return false;
-	}
-	node* n = (*nod)->next;
-
-	if (must && n->type_ != next)
-	{
-		printf("Error : missing in line %d - c-%s:%s:%d\n", (*nod)->line, __FILE__, __func__, __LINE__);
-		exit(1);
-	}
-
-	if (n->type_ == next)
-	{
-		*nod = n;
-		return true;
-	}
-	return false;
-}
+#include "xir_compiler.h"
+#include "xvm.h"
 
 void len(fcall* y);
 type_stack simple_type_stack = {.top = T_FUNC, .root = T_LONG, .size = 10};
@@ -158,93 +125,93 @@ type_def SIMPLE_TYPE[] = {
 			{
 				.start_func_parmeters = {0}, .func_code = &len, .func_name = "len", .function_type = f_main,
 				.access = PUBLIC,
-				.return_type = T_INT, .ref = 0, .stack_next = T_STRING->d_functions + 1, .start_parm_count = 1
+				.return_type = T_INT, .stack_next = T_STRING->d_functions + 1, .start_parm_count = 1
 			},
 			{
 				.start_func_parmeters = {T_STRING}, .func_code = &xeql, .func_name = "eql", .function_type = f_main,
 				.access = PUBLIC,
-				.return_type = T_BOOL, .ref = 0, .stack_next = T_STRING->d_functions + 2, .start_parm_count = 1
+				.return_type = T_BOOL, .stack_next = T_STRING->d_functions + 2, .start_parm_count = 1
 			},
 			{
 				.start_func_parmeters = {T_ANY,T_ANY}, .func_code = &xreplace, .func_name = "replace",
 				.function_type = f_main,
 				.access = PUBLIC,
-				.return_type = T_STRING, .ref = 0, .stack_next = T_STRING->d_functions + 3, .start_parm_count = 1
+				.return_type = T_STRING, .stack_next = T_STRING->d_functions + 3, .start_parm_count = 1
 			},
 			{
 				.start_func_parmeters = {T_INT, T_INT}, .func_code = &x_substr, .func_name = "substr",
 				.function_type = f_main, .access = PUBLIC,
-				.return_type = T_STRING, .ref = 0, .stack_next = T_STRING->d_functions + 4, .start_parm_count = 2
+				.return_type = T_STRING, .stack_next = T_STRING->d_functions + 4, .start_parm_count = 2
 			},
 			{
 				.start_func_parmeters = {T_STRING}, .func_code = &x_index_of, .func_name = "index_of",
 				.function_type = f_main, .access = PUBLIC,
-				.return_type = T_INT, .ref = 0, .stack_next = T_STRING->d_functions + 5, .start_parm_count = 1
+				.return_type = T_INT, .stack_next = T_STRING->d_functions + 5, .start_parm_count = 1
 			},
 			{
 				.start_func_parmeters = {T_STRING}, .func_code = &x_index_of, .func_name = "find",
 				.function_type = f_main, .access = PUBLIC,
-				.return_type = T_INT, .ref = 0, .stack_next = T_STRING->d_functions + 6, .start_parm_count = 1
+				.return_type = T_INT, .stack_next = T_STRING->d_functions + 6, .start_parm_count = 1
 			},
 			{
 				.start_func_parmeters = {0}, .func_code = &x_trim, .func_name = "trim",
 				.function_type = f_main, .access = PUBLIC,
-				.return_type = T_STRING, .ref = 0, .stack_next = T_STRING->d_functions + 7, .start_parm_count = 0
+				.return_type = T_STRING, .stack_next = T_STRING->d_functions + 7, .start_parm_count = 0
 			},
 			{
 				.start_func_parmeters = {0}, .func_code = &x_to_lower, .func_name = "to_lower",
 				.function_type = f_main, .access = PUBLIC,
-				.return_type = T_STRING, .ref = 0, .stack_next = T_STRING->d_functions + 8, .start_parm_count = 0
+				.return_type = T_STRING, .stack_next = T_STRING->d_functions + 8, .start_parm_count = 0
 			},
 			{
 				.start_func_parmeters = {0}, .func_code = &x_to_lower, .func_name = "lower",
 				.function_type = f_main, .access = PUBLIC,
-				.return_type = T_STRING, .ref = 0, .stack_next = T_STRING->d_functions + 9, .start_parm_count = 0
+				.return_type = T_STRING, .stack_next = T_STRING->d_functions + 9, .start_parm_count = 0
 			},
 			{
 				.start_func_parmeters = {0}, .func_code = &x_to_upper, .func_name = "to_upper",
 				.function_type = f_main, .access = PUBLIC,
-				.return_type = T_STRING, .ref = 0, .stack_next = T_STRING->d_functions + 10, .start_parm_count = 0
+				.return_type = T_STRING, .stack_next = T_STRING->d_functions + 10, .start_parm_count = 0
 			},
 			{
 				.start_func_parmeters = {0}, .func_code = &x_to_upper, .func_name = "upper",
 				.function_type = f_main, .access = PUBLIC,
-				.return_type = T_STRING, .ref = 0, .stack_next = T_STRING->d_functions + 11, .start_parm_count = 0
+				.return_type = T_STRING, .stack_next = T_STRING->d_functions + 11, .start_parm_count = 0
 			},
 			{
 				.start_func_parmeters = {T_STRING}, .func_code = &x_starts_with, .func_name = "starts_with",
 				.function_type = f_main, .access = PUBLIC,
-				.return_type = T_INT, .ref = 0, .stack_next = T_STRING->d_functions + 12, .start_parm_count = 1
+				.return_type = T_INT, .stack_next = T_STRING->d_functions + 12, .start_parm_count = 1
 			},
 			{
 				.start_func_parmeters = {T_STRING}, .func_code = &x_ends_with, .func_name = "ends_with",
 				.function_type = f_main, .access = PUBLIC,
-				.return_type = T_INT, .ref = 0, .stack_next = T_STRING->d_functions + 13, .start_parm_count = 1
+				.return_type = T_INT, .stack_next = T_STRING->d_functions + 13, .start_parm_count = 1
 			},
 			{
 				.start_func_parmeters = {T_STRING}, .func_code = &x_regex_match, .func_name = "regex_match",
 				.function_type = f_main, .access = PUBLIC,
-				.return_type = T_INT, .ref = 0, .stack_next = T_STRING->d_functions + 14, .start_parm_count = 1
+				.return_type = T_INT, .stack_next = T_STRING->d_functions + 14, .start_parm_count = 1
 			},
 			{
 				.start_func_parmeters = {T_STRING}, .func_code = &x_regex_match, .func_name = "match",
 				.function_type = f_main, .access = PUBLIC,
-				.return_type = T_INT, .ref = 0, .stack_next = T_STRING->d_functions + 15, .start_parm_count = 1
+				.return_type = T_INT, .stack_next = T_STRING->d_functions + 15, .start_parm_count = 1
 			},
 			{
 				.start_func_parmeters = {T_STRING}, .func_code = &x_regex_find, .func_name = "regex_find",
 				.function_type = f_main, .access = PUBLIC,
-				.return_type = T_STRING, .ref = 0, .stack_next = T_STRING->d_functions + 16, .start_parm_count = 1
+				.return_type = T_STRING, .stack_next = T_STRING->d_functions + 16, .start_parm_count = 1
 			},
 			{
 				.start_func_parmeters = {T_STRING, T_STRING}, .func_code = &x_regex_replace, .func_name = "regex_replace",
 				.function_type = f_main, .access = PUBLIC,
-				.return_type = T_STRING, .ref = 0, .stack_next = T_STRING->d_functions + 17, .start_parm_count = 2
+				.return_type = T_STRING, .stack_next = T_STRING->d_functions + 17, .start_parm_count = 2
 			},
 			{
 				.start_func_parmeters = {T_STRING}, .func_code = &x_string_split, .func_name = "split",
 				.function_type = f_main, .access = PUBLIC,
-				.return_type = T_INT, .ref = 0, .stack_next = 0, .start_parm_count = 1
+				.return_type = T_INT, .stack_next = 0, .start_parm_count = 1
 			}
 		},
 		.d_function_size = 18, .base = 0,
@@ -258,7 +225,7 @@ type_def SIMPLE_TYPE[] = {
 			{
 				.start_func_parmeters = {T_ANY}, .func_code = &int_add, .func_name = "add",
 				.function_type = f_main, .access = PUBLIC, .start_parm_count = 1,
-				.return_type = T_INT, .ref = 0, .stack_next = 0
+				.return_type = T_INT, .stack_next = 0
 			}
 		},
 		.d_function_size = 1, .base = 0,
@@ -272,8 +239,7 @@ type_def SIMPLE_TYPE[] = {
 		.d_functions = {
 			{
 				.start_func_parmeters = {0}, .func_code = &len, .func_name = "len",
-				.function_type = f_main, .access = PUBLIC, .return_type = T_INT, .ref = 0,
-				.stack_next = 0, .start_parm_count = 1
+				.function_type = f_main, .access = PUBLIC, .return_type = T_INT, .stack_next = 0, .start_parm_count = 1
 			}
 		},
 		.d_function_size = 1, .base = 0,
@@ -288,84 +254,6 @@ type_def SIMPLE_TYPE[] = {
 
 
 
-node* get_root(node* j)
-{
-	node* temp = (node*)j;
-
-	while (temp->parent != NULL)
-	{
-		temp = temp->parent;
-	}
-	return temp;
-}
-
-node* get_first_type_backward_from(node* in, node_type b)
-{
-	node* save = (node*)in;
-	while (save != NULL && save->type_ != b)
-	{
-		save = save->parent;
-	}
-	return save;
-}
-
-node* get_first_type_backword_from(node* in, node_type b)
-{
-	return get_first_type_backward_from(in, b);
-}
-
-
-char* parse_obj_to_str(const node_type t)
-{
-	char* y = (char*)malloc(1024);
-	memset(y, 0, 1024);
-	if (t & itype)
-		S(y, "itype,");
-	if (t & keyword)
-		S(y, "keyword,");
-	if (t & var_name)
-		S(y, "var_name,");
-	if (t & value)
-		S(y, "value,");
-	if (t & operators_n)
-		S(y, "operators_n,");
-	if (t & equles)
-		S(y, "equles,");
-	if (t & endl)
-		S(y, "endl,");
-	if (t & s_index)
-		S(y, "s_index,");
-	if (t & parentheses1)
-		S(y, "parentheses1,");
-	if (t & parentheses1_c)
-		S(y, "parentheses1c,");
-	if (t & comma)
-		S(y, "comma,");
-	if (t & s_index_c)
-		S(y, "s_index_c,");
-	if (t & parentheses4)
-		S(y, "parentheses4,");
-	if (t & parentheses4_c)
-		S(y, "parentheses4c,");
-	return y;
-}
-
-
-node* static_flag_op2(const node_type mtype, node* w_node, bool added)
-{
-	return parser_delim_op(current_parser_ctx, mtype, w_node, added);
-}
-
-
-bool static_flag_check2x(node_type* m)
-{
-	return parser_delim_check_unclosed(current_parser_ctx, m);
-}
-
-fl* static_flag_check2()
-{
-	return parser_delim_get_first_unclosed(current_parser_ctx);
-}
 
 // check if text starts with keyword at a word boundary
 int starts_with_keyword(const char* text, const char* keyword)
@@ -390,51 +278,6 @@ int eql(const char* n, const char* x)
 }
 
 
-node* get_first_type_with_value(node* in, node_type b, void* value)
-{
-	//node* temp=getRoot(in);
-	int len = 0;
-	node* temp = (node*)in;
-	while (temp != NULL)
-	{
-		if (temp->type_ == b)
-		{
-			if (b == keyword)
-			{
-				if (((intptr_t)value) == temp->value_keyword)
-					return temp;
-			}
-			else if (value == NULL)
-				return temp;
-			else if (strcmp((char*)temp->value_raw, (char*)value) == 0)
-				return temp;
-		}
-		len++;
-		temp = temp->next;
-	}
-	return NULL;
-}
-
-node* get_first_type(node* in, node_type b)
-{
-	return get_first_type_with_value(in, b, NULL);
-}
-
-node* get_last_type(node* in, const node_type b)
-{
-	node* temp = (node*)in;
-	node* m = NULL;
-	while (temp != NULL)
-	{
-		if (temp->type_ == b)
-		{
-			m = temp;
-		}
-
-		temp = temp->next;
-	}
-	return m;
-}
 
 
 void assign_array_index(var* nvalue, var* marray, int index)
@@ -584,10 +427,30 @@ void print_f(fcall* temp)
 
 void eval(fcall* temp)
 {
-	if (temp->parm_count_c == 0)return;
+	if (temp->parm_count_c == 0) return;
 	if (temp->parm_count_c == 1 && temp->func_parmeters->type_define == T_STRING)
 	{
-		pre_parse_line(*temp->func_parmeters->value_str_ptr, 0);
+		const char* code = *temp->func_parmeters->value_str_ptr;
+		if (code && *code)
+		{
+			AstProgram* prog = xast_parse_source(code, "<eval>");
+			if (prog != NULL && xdiag_get_error_count() == 0)
+			{
+				XIrChunk chunk;
+				xir_chunk_init(&chunk);
+				xir_compile_program(prog, &chunk);
+				XVm vm;
+				xvm_init(&vm);
+				xvm_run(&vm, &chunk);
+				xvm_free(&vm);
+				xir_chunk_free(&chunk);
+				ast_program_destroy(prog);
+			}
+			else if (prog != NULL)
+			{
+				ast_program_destroy(prog);
+			}
+		}
 	}
 }
 
@@ -695,22 +558,6 @@ char** get_pptr_string(char* t)
 	return NULL;
 }
 
-void call_func_in(fcall* mfunc)
-{
-	//d->ref must be parth
-	node* stop = get_close_part(mfunc->deftion->ref);
-	//c = (node*)temp->func_code;
-	compile(mfunc->context, mfunc->deftion->ref->parent, mfunc, stop, NULL);
-	if (mfunc->deftion->function_type == constr)
-	{
-		if (mfunc->context != NULL)
-		{
-			mfunc->_return.value_type_instsance = mfunc->context->value_type_instsance;
-			mfunc->_return.values = mfunc->context->values;
-			mfunc->_return.type_define = mfunc->context->type_define;
-		}
-	}
-}
 
 void import(fcall* d)
 {
@@ -1231,6 +1078,42 @@ int type_def_find_field_slot(const type_def* td, const char* name)
 	return -1;
 }
 
+void define_class_property(const char* name, type_def* container_class, type_def* prop_type, var** out_var)
+{
+	if (container_class != NULL)
+	{
+		for (int i = 0; i < container_class->d_propertys_size; i++)
+		{
+			if (container_class->d_propertys[i].name != NULL && strcmp(container_class->d_propertys[i].name, name) == 0)
+			{
+				if (out_var) *out_var = &container_class->d_propertys[i];
+				return;
+			}
+		}
+
+		int psize = container_class->d_propertys_size;
+		var* ivar = &container_class->d_propertys[psize];
+		ivar->type_define = prop_type;
+		ivar->name = (char*)name;
+		ivar->slot_idx = psize;
+		ivar->access = PUBLIC;
+
+		FieldDescriptor* fd = &container_class->field_descriptors[psize];
+		fd->name = (char*)name;
+		fd->type_define = prop_type;
+		fd->slot_idx = psize;
+		fd->access = PUBLIC;
+
+		container_class->d_propertys_size++;
+		if (out_var) *out_var = ivar;
+	}
+}
+
+void define_new_class_prop(char* name, type_def* contern_class, type_def* new_var_type, var** out_var)
+{
+	define_class_property(name, contern_class, new_var_type, out_var);
+}
+
 FieldDescriptor* type_def_get_field_descriptor(const type_def* td, const char* name)
 {
 	if (td == NULL || name == NULL) return NULL;
@@ -1416,6 +1299,29 @@ void* install_memory(var* target_var)
 	return target_var->values;
 }
 
+static bool call_function(fcall* mfunc, var** context)
+{
+	if (mfunc == NULL || mfunc->deftion == NULL) return false;
+	if (mfunc->deftion->function_type == constr && (*context == NULL || (*context)->values == NULL))
+	{
+		mfunc->_return.size = 1;
+		mfunc->_return.values = install_memory(&mfunc->_return);
+		*context = &mfunc->_return;
+	}
+	if (*context != NULL && (*context)->value_type_instsance == NULL && (*context)->values != NULL && !is_base_type((*context)->type_define))
+	{
+		(*context)->value_type_instsance = (type_instance*)(*context)->values;
+	}
+	mfunc->context = *context;
+	mfunc->has_returned = false;
+
+	if (mfunc->deftion->func_code != NULL)
+		mfunc->deftion->func_code(mfunc);
+	gc_pop_frame();
+
+	return false;
+}
+
 static void init_instance_prop_obj(var* instance_prop)
 {
 	if (instance_prop == NULL || instance_prop->type_define == NULL || is_base_type(instance_prop->type_define))
@@ -1549,56 +1455,7 @@ bool copy_array(var* out, void* out_memory, var* src)
 	return false;
 }
 
-bool is_double_equal(node* mnode)
-{
-	return (mnode->type_ == equals || mnode->type_ == equles) &&
-	       (mnode->next->type_ == equals || mnode->next->type_ == equles);
-}
 
-bool is_double_equle(node* mnode)
-{
-	return is_double_equal(mnode);
-}
-
-bool is_double_operator(node* mnode)
-{
-	if (mnode == NULL || mnode->next == NULL || mnode->value_char_ptr == NULL || mnode->next->value_char_ptr == NULL)
-		return false;
-
-	char c1 = *mnode->value_char_ptr;
-	char c2 = *mnode->next->value_char_ptr;
-
-	if (c1 == '=' && c2 == '=') return true; /* == */
-	if (c1 == '!' && c2 == '=') return true; /* != */
-	if (c1 == '<' && c2 == '=') return true; /* <= */
-	if (c1 == '>' && c2 == '=') return true; /* >= */
-	if (c1 == '<' && c2 == '<') return true; /* << */
-	if (c1 == '>' && c2 == '>') return true; /* >> */
-	if (c1 == '&' && c2 == '&') return true; /* && */
-	if (c1 == '|' && c2 == '|') return true; /* || */
-
-	return false;
-}
-
-bool is_double_oprater(node* mnode)
-{
-	return is_double_operator(mnode);
-}
-
-
-node* get_close_part(node* t)
-{
-	if (t->ref_node != NULL &&
-		((t->btype.name == s_index && t->ref_node->type_ == s_index_c) ||
-			(t->btype.name == parentheses1 && t->ref_node->type_ == parentheses1_c) ||
-			(t->btype.name == parentheses4 && t->ref_node->type_ == parentheses4_c)))
-	{
-		return t->ref_node;
-	}
-
-	printf("ERROR: Line:%d BLOCK %s", t->line, __FUNCTION__);
-	exit(0);
-}
 
 
 char* get_file_buffer(FILE* sf)
@@ -1648,34 +1505,6 @@ void set_value_copy_var(var* dest, var* src)
 	}
 }
 
-// var type and memory must already be allocated
-void set_value_copy_node(var* dest, node* src_node)
-{
-	if (dest == NULL || src_node == NULL) return;
-	if (T_INT == dest->type_define)
-		*dest->value_int = atoi(src_node->value_char_ptr);
-	else if (T_STRING == dest->type_define)
-	{
-		*dest->value_str_ptr = (char*)gc_calloc(1, strlen(src_node->value_char_ptr) + 1, GC_KIND_STRING);
-		strcpy(*dest->value_str_ptr, src_node->value_char_ptr);
-	}
-	else if (T_FLOAT == dest->type_define)
-	{
-		*dest->value_float = atof(src_node->value_char_ptr);
-	}
-	else if (T_LONG == dest->type_define)
-	{
-		*dest->value_long = atol(src_node->value_char_ptr);
-	}
-	else if (T_BOOL == dest->type_define)
-	{
-		*dest->value_bool = strcmp(src_node->value_char_ptr, "false") != 0;
-	}
-	else if (T_CHAR == dest->type_define)
-	{
-		*dest->value_char_ptr = *src_node->value_char_ptr;
-	}
-}
 
 
 //type_def parms[] = {T_STRING, T_INT};
@@ -1684,91 +1513,78 @@ func_deftion simple_function_array[] = {
 	{
 		.start_func_parmeters = {0}, .func_code = &print, .func_name = "print", .function_type = f_main,
 		.return_type = T_INT,
-		.ref = 0, .stack_next = simple_function_array + 1
+		.stack_next = simple_function_array + 1
 	},
 	{
 		//vprint
 		.start_func_parmeters = {0}, .func_code = &print, .func_name = "vprint", .function_type = f_main,
 		.return_type = T_INT,
-		.ref = 0,
 		.stack_next = simple_function_array + 2
 	},
 	{
 		.start_func_parmeters = {0}, .func_code = &time_x, .func_name = "time", .function_type = f_main,
 		.return_type = T_STRING,
-		.ref = 0,
 		.stack_next = simple_function_array + 3
 	},
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &scan, .func_name = "scan", .function_type = f_main,
 		.return_type = T_INT,
-		.ref = 0,
 		.stack_next = simple_function_array + 4
 	},
 	{
 		.start_func_parmeters = {T_INT}, .start_parm_count = 1, .func_code = &random_, .func_name = "random",
 		.function_type = f_main, .return_type = T_INT,
-		.ref = 0,
 		.stack_next = simple_function_array + 5
 	},
 	{
 		.start_func_parmeters = {T_INT}, .start_parm_count = 1, .func_code = &str, .func_name = "str",
 		.function_type = f_main,
 		.return_type = T_STRING,
-		.ref = 0,
 		.stack_next = simple_function_array + 6
 	},
 	{
 		.start_func_parmeters = {T_STRING}, .start_parm_count = 1, .func_code = &import, .func_name = "import",
 		.function_type = f_main,
 		.return_type = T_INT,
-		.ref = 0,
 		.stack_next = simple_function_array + 7
 	},
 	{
 		.start_func_parmeters = {0}, .func_code = &print, .func_name = "xxxx", .function_type = f_main,
 		.return_type = T_INT,
-		.ref = 0,
 		.stack_next = simple_function_array + 8
 	},
 	{
 		.start_func_parmeters = {0}, .func_code = &print, .func_name = "pxcrint", .function_type = f_main,
 		.return_type = T_INT,
-		.ref = 0,
 		.stack_next = simple_function_array + 9
 	},
 	{
 		.start_func_parmeters = {0}, .func_code = &_exit_, .func_name = "exit", .function_type = f_main,
 		.return_type = T_INT,
-		.ref = 0,
 		.stack_next = simple_function_array + 10
 	},
 	{
 		.start_func_parmeters = {0}, .func_code = &len, .func_name = "len", .function_type = f_main,
 		.return_type = T_INT,
 		.start_parm_count = 1,
-		.ref = 0,
 		.stack_next = simple_function_array + 11
 	},
 	{
 		.start_func_parmeters = {0}, .func_code = &_echo, .func_name = "echo", .function_type = f_main,
 		.return_type = T_INT,
 		.start_parm_count = 1,
-		.ref = 0,
 		.stack_next = simple_function_array + 12
 	},
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &eval, .func_name = "eval", .function_type = f_main,
 		.return_type = T_INT,
 		.start_parm_count = 1,
-		.ref = 0,
 		.stack_next = simple_function_array + 13
 	},
 	{
 		.start_func_parmeters = {T_ANY,T_ANY}, .func_code = &xeql, .func_name = "eql", .function_type = f_main,
 		.return_type = T_INT,
 		.start_parm_count = 2,
-		.ref = 0,
 		.stack_next = simple_function_array + 14
 	},
 	{
@@ -1776,734 +1592,590 @@ func_deftion simple_function_array[] = {
 		.function_type = f_main,
 		.return_type = T_STRING,
 		.start_parm_count = 3,
-		.ref = 0,
 		.stack_next = simple_function_array + 15
 	},
 	{
 		.start_func_parmeters = {0}, .func_code = &x_socket_create, .func_name = "socket_create",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .ref = 0,
-		.stack_next = simple_function_array + 16
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .stack_next = simple_function_array + 16
 	},
 	{
 		.start_func_parmeters = {0}, .func_code = &x_socket_create, .func_name = "socket",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .ref = 0,
-		.stack_next = simple_function_array + 17
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .stack_next = simple_function_array + 17
 	},
 	{
 		.start_func_parmeters = {T_INT, T_STRING, T_INT}, .func_code = &x_socket_connect, .func_name = "socket_connect",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 3, .ref = 0,
-		.stack_next = simple_function_array + 18
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 3, .stack_next = simple_function_array + 18
 	},
 	{
 		.start_func_parmeters = {T_INT, T_STRING, T_INT}, .func_code = &x_socket_connect, .func_name = "connect",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 3, .ref = 0,
-		.stack_next = simple_function_array + 19
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 3, .stack_next = simple_function_array + 19
 	},
 	{
 		.start_func_parmeters = {T_INT, T_STRING, T_INT}, .func_code = &x_socket_bind, .func_name = "socket_bind",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 3, .ref = 0,
-		.stack_next = simple_function_array + 20
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 3, .stack_next = simple_function_array + 20
 	},
 	{
 		.start_func_parmeters = {T_INT, T_STRING, T_INT}, .func_code = &x_socket_bind, .func_name = "bind",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 3, .ref = 0,
-		.stack_next = simple_function_array + 21
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 3, .stack_next = simple_function_array + 21
 	},
 	{
 		.start_func_parmeters = {T_INT, T_INT}, .func_code = &x_socket_listen, .func_name = "socket_listen",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 22
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 22
 	},
 	{
 		.start_func_parmeters = {T_INT, T_INT}, .func_code = &x_socket_listen, .func_name = "listen",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 23
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 23
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_socket_accept, .func_name = "socket_accept",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 24
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 24
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_socket_accept, .func_name = "accept",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 25
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 25
 	},
 	{
 		.start_func_parmeters = {T_INT, T_STRING}, .func_code = &x_socket_send, .func_name = "socket_send",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 26
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 26
 	},
 	{
 		.start_func_parmeters = {T_INT, T_STRING}, .func_code = &x_socket_send, .func_name = "send",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 27
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 27
 	},
 	{
 		.start_func_parmeters = {T_INT, T_INT}, .func_code = &x_socket_recv, .func_name = "socket_recv",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 28
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .stack_next = simple_function_array + 28
 	},
 	{
 		.start_func_parmeters = {T_INT, T_INT}, .func_code = &x_socket_recv, .func_name = "recv",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 29
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .stack_next = simple_function_array + 29
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_socket_close, .func_name = "socket_close",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 30
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 30
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_socket_close, .func_name = "close",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 31
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 31
 	},
 	{
 		.start_func_parmeters = {T_INT, T_INT}, .func_code = &x_socket_set_timeout, .func_name = "socket_set_timeout",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 32
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 32
 	},
 	{
 		.start_func_parmeters = {T_INT, T_INT}, .func_code = &x_socket_set_reuseaddr, .func_name = "socket_set_reuseaddr",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 33
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 33
 	},
 	{
 		.start_func_parmeters = {T_INT, T_STRING, T_STRING, T_INT}, .func_code = &x_socket_sendto, .func_name = "socket_sendto",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 4, .ref = 0,
-		.stack_next = simple_function_array + 34
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 4, .stack_next = simple_function_array + 34
 	},
 	{
 		.start_func_parmeters = {T_INT, T_INT}, .func_code = &x_socket_recvfrom, .func_name = "socket_recvfrom",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 35
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .stack_next = simple_function_array + 35
 	},
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &x_http_get, .func_name = "http_get",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 36
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .stack_next = simple_function_array + 36
 	},
 	/* File I/O (36 - 48) */
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &x_file_read_all, .func_name = "file_read_all",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 37
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .stack_next = simple_function_array + 37
 	},
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &x_file_read_all, .func_name = "read_file",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 38
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .stack_next = simple_function_array + 38
 	},
 	{
 		.start_func_parmeters = {T_STRING, T_STRING}, .func_code = &x_file_write_all, .func_name = "file_write_all",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 39
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 39
 	},
 	{
 		.start_func_parmeters = {T_STRING, T_STRING}, .func_code = &x_file_write_all, .func_name = "write_file",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 40
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 40
 	},
 	{
 		.start_func_parmeters = {T_STRING, T_STRING}, .func_code = &x_file_append, .func_name = "file_append",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 41
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 41
 	},
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &x_file_exists, .func_name = "file_exists",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 42
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 42
 	},
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &x_file_remove, .func_name = "file_remove",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 43
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 43
 	},
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &x_file_remove, .func_name = "file_delete",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 44
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 44
 	},
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &x_file_size, .func_name = "file_size",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 45
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 45
 	},
 	{
 		.start_func_parmeters = {T_STRING, T_STRING}, .func_code = &x_file_open, .func_name = "file_open",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 46
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 46
 	},
 	{
 		.start_func_parmeters = {T_INT, T_INT}, .func_code = &x_file_read, .func_name = "file_read",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 47
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 2, .stack_next = simple_function_array + 47
 	},
 	{
 		.start_func_parmeters = {T_INT, T_STRING}, .func_code = &x_file_write, .func_name = "file_write",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 48
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 48
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_file_close, .func_name = "file_close",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 49
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 49
 	},
 	/* CLI & System (49 - 56) */
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_get_arg, .func_name = "get_arg",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 50
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .stack_next = simple_function_array + 50
 	},
 	{
 		.start_func_parmeters = {0}, .func_code = &x_get_argc, .func_name = "get_argc",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .ref = 0,
-		.stack_next = simple_function_array + 51
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .stack_next = simple_function_array + 51
 	},
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &x_system_exec, .func_name = "system_exec",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 52
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 52
 	},
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &x_system_exec, .func_name = "exec",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 53
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 53
 	},
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &x_system_getenv, .func_name = "system_getenv",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 54
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .stack_next = simple_function_array + 54
 	},
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &x_system_getenv, .func_name = "getenv",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 55
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .stack_next = simple_function_array + 55
 	},
 	{
 		.start_func_parmeters = {T_STRING, T_STRING}, .func_code = &x_system_setenv, .func_name = "system_setenv",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 56
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 56
 	},
 	{
 		.start_func_parmeters = {T_STRING, T_STRING}, .func_code = &x_system_setenv, .func_name = "setenv",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 57
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 57
 	},
 	/* Regex & String Utilities (57 - 67) */
 	{
 		.start_func_parmeters = {T_STRING, T_STRING}, .func_code = &x_regex_match, .func_name = "regex_match",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 58
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 58
 	},
 	{
 		.start_func_parmeters = {T_STRING, T_STRING}, .func_code = &x_regex_find, .func_name = "regex_find",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 59
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 2, .stack_next = simple_function_array + 59
 	},
 	{
 		.start_func_parmeters = {T_STRING, T_STRING, T_STRING}, .func_code = &x_regex_replace, .func_name = "regex_replace",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 3, .ref = 0,
-		.stack_next = simple_function_array + 60
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 3, .stack_next = simple_function_array + 60
 	},
 	{
 		.start_func_parmeters = {T_STRING, T_INT, T_INT}, .func_code = &x_substr, .func_name = "substr",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 3, .ref = 0,
-		.stack_next = simple_function_array + 61
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 3, .stack_next = simple_function_array + 61
 	},
 	{
 		.start_func_parmeters = {T_STRING, T_STRING}, .func_code = &x_index_of, .func_name = "index_of",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 62
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 62
 	},
 	{
 		.start_func_parmeters = {T_STRING, T_STRING}, .func_code = &x_index_of, .func_name = "find",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 63
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 63
 	},
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &x_trim, .func_name = "trim",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 64
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .stack_next = simple_function_array + 64
 	},
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &x_to_lower, .func_name = "to_lower",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 65
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .stack_next = simple_function_array + 65
 	},
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &x_to_upper, .func_name = "to_upper",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 66
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .stack_next = simple_function_array + 66
 	},
 	{
 		.start_func_parmeters = {T_STRING, T_STRING}, .func_code = &x_starts_with, .func_name = "starts_with",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 67
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 67
 	},
 	{
 		.start_func_parmeters = {T_STRING, T_STRING}, .func_code = &x_ends_with, .func_name = "ends_with",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 68
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 68
 	},
 	/* Math Library (68 - 91) */
 	{
 		.start_func_parmeters = {T_ANY}, .func_code = &x_math_sqrt, .func_name = "math_sqrt",
-		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 69
+		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .stack_next = simple_function_array + 69
 	},
 	{
 		.start_func_parmeters = {T_ANY}, .func_code = &x_math_sqrt, .func_name = "sqrt",
-		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 70
+		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .stack_next = simple_function_array + 70
 	},
 	{
 		.start_func_parmeters = {T_ANY, T_ANY}, .func_code = &x_math_pow, .func_name = "math_pow",
-		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 71
+		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 2, .stack_next = simple_function_array + 71
 	},
 	{
 		.start_func_parmeters = {T_ANY, T_ANY}, .func_code = &x_math_pow, .func_name = "pow",
-		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 72
+		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 2, .stack_next = simple_function_array + 72
 	},
 	{
 		.start_func_parmeters = {T_ANY}, .func_code = &x_math_abs, .func_name = "math_abs",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 73
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 73
 	},
 	{
 		.start_func_parmeters = {T_ANY}, .func_code = &x_math_abs, .func_name = "abs",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 74
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 74
 	},
 	{
 		.start_func_parmeters = {T_ANY, T_ANY}, .func_code = &x_math_min, .func_name = "math_min",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 75
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 75
 	},
 	{
 		.start_func_parmeters = {T_ANY, T_ANY}, .func_code = &x_math_min, .func_name = "min",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 76
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 76
 	},
 	{
 		.start_func_parmeters = {T_ANY, T_ANY}, .func_code = &x_math_max, .func_name = "math_max",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 77
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 77
 	},
 	{
 		.start_func_parmeters = {T_ANY, T_ANY}, .func_code = &x_math_max, .func_name = "max",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 78
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 78
 	},
 	{
 		.start_func_parmeters = {T_ANY}, .func_code = &x_math_floor, .func_name = "math_floor",
-		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 79
+		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .stack_next = simple_function_array + 79
 	},
 	{
 		.start_func_parmeters = {T_ANY}, .func_code = &x_math_floor, .func_name = "floor",
-		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 80
+		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .stack_next = simple_function_array + 80
 	},
 	{
 		.start_func_parmeters = {T_ANY}, .func_code = &x_math_ceil, .func_name = "math_ceil",
-		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 81
+		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .stack_next = simple_function_array + 81
 	},
 	{
 		.start_func_parmeters = {T_ANY}, .func_code = &x_math_ceil, .func_name = "ceil",
-		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 82
+		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .stack_next = simple_function_array + 82
 	},
 	{
 		.start_func_parmeters = {T_ANY}, .func_code = &x_math_round, .func_name = "math_round",
-		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 83
+		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .stack_next = simple_function_array + 83
 	},
 	{
 		.start_func_parmeters = {T_ANY}, .func_code = &x_math_round, .func_name = "round",
-		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 84
+		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .stack_next = simple_function_array + 84
 	},
 	{
 		.start_func_parmeters = {T_ANY}, .func_code = &x_math_sin, .func_name = "math_sin",
-		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 85
+		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .stack_next = simple_function_array + 85
 	},
 	{
 		.start_func_parmeters = {T_ANY}, .func_code = &x_math_sin, .func_name = "sin",
-		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 86
+		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .stack_next = simple_function_array + 86
 	},
 	{
 		.start_func_parmeters = {T_ANY}, .func_code = &x_math_cos, .func_name = "math_cos",
-		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 87
+		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .stack_next = simple_function_array + 87
 	},
 	{
 		.start_func_parmeters = {T_ANY}, .func_code = &x_math_cos, .func_name = "cos",
-		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 88
+		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .stack_next = simple_function_array + 88
 	},
 	{
 		.start_func_parmeters = {T_ANY}, .func_code = &x_math_tan, .func_name = "math_tan",
-		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 89
+		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .stack_next = simple_function_array + 89
 	},
 	{
 		.start_func_parmeters = {T_ANY}, .func_code = &x_math_tan, .func_name = "tan",
-		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 90
+		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .stack_next = simple_function_array + 90
 	},
 	{
 		.start_func_parmeters = {T_ANY}, .func_code = &x_math_log, .func_name = "math_log",
-		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 91
+		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .stack_next = simple_function_array + 91
 	},
 	{
 		.start_func_parmeters = {T_ANY}, .func_code = &x_math_log, .func_name = "log",
-		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 92
+		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 1, .stack_next = simple_function_array + 92
 	},
 	/* Dynamic List (92 - 112) */
 	{
 		.start_func_parmeters = {0}, .func_code = &x_list_create, .func_name = "list_new",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .ref = 0,
-		.stack_next = simple_function_array + 93
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .stack_next = simple_function_array + 93
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_list_free, .func_name = "list_free",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 94
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 94
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_list_size, .func_name = "list_size",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 95
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 95
 	},
 	{
 		.start_func_parmeters = {T_INT, T_STRING}, .func_code = &x_list_add, .func_name = "list_add",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 96
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 96
 	},
 	{
 		.start_func_parmeters = {T_INT, T_INT}, .func_code = &x_list_add_int, .func_name = "list_add_int",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 97
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 97
 	},
 	{
 		.start_func_parmeters = {T_INT, T_ANY}, .func_code = &x_list_add_float, .func_name = "list_add_float",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 98
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 98
 	},
 	{
 		.start_func_parmeters = {T_INT, T_INT}, .func_code = &x_list_get, .func_name = "list_get",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 99
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 2, .stack_next = simple_function_array + 99
 	},
 	{
 		.start_func_parmeters = {T_INT, T_INT}, .func_code = &x_list_get_int, .func_name = "list_get_int",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 100
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 100
 	},
 	{
 		.start_func_parmeters = {T_INT, T_INT}, .func_code = &x_list_get_float, .func_name = "list_get_float",
-		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 101
+		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 2, .stack_next = simple_function_array + 101
 	},
 	{
 		.start_func_parmeters = {T_INT, T_INT, T_STRING}, .func_code = &x_list_set, .func_name = "list_set",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 3, .ref = 0,
-		.stack_next = simple_function_array + 102
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 3, .stack_next = simple_function_array + 102
 	},
 	{
 		.start_func_parmeters = {T_INT, T_INT, T_INT}, .func_code = &x_list_set_int, .func_name = "list_set_int",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 3, .ref = 0,
-		.stack_next = simple_function_array + 103
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 3, .stack_next = simple_function_array + 103
 	},
 	{
 		.start_func_parmeters = {T_INT, T_INT}, .func_code = &x_list_remove_at, .func_name = "list_remove_at",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 104
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 104
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_list_clear, .func_name = "list_clear",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 105
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 105
 	},
 	{
 		.start_func_parmeters = {T_INT, T_STRING}, .func_code = &x_list_contains, .func_name = "list_contains",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 106
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 106
 	},
 	{
 		.start_func_parmeters = {T_INT, T_INT}, .func_code = &x_list_contains_int, .func_name = "list_contains_int",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 107
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 107
 	},
 	{
 		.start_func_parmeters = {T_INT, T_STRING}, .func_code = &x_list_index_of, .func_name = "list_index_of",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 108
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 108
 	},
 	{
 		.start_func_parmeters = {T_INT, T_INT}, .func_code = &x_list_index_of_int, .func_name = "list_index_of_int",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 109
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 109
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_list_pop, .func_name = "list_pop",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 110
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .stack_next = simple_function_array + 110
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_list_pop_int, .func_name = "list_pop_int",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 111
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 111
 	},
 	{
 		.start_func_parmeters = {T_INT, T_STRING}, .func_code = &x_list_join, .func_name = "list_join",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 112
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 2, .stack_next = simple_function_array + 112
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_list_to_string, .func_name = "list_to_string",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 113
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .stack_next = simple_function_array + 113
 	},
 	/* Hash Map (113 - 128) */
 	{
 		.start_func_parmeters = {0}, .func_code = &x_map_create, .func_name = "map_new",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .ref = 0,
-		.stack_next = simple_function_array + 114
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .stack_next = simple_function_array + 114
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_map_free, .func_name = "map_free",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 115
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 115
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_map_size, .func_name = "map_size",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 116
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 116
 	},
 	{
 		.start_func_parmeters = {T_INT, T_STRING, T_STRING}, .func_code = &x_map_put, .func_name = "map_put",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 3, .ref = 0,
-		.stack_next = simple_function_array + 117
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 3, .stack_next = simple_function_array + 117
 	},
 	{
 		.start_func_parmeters = {T_INT, T_STRING, T_INT}, .func_code = &x_map_put_int, .func_name = "map_put_int",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 3, .ref = 0,
-		.stack_next = simple_function_array + 118
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 3, .stack_next = simple_function_array + 118
 	},
 	{
 		.start_func_parmeters = {T_INT, T_STRING, T_ANY}, .func_code = &x_map_put_float, .func_name = "map_put_float",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 3, .ref = 0,
-		.stack_next = simple_function_array + 119
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 3, .stack_next = simple_function_array + 119
 	},
 	{
 		.start_func_parmeters = {T_INT, T_STRING}, .func_code = &x_map_get, .func_name = "map_get",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 120
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 2, .stack_next = simple_function_array + 120
 	},
 	{
 		.start_func_parmeters = {T_INT, T_STRING}, .func_code = &x_map_get_int, .func_name = "map_get_int",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 121
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 121
 	},
 	{
 		.start_func_parmeters = {T_INT, T_STRING}, .func_code = &x_map_get_float, .func_name = "map_get_float",
-		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 122
+		.function_type = f_main, .return_type = T_FLOAT, .start_parm_count = 2, .stack_next = simple_function_array + 122
 	},
 	{
 		.start_func_parmeters = {T_INT, T_STRING}, .func_code = &x_map_has, .func_name = "map_has",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 123
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 123
 	},
 	{
 		.start_func_parmeters = {T_INT, T_STRING}, .func_code = &x_map_remove, .func_name = "map_remove",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 124
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 124
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_map_clear, .func_name = "map_clear",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 125
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 125
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_map_keys, .func_name = "map_keys",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 126
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .stack_next = simple_function_array + 126
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_map_values, .func_name = "map_values",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 127
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .stack_next = simple_function_array + 127
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_map_to_string, .func_name = "map_to_string",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 128
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .stack_next = simple_function_array + 128
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_map_keys_list, .func_name = "map_keys_list",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 129
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 129
 	},
 	{
 		.start_func_parmeters = {}, .func_code = &x_gc_collect, .func_name = "gc_collect",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .ref = 0,
-		.stack_next = simple_function_array + 130
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .stack_next = simple_function_array + 130
 	},
 	{
 		.start_func_parmeters = {}, .func_code = &x_gc_allocated_bytes, .func_name = "gc_allocated_bytes",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .ref = 0,
-		.stack_next = simple_function_array + 131
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .stack_next = simple_function_array + 131
 	},
 	{
 		.start_func_parmeters = {}, .func_code = &x_gc_total_objects, .func_name = "gc_total_objects",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .ref = 0,
-		.stack_next = simple_function_array + 132
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .stack_next = simple_function_array + 132
 	},
 	{
 		.start_func_parmeters = {}, .func_code = &x_gc_enable, .func_name = "gc_enable",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .ref = 0,
-		.stack_next = simple_function_array + 133
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .stack_next = simple_function_array + 133
 	},
 	{
 		.start_func_parmeters = {}, .func_code = &x_gc_disable, .func_name = "gc_disable",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .ref = 0,
-		.stack_next = simple_function_array + 134
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .stack_next = simple_function_array + 134
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_gc_set_threshold, .func_name = "gc_set_threshold",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 135
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 135
 	},
 	{
 		.start_func_parmeters = {}, .func_code = &x_gc_dump, .func_name = "gc_dump",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .ref = 0,
-		.stack_next = simple_function_array + 136
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .stack_next = simple_function_array + 136
 	},
 	{
 		.start_func_parmeters = {}, .func_code = &x_clock_ms, .func_name = "clock_ms",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .ref = 0,
-		.stack_next = simple_function_array + 137
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .stack_next = simple_function_array + 137
 	},
 	{
 		.start_func_parmeters = {}, .func_code = &x_clock_ms, .func_name = "time_ms",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .ref = 0,
-		.stack_next = simple_function_array + 138
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .stack_next = simple_function_array + 138
 	},
 	/* String Ergonomics (138) */
 	{
 		.start_func_parmeters = {T_STRING, T_STRING}, .func_code = &x_string_split, .func_name = "str_split",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 139
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 2, .stack_next = simple_function_array + 139
 	},
 	/* JSON Module (139 - 141) */
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &x_json_parse, .func_name = "json_parse",
-		.function_type = f_main, .return_type = T_ANY, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 140
+		.function_type = f_main, .return_type = T_ANY, .start_parm_count = 1, .stack_next = simple_function_array + 140
 	},
 	{
 		.start_func_parmeters = {T_ANY}, .func_code = &x_json_stringify, .func_name = "json_stringify",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 141
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .stack_next = simple_function_array + 141
 	},
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &x_json_is_valid, .func_name = "json_is_valid",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 142
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 142
 	},
 	/* DateTime Module (142 - 150) */
 	{
 		.start_func_parmeters = {}, .func_code = &x_datetime_now, .func_name = "datetime_now",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .ref = 0,
-		.stack_next = simple_function_array + 143
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .stack_next = simple_function_array + 143
 	},
 	{
 		.start_func_parmeters = {T_INT, T_STRING}, .func_code = &x_datetime_format, .func_name = "datetime_format",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 2, .ref = 0,
-		.stack_next = simple_function_array + 144
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 2, .stack_next = simple_function_array + 144
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_datetime_year, .func_name = "datetime_year",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 145
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 145
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_datetime_month, .func_name = "datetime_month",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 146
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 146
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_datetime_day, .func_name = "datetime_day",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 147
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 147
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_datetime_hour, .func_name = "datetime_hour",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 148
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 148
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_datetime_minute, .func_name = "datetime_minute",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 149
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 149
 	},
 	{
 		.start_func_parmeters = {T_INT}, .func_code = &x_datetime_second, .func_name = "datetime_second",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 150
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 150
 	},
 	{
 		.start_func_parmeters = {}, .func_code = &x_datetime_clock_ms, .func_name = "datetime_clock_ms",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .ref = 0,
-		.stack_next = simple_function_array + 151
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 0, .stack_next = simple_function_array + 151
 	},
 	/* Directory Operations (151 - 154) */
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &x_dir_list, .func_name = "dir_list",
-		.function_type = f_main, .return_type = T_ANY, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 152
+		.function_type = f_main, .return_type = T_ANY, .start_parm_count = 1, .stack_next = simple_function_array + 152
 	},
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &x_dir_create, .func_name = "dir_create",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 153
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 153
 	},
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &x_dir_exists, .func_name = "dir_exists",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 154
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 154
 	},
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &x_dir_remove, .func_name = "dir_remove",
-		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 155
+		.function_type = f_main, .return_type = T_INT, .start_parm_count = 1, .stack_next = simple_function_array + 155
 	},
 	/* Process Operations (155 - 156) */
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &x_proc_capture, .func_name = "proc_capture",
-		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 156
+		.function_type = f_main, .return_type = T_STRING, .start_parm_count = 1, .stack_next = simple_function_array + 156
 	},
 	{
 		.start_func_parmeters = {T_STRING}, .func_code = &x_proc_run, .func_name = "proc_run",
-		.function_type = f_main, .return_type = T_ANY, .start_parm_count = 1, .ref = 0,
-		.stack_next = simple_function_array + 157
+		.function_type = f_main, .return_type = T_ANY, .start_parm_count = 1, .stack_next = simple_function_array + 157
 	},
 	{
 		.start_func_parmeters = {T_ANY, T_ANY}, .start_parm_count = 1, .func_code = &xassert, .func_name = "assert", .function_type = f_main,
 		.return_type = T_INT,
-		.ref = 0,
 		.stack_next = 0
 	},
 };
@@ -2529,7 +2201,7 @@ type_instance xlnag_object = {
 };
 var start_var = {
 	.name = "xlang", .type_define = T_OBJECT, .value_type_instsance = &xlnag_object,
-	.size = 1, .holder = NULL, .base_type = 0, .ref = 0, .stack_next = tinfo, .access = PUBLIC
+	.size = 1, .holder = NULL, .base_type = 0, .stack_next = tinfo, .access = PUBLIC
 };
 var_stack var_start_stack = {
 	.top = tinfo + 5, .root = &start_var, .size = 7
@@ -2632,10 +2304,4 @@ func_deftion* get_obj_function2(var* object_var, char* name)
 }
 
 
-bool stop_here(node_type stop_in_type, node* stop_in_node, node* mnode)
-{
-	if ((stop_in_type != none && (mnode->type_ & stop_in_type)) || (stop_in_node != NULL && (mnode == stop_in_node ||
-		mnode->parent == stop_in_node)))
-		return true;
-	return false;
-}
+

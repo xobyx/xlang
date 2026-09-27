@@ -2,14 +2,17 @@
 #define XAST_PARSER_H
 
 #include "xast.h"
-#include "types.h"
+#include "lexer.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* Build Structured AST from the token node stream (nodes->root) */
-AstProgram* xast_parse_node_stream(AstArena* arena, node* start_node, node* end_node);
+/* Build Structured AST from the token stream */
+AstProgram* xast_parse_token_stream(AstArena* arena, token_stream_t* stream);
+
+/* Parse into an existing AstProgram (used by imports) */
+bool xast_parse_into_program(AstProgram* prog, token_stream_t* stream);
 
 /* Parse an xlang source code string into a Structured AST */
 AstProgram* xast_parse_source(const char* source_code, const char* filename);

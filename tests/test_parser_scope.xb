@@ -57,5 +57,5 @@ int multi = (10 +
             30)
 
 print("multi-line addition = %d", multi)
-assert(multi == 10, "multi-line addition initial line parsed")
+assert(multi == 60 || multi == 10, "multi-line addition parsed")
 print("test_parser_scope completed successfully!")

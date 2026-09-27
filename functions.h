@@ -11,7 +11,6 @@
 
 /* Memory and value copying helpers */
 void set_value_copy_var(var* dest, var* src);
-void set_value_copy_node(var* dest, node* src_node);
 
 //#define setvaluefortype(mvar,)
 /*XLANG*/ char* get_file_buffer(FILE* sf);
@@ -36,13 +35,8 @@ void set_value_copy_node(var* dest, node* src_node);
 #define SIMPLE_FUNC_COUNT 158
 extern func_stack base_function;
 
-/*XLANG*/ var* get_type_inc_obj_var(node** nop, var* context, func_deftion ** outp);
 int starts_with_keyword(const char* text, const char* keyword);
 int eql(const char* n, const char* x);
-
-/*XLANG*/ bool static_flag_check2x(node_type* m);
-/*XLANG*/ node* static_flag_op2(node_type v,node* n, bool added);
-/*XLANG*/ node* get_root(node* j);
 
 void instance_type(type_def* type_prototype, void* dest_array, int size);
 int type_def_compute_field_offsets(type_def* td);
@@ -53,12 +47,8 @@ type_instance* type_instance_create(type_def* td);
 var* type_instance_get_field(type_instance* inst, const char* name);
 var* type_instance_get_field_by_slot(type_instance* inst, int slot);
 int type_instance_get_id(type_instance* inst);
-node* get_first_type_with_value(node* in, node_type b, void* value);
-node* get_first_type(node* in, node_type b);
-node* get_first_type_backward_from(node* in, node_type b);
-node* get_first_type_backword_from(node* in, node_type b);
-node* get_last_type(node* in, node_type b);
-void set_value(var* context, fcall* temp, node** cx);
+void define_class_property(const char* name, type_def* container_class, type_def* prop_type, var** out_var);
+void define_new_class_prop(char* name, type_def* contern_class, type_def* new_var_type, var** out_var);
 
 var* new_var(char* name, type_def* vtype);
 var* new_temp_var(type_def* typ);
@@ -83,31 +73,19 @@ var* all_get_var_by_name(char* name, fcall * called_function, var* called_var);
 void* install_memory_with_type(type_def* type_def_ptr, const int element_count);
 void* install_memory(var* target_var);
 
-node* get_close_part(node* t);
-
 /*XLANG*/ char** get_pptr_string(char* t);
-fl* static_flag_check2();
-void call_func_in(fcall* d);
 void print(fcall* temp);
 
 bool is_base_type(type_def* t);
+type_def* get_type_by_name(char* name);
 
 /*XLANG*/ func_deftion* add_function(func_stack* s, char* name, type_def* return_type, int pcount, const function_node fe, char** par_name,
                    type_def** par_type);
 
 #define S(X, B) strcat(X,B)
-char* parse_obj_to_str(node_type t);
 void unescape_string(char* str);
 void scap_string(char* m);
 
-bool stop_here(node_type stop_in_type, node* stop_in_node, node* mnode);
 func_deftion* get_obj_function2(var* object_var, char* name);
 var* get_array_item(var * name, int index);
-void step(node** nod);
 bool copy_array(var* out, void* out_memory, var* src);
-bool is_double_operator(node* mnode);
-bool is_double_oprater(node* mnode);
-bool is_double_equal(node* mnode);
-bool is_double_equle(node* mnode);
-int get_index_value(fcall* funct, node* k);
-bool eat(node** nod,enum node_type_enum next,bool must);

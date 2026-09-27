@@ -1,39 +1,47 @@
 #include "xast_parser.h"
-#include "functions.h"
-#include "parse.h"
-#include "lexer.h"
 #include "xdiag.h"
+#include "ximport.h"
+#include "functions.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 /* Forward declarations */
-static AstExpr* parse_expr(AstArena* arena, node** n, node* stop);
-static AstExpr* parse_expr_prec(AstArena* arena, node** n, node* stop, int min_prec);
-static AstStmt* parse_statement(AstArena* arena, node** n, node* stop);
-static AstStmt* parse_block(AstArena* arena, node** n, node* stop);
+static AstExpr* parse_expr(AstArena* arena, token_stream_t* s);
+static AstExpr* parse_expr_prec(AstArena* arena, token_stream_t* s, int min_prec);
+static AstStmt* parse_statement(AstArena* arena, token_stream_t* s);
+static AstStmt* parse_block(AstArena* arena, token_stream_t* s);
 
-static inline node* node_advance(node* curr)
-{
-	if (curr == NULL) return NULL;
-	if (curr->next != NULL) return curr->next;
-	return curr->stack_next;
-}
+static AstProgram* s_current_program = NULL;
+static int s_class_depth = 0;
+static const char* s_current_class_name = NULL;
 
-static bool is_end(node* n, node* stop)
-{
-	if (n == NULL) return true;
-	if (stop != NULL && (n == stop || (n->parent != NULL && n->parent == stop)))
-		return true;
-	return false;
-}
+/* -------------------------------------------------------------------------
+ * Registered Classes Registry (for E0010, E0011, E0012 diagnostics)
+ * ------------------------------------------------------------------------- */
+static char** s_registered_classes = NULL;
+static int s_registered_class_count = 0;
+static int s_registered_class_cap = 0;
 
-static void skip_endl(node** n, node* stop)
+static void register_class_name(const char* name)
 {
-	while (*n != NULL && !is_end(*n, stop) && ((*n)->type_ & endl))
+	if (name == NULL || *name == '\0') return;
+	for (int i = 0; i < s_registered_class_count; i++)
 	{
-		*n = node_advance(*n);
+		if (strcmp(s_registered_classes[i], name) == 0) return;
+	}
+	if (s_registered_class_count >= s_registered_class_cap)
+	{
+		s_registered_class_cap = s_registered_class_cap == 0 ? 32 : s_registered_class_cap * 2;
+		s_registered_classes = (char**)realloc(s_registered_classes, s_registered_class_cap * sizeof(char*));
+	}
+	s_registered_classes[s_registered_class_count++] = strdup(name);
+	if (get_type_by_name((char*)name) == NULL)
+	{
+		type_def* td = new_type();
+		td->type_name = strdup(name);
 	}
 }
-
-static int s_class_depth = 0;
 
 static bool is_primitive_type_name(const char* name)
 {
@@ -48,268 +56,281 @@ static bool is_primitive_type_name(const char* name)
 	        strcmp(name, "double") == 0);
 }
 
-static AstBinaryOp get_binop(node* n, int* out_tokens)
+static bool is_known_class_name(const char* name)
 {
-	if (out_tokens) *out_tokens = 1;
-	if (n == NULL) return BINOP_NONE;
+	if (!name) return false;
+	if (is_primitive_type_name(name)) return false;
 
-	node* next = node_advance(n);
-
-	/* Check two-token operators */
-	if (n->type_ == equles && next != NULL && next->type_ == equles)
+	for (int i = 0; i < s_registered_class_count; i++)
 	{
-		if (out_tokens) *out_tokens = 2;
-		return BINOP_EQ;
+		if (strcmp(s_registered_classes[i], name) == 0) return true;
 	}
 
-	if (n->type_ == operators_n && n->value_char_ptr != NULL)
+	type_def* t = get_type_by_name((char*)name);
+	if (t != NULL && !is_base_type(t)) return true;
+
+	return false;
+}
+
+/* -------------------------------------------------------------------------
+ * Operator Precedence
+ * ------------------------------------------------------------------------- */
+static AstBinaryOp get_binop(token_type_t tt)
+{
+	switch (tt)
 	{
-		char c = *n->value_char_ptr;
-		if (next != NULL && next->type_ == equles)
-		{
-			if (c == '!') { if (out_tokens) *out_tokens = 2; return BINOP_NEQ; }
-			if (c == '<') { if (out_tokens) *out_tokens = 2; return BINOP_LTE; }
-			if (c == '>') { if (out_tokens) *out_tokens = 2; return BINOP_GTE; }
-			return BINOP_NONE; /* +=, -=, *=, /=, %= are assignments */
-		}
-
-		if (next != NULL && next->type_ == operators_n && next->value_char_ptr != NULL)
-		{
-			char c2 = *next->value_char_ptr;
-			if (c == '&' && c2 == '&') { if (out_tokens) *out_tokens = 2; return BINOP_AND; }
-			if (c == '|' && c2 == '|') { if (out_tokens) *out_tokens = 2; return BINOP_OR; }
-			if (c == '<' && c2 == '<') { if (out_tokens) *out_tokens = 2; return BINOP_SHL; }
-			if (c == '>' && c2 == '>') { if (out_tokens) *out_tokens = 2; return BINOP_SHR; }
-			if (c == '+' && c2 == '+') return BINOP_NONE;
-			if (c == '-' && c2 == '-')
-			{
-				node* after_next = node_advance(next);
-				if (after_next == NULL || after_next->type_ == endl ||
-				    after_next->type_ == parentheses4_c || after_next->type_ == comma ||
-				    after_next->type_ == s_index_c)
-				{
-					return BINOP_NONE;
-				}
-			}
-		}
-
-		return ast_binop_from_string(n->value_char_ptr);
+		case TOK_PLUS: return BINOP_ADD;
+		case TOK_MINUS: return BINOP_SUB;
+		case TOK_STAR: return BINOP_MUL;
+		case TOK_SLASH: return BINOP_DIV;
+		case TOK_PERCENT: return BINOP_MOD;
+		case TOK_EQ: return BINOP_EQ;
+		case TOK_NEQ: return BINOP_NEQ;
+		case TOK_LT: return BINOP_LT;
+		case TOK_LTE: return BINOP_LTE;
+		case TOK_GT: return BINOP_GT;
+		case TOK_GTE: return BINOP_GTE;
+		case TOK_AND: return BINOP_AND;
+		case TOK_OR: return BINOP_OR;
+		case TOK_BIT_AND: return BINOP_BIT_AND;
+		case TOK_BIT_OR: return BINOP_BIT_OR;
+		case TOK_BIT_XOR: return BINOP_BIT_XOR;
+		case TOK_SHL: return BINOP_SHL;
+		case TOK_SHR: return BINOP_SHR;
+		default: return BINOP_NONE;
 	}
-
-	return BINOP_NONE;
 }
 
 static int get_precedence(AstBinaryOp op)
 {
 	switch (op)
 	{
-	case BINOP_OR:      return 1;
-	case BINOP_AND:     return 2;
-	case BINOP_BIT_OR:  return 3;
-	case BINOP_BIT_XOR: return 4;
-	case BINOP_BIT_AND: return 5;
-	case BINOP_EQ:
-	case BINOP_NEQ:     return 6;
-	case BINOP_LT:
-	case BINOP_LTE:
-	case BINOP_GT:
-	case BINOP_GTE:     return 7;
-	case BINOP_SHL:
-	case BINOP_SHR:     return 8;
-	case BINOP_ADD:
-	case BINOP_SUB:     return 9;
-	case BINOP_MUL:
-	case BINOP_DIV:
-	case BINOP_MOD:     return 10;
-	default:            return 0;
+		case BINOP_OR: return 2;
+		case BINOP_AND: return 3;
+		case BINOP_BIT_OR: return 4;
+		case BINOP_BIT_XOR: return 5;
+		case BINOP_BIT_AND: return 6;
+		case BINOP_EQ:
+		case BINOP_NEQ: return 7;
+		case BINOP_LT:
+		case BINOP_LTE:
+		case BINOP_GT:
+		case BINOP_GTE: return 8;
+		case BINOP_SHL:
+		case BINOP_SHR: return 9;
+		case BINOP_ADD:
+		case BINOP_SUB: return 10;
+		case BINOP_MUL:
+		case BINOP_DIV:
+		case BINOP_MOD: return 11;
+		default: return 0;
 	}
 }
 
-static AstExpr* parse_primary(AstArena* arena, node** n, node* stop)
+/* -------------------------------------------------------------------------
+ * Expression Parsing
+ * ------------------------------------------------------------------------- */
+static AstExpr* parse_primary(AstArena* arena, token_stream_t* s)
 {
-	if (is_end(*n, stop)) return NULL;
+	token_stream_skip_newlines(s);
+	token_t* tok = token_stream_current(s);
+	if (tok == NULL || tok->type == TOK_EOF) return NULL;
 
-	node* curr = *n;
-	int line = curr->line;
-	int col = curr->col;
+	int line = tok->line;
+	int col = tok->col;
 
-	/* Literals */
-	if (curr->type_ == value)
+	/* Integer Literal */
+	if (tok->type == TOK_INT)
 	{
-		*n = curr->next;
-		if (curr->opt_type_ptr == T_INT)
-		{
-			int64_t v = curr->value_char_ptr ? atoll(curr->value_char_ptr) : 0;
-			return ast_expr_literal_int(arena, v, line, col);
-		}
-		if (curr->opt_type_ptr == T_FLOAT)
-		{
-			double v = curr->value_char_ptr ? atof(curr->value_char_ptr) : 0.0;
-			return ast_expr_literal_float(arena, v, line, col);
-		}
-		if (curr->opt_type_ptr == T_STRING)
-		{
-			return ast_expr_literal_string(arena, curr->value_char_ptr ? curr->value_char_ptr : "", line, col);
-		}
-		if (curr->opt_type_ptr == T_BOOL)
-		{
-			bool b = (curr->value_char_ptr && strcmp(curr->value_char_ptr, "true") == 0);
-			return ast_expr_literal_bool(arena, b, line, col);
-		}
-		/* Fallback: guess from string */
-		if (curr->value_char_ptr != NULL)
-		{
-			if (strcmp(curr->value_char_ptr, "null") == 0)
-				return ast_expr_literal_null(arena, line, col);
-			if (strchr(curr->value_char_ptr, '.'))
-				return ast_expr_literal_float(arena, atof(curr->value_char_ptr), line, col);
-			return ast_expr_literal_int(arena, atoll(curr->value_char_ptr), line, col);
-		}
+		token_stream_advance(s);
+		return ast_expr_literal_int(arena, tok->int_val, line, col);
+	}
+
+	/* Float Literal */
+	if (tok->type == TOK_FLOAT)
+	{
+		token_stream_advance(s);
+		return ast_expr_literal_float(arena, tok->float_val, line, col);
+	}
+
+	/* String Literal */
+	if (tok->type == TOK_STRING)
+	{
+		token_stream_advance(s);
+		return ast_expr_literal_string(arena, tok->text ? tok->text : "", line, col);
+	}
+
+	/* Char Literal */
+	if (tok->type == TOK_CHAR)
+	{
+		token_stream_advance(s);
+		return ast_expr_literal_int(arena, tok->int_val, line, col);
+	}
+
+	/* Boolean Literal */
+	if (tok->type == TOK_BOOL)
+	{
+		token_stream_advance(s);
+		return ast_expr_literal_bool(arena, tok->int_val != 0, line, col);
+	}
+
+	/* Null Literal */
+	if (tok->type == TOK_NULL)
+	{
+		token_stream_advance(s);
 		return ast_expr_literal_null(arena, line, col);
 	}
 
 	/* List Literal: [elem1, elem2, ...] */
-	if (curr->type_ == s_index)
+	if (tok->type == TOK_LBRACKET)
 	{
-		node* close = get_close_part(curr);
-		*n = curr->next;
-
-		AstExpr* elems[64];
+		token_stream_advance(s); /* consume '[' */
+		AstExpr* elems[128];
 		int elem_count = 0;
 
-		while (!is_end(*n, close) && *n != close)
+		while (!token_stream_check(s, TOK_RBRACKET) && !token_stream_check(s, TOK_EOF))
 		{
-			if ((*n)->type_ == comma)
-			{
-				*n = (*n)->next;
-				continue;
-			}
-			AstExpr* elem = parse_expr_prec(arena, n, close, 1);
-			if (elem && elem_count < 64)
+			token_stream_skip_newlines(s);
+			if (token_stream_check(s, TOK_RBRACKET)) break;
+
+			AstExpr* elem = parse_expr_prec(arena, s, 1);
+			if (elem && elem_count < 128)
 			{
 				elems[elem_count++] = elem;
 			}
-			if (!is_end(*n, close) && (*n)->type_ == comma)
+			token_stream_skip_newlines(s);
+			if (token_stream_check(s, TOK_COMMA))
 			{
-				*n = (*n)->next;
+				token_stream_advance(s);
+			}
+			else
+			{
+				break;
 			}
 		}
-		if (*n == close) *n = (*n)->next;
+		token_stream_skip_newlines(s);
+		token_stream_match(s, TOK_RBRACKET);
 		return ast_expr_list(arena, elems, elem_count, line, col);
 	}
 
 	/* Parenthesized Group: (expr) */
-	if (curr->type_ == parentheses4)
+	if (tok->type == TOK_LPAREN)
 	{
-		node* close = get_close_part(curr);
-		*n = curr->next;
-		AstExpr* sub = parse_expr(arena, n, close);
-		if (*n == close) *n = (*n)->next;
+		token_stream_advance(s); /* consume '(' */
+		token_stream_skip_newlines(s);
+		AstExpr* sub = parse_expr(arena, s);
+		token_stream_skip_newlines(s);
+		token_stream_match(s, TOK_RPAREN);
 		return sub;
 	}
 
-	/* Unary Operator: -expr or !expr */
-	if (curr->type_ == operators_n && curr->value_char_ptr != NULL)
+	/* Unary - */
+	if (tok->type == TOK_MINUS)
 	{
-		if (strcmp(curr->value_char_ptr, "-") == 0)
-		{
-			*n = curr->next;
-			AstExpr* opnd = parse_primary(arena, n, stop);
-			return ast_expr_unary(arena, UNOP_NEG, opnd, line, col);
-		}
-		if (strcmp(curr->value_char_ptr, "!") == 0)
-		{
-			*n = curr->next;
-			AstExpr* opnd = parse_primary(arena, n, stop);
-			return ast_expr_unary(arena, UNOP_NOT, opnd, line, col);
-		}
+		token_stream_advance(s);
+		AstExpr* opnd = parse_primary(arena, s);
+		return ast_expr_unary(arena, UNOP_NEG, opnd, line, col);
+	}
+
+	/* Unary ! */
+	if (tok->type == TOK_NOT)
+	{
+		token_stream_advance(s);
+		AstExpr* opnd = parse_primary(arena, s);
+		return ast_expr_unary(arena, UNOP_NOT, opnd, line, col);
+	}
+
+	/* Unary ~ */
+	if (tok->type == TOK_BIT_NOT)
+	{
+		token_stream_advance(s);
+		AstExpr* opnd = parse_primary(arena, s);
+		return ast_expr_unary(arena, UNOP_BIT_NOT, opnd, line, col);
 	}
 
 	/* 'new' Expression: new ClassName(args...) */
-	if (curr->type_ == keyword && curr->value_keyword == _new_)
+	if (tok->type == TOK_KW_NEW)
 	{
-		*n = curr->next;
-		if (!is_end(*n, stop))
+		token_stream_advance(s); /* consume 'new' */
+		token_stream_skip_newlines(s);
+		token_t* ctok = token_stream_current(s);
+		char* class_name = ctok ? ctok->text : "Object";
+		token_stream_advance(s); /* consume class name */
+
+		AstExpr* args[32];
+		int arg_count = 0;
+
+		token_stream_skip_newlines(s);
+		if (token_stream_match(s, TOK_LPAREN))
 		{
-			node* cnode = *n;
-			char* class_name = cnode->value_char_ptr;
-			if (cnode->type_ == itype && cnode->value_type != NULL && cnode->value_type->type_name != NULL)
+			while (!token_stream_check(s, TOK_RPAREN) && !token_stream_check(s, TOK_EOF))
 			{
-				class_name = cnode->value_type->type_name;
-			}
-			*n = cnode->next;
+				token_stream_skip_newlines(s);
+				if (token_stream_check(s, TOK_RPAREN)) break;
 
-			AstExpr* args[32];
-			int arg_count = 0;
-
-			if (!is_end(*n, stop) && (*n)->type_ == parentheses4)
-			{
-				node* pclose = get_close_part(*n);
-				*n = (*n)->next;
-
-				while (!is_end(*n, pclose) && *n != pclose)
-				{
-					if ((*n)->type_ == comma)
-					{
-						*n = (*n)->next;
-						continue;
-					}
-					AstExpr* arg = parse_expr_prec(arena, n, pclose, 1);
-					if (arg && arg_count < 32)
-					{
-						args[arg_count++] = arg;
-					}
-					if (!is_end(*n, pclose) && (*n)->type_ == comma)
-					{
-						*n = (*n)->next;
-					}
-				}
-				if (*n == pclose) *n = (*n)->next;
-			}
-			return ast_expr_new(arena, class_name ? class_name : "Object", args, arg_count, line, col);
-		}
-	}
-
-	/* Variable or Function Call */
-	if (curr->type_ == var_name || curr->type_ == itype)
-	{
-		char* name = curr->value_char_ptr;
-		if (curr->type_ == itype && curr->value_type != NULL && curr->value_type->type_name != NULL)
-			name = curr->value_type->type_name;
-
-		*n = curr->next;
-
-		/* Function Call: name(args...) */
-		if (!is_end(*n, stop) && (*n)->type_ == parentheses4)
-		{
-			node* pclose = get_close_part(*n);
-			*n = (*n)->next;
-
-			AstExpr* args[32];
-			int arg_count = 0;
-
-			while (!is_end(*n, pclose) && *n != pclose)
-			{
-				if ((*n)->type_ == comma)
-				{
-					*n = (*n)->next;
-					continue;
-				}
-				AstExpr* arg = parse_expr_prec(arena, n, pclose, 1);
+				AstExpr* arg = parse_expr_prec(arena, s, 1);
 				if (arg && arg_count < 32)
 				{
 					args[arg_count++] = arg;
 				}
-				if (!is_end(*n, pclose) && (*n)->type_ == comma)
+				token_stream_skip_newlines(s);
+				if (token_stream_check(s, TOK_COMMA))
 				{
-					*n = (*n)->next;
+					token_stream_advance(s);
+				}
+				else
+				{
+					break;
 				}
 			}
-			if (*n == pclose) *n = (*n)->next;
+			token_stream_skip_newlines(s);
+			token_stream_match(s, TOK_RPAREN);
+		}
 
-			/* Check if name is a known class: instantiation without 'new' is disallowed */
-			if ((curr->type_ == itype && curr->value_type != NULL && !is_base_type(curr->value_type)) ||
-			    (name != NULL && !is_primitive_type_name(name) && get_type_by_name(name) != NULL && !is_base_type(get_type_by_name(name))))
+		return ast_expr_new(arena, class_name, args, arg_count, line, col);
+	}
+
+	/* Identifier or Function Call */
+	if (tok->type == TOK_IDENT || tok->type == TOK_TYPE_INT || tok->type == TOK_TYPE_FLOAT ||
+	    tok->type == TOK_TYPE_STRING || tok->type == TOK_TYPE_BOOL || tok->type == TOK_TYPE_CHAR ||
+	    tok->type == TOK_TYPE_VOID || tok->type == TOK_TYPE_LONG || tok->type == TOK_TYPE_DOUBLE)
+	{
+		char* name = tok->text;
+		token_stream_advance(s); /* consume identifier */
+
+		/* Function Call: name(args...) */
+		if (token_stream_check(s, TOK_LPAREN))
+		{
+			token_stream_advance(s); /* consume '(' */
+
+			AstExpr* args[32];
+			int arg_count = 0;
+
+			while (!token_stream_check(s, TOK_RPAREN) && !token_stream_check(s, TOK_EOF))
+			{
+				token_stream_skip_newlines(s);
+				if (token_stream_check(s, TOK_RPAREN)) break;
+
+				AstExpr* arg = parse_expr_prec(arena, s, 1);
+				if (arg && arg_count < 32)
+				{
+					args[arg_count++] = arg;
+				}
+				token_stream_skip_newlines(s);
+				if (token_stream_check(s, TOK_COMMA))
+				{
+					token_stream_advance(s);
+				}
+				else
+				{
+					break;
+				}
+			}
+			token_stream_skip_newlines(s);
+			token_stream_match(s, TOK_RPAREN);
+
+			/* Disallowed: Instantiation without 'new' (E0012) */
+			if (is_known_class_name(name))
 			{
 				xdiag_error("E0012", NULL, line, col, 0, NULL,
 				            "cannot instantiate class '%s' without 'new'; use 'new %s(...)'",
@@ -320,79 +341,108 @@ static AstExpr* parse_primary(AstArena* arena, node** n, node* stop)
 			return ast_expr_call(arena, name ? name : "anon", args, arg_count, line, col);
 		}
 
-		/* Simple Identifier */
 		return ast_expr_identifier(arena, name ? name : "unknown", line, col);
 	}
 
-	*n = curr->next;
 	return NULL;
 }
 
-static AstExpr* parse_postfix(AstArena* arena, node** n, node* stop)
+static AstExpr* parse_postfix(AstArena* arena, token_stream_t* s)
 {
-	AstExpr* left = parse_primary(arena, n, stop);
+	AstExpr* left = parse_primary(arena, s);
 	if (!left) return NULL;
 
-	while (!is_end(*n, stop))
+	while (true)
 	{
-		/* Member access: .member or .method(args) */
-		if ((*n)->type_ == dot)
+		/* Member Access or Method Call: .member or .method(args...) */
+		if (token_stream_check(s, TOK_DOT))
 		{
-			*n = (*n)->next;
-			if (is_end(*n, stop)) break;
-
-			node* mem_node = *n;
-			char* mem_name = mem_node->value_char_ptr;
-			if (!mem_name && mem_node->value_type)
-				mem_name = mem_node->value_type->type_name;
-			*n = mem_node->next;
-
-			/* Check if followed by (args) -> Method Call */
-			if (!is_end(*n, stop) && (*n)->type_ == parentheses4)
+			token_stream_advance(s); /* consume '.' */
+			token_t* mtok = token_stream_current(s);
+			if (mtok == NULL || (mtok->type != TOK_IDENT && mtok->type < TOK_TYPE_INT))
 			{
-				node* pclose = get_close_part(*n);
-				*n = (*n)->next;
+				break;
+			}
+			char* mem_name = mtok->text;
+			int mline = mtok->line;
+			int mcol = mtok->col;
+			token_stream_advance(s); /* consume member identifier */
 
+			if (token_stream_check(s, TOK_LPAREN))
+			{
+				token_stream_advance(s); /* consume '(' */
 				AstExpr* args[32];
 				int arg_count = 0;
-				while (!is_end(*n, pclose) && *n != pclose)
+
+				while (!token_stream_check(s, TOK_RPAREN) && !token_stream_check(s, TOK_EOF))
 				{
-					if ((*n)->type_ == comma)
-					{
-						*n = (*n)->next;
-						continue;
-					}
-					AstExpr* arg = parse_expr_prec(arena, n, pclose, 1);
+					token_stream_skip_newlines(s);
+					if (token_stream_check(s, TOK_RPAREN)) break;
+
+					AstExpr* arg = parse_expr_prec(arena, s, 1);
 					if (arg && arg_count < 32)
 					{
 						args[arg_count++] = arg;
 					}
-					if (!is_end(*n, pclose) && (*n)->type_ == comma)
+					token_stream_skip_newlines(s);
+					if (token_stream_check(s, TOK_COMMA))
 					{
-						*n = (*n)->next;
+						token_stream_advance(s);
+					}
+					else
+					{
+						break;
 					}
 				}
-				if (*n == pclose) *n = (*n)->next;
-				left = ast_expr_method_call(arena, left, mem_name ? mem_name : "", args, arg_count, mem_node->line, mem_node->col);
+				token_stream_skip_newlines(s);
+				token_stream_match(s, TOK_RPAREN);
+
+				left = ast_expr_method_call(arena, left, mem_name ? mem_name : "", args, arg_count, mline, mcol);
 			}
 			else
 			{
-				left = ast_expr_member(arena, left, mem_name ? mem_name : "", mem_node->line, mem_node->col);
+				left = ast_expr_member(arena, left, mem_name ? mem_name : "", mline, mcol);
 			}
 			continue;
 		}
 
 		/* Indexing: [idx] */
-		if ((*n)->type_ == s_index)
+		if (token_stream_check(s, TOK_LBRACKET))
 		{
-			node* iclose = get_close_part(*n);
-			int line = (*n)->line;
-			int col = (*n)->col;
-			*n = (*n)->next;
+			int iline = token_stream_current(s)->line;
+			int icol = token_stream_current(s)->col;
+			token_stream_advance(s); /* consume '[' */
 
-			AstExpr* idx = parse_expr(arena, n, iclose);
-			if (*n == iclose) *n = (*n)->next;
-			left = ast_expr_index(arena, left, idx, line, col);
+			token_stream_skip_newlines(s);
+			AstExpr* idx = parse_expr(arena, s);
+			token_stream_skip_newlines(s);
+			token_stream_match(s, TOK_RBRACKET);
+
+			left = ast_expr_index(arena, left, idx, iline, icol);
+			continue;
+		}
+
+		/* Postfix ++ */
+		if (token_stream_check(s, TOK_INC))
+		{
+			token_t* itok = token_stream_current(s);
+			int iline = itok->line;
+			int icol = itok->col;
+			token_stream_advance(s);
+			AstExpr* one_lit = ast_expr_literal_int(arena, 1, iline, icol);
+			left = ast_expr_assign(arena, left, "+=", one_lit, iline, icol);
+			continue;
+		}
+
+		/* Postfix -- */
+		if (token_stream_check(s, TOK_DEC))
+		{
+			token_t* dtok = token_stream_current(s);
+			int dline = dtok->line;
+			int dcol = dtok->col;
+			token_stream_advance(s);
+			AstExpr* one_lit = ast_expr_literal_int(arena, 1, dline, dcol);
+			left = ast_expr_assign(arena, left, "-=", one_lit, dline, dcol);
 			continue;
 		}
 
@@ -402,240 +452,294 @@ static AstExpr* parse_postfix(AstArena* arena, node** n, node* stop)
 	return left;
 }
 
-static AstExpr* parse_expr_prec(AstArena* arena, node** n, node* stop, int min_prec)
+static AstExpr* parse_expr_prec(AstArena* arena, token_stream_t* s, int min_prec)
 {
-	AstExpr* left = parse_postfix(arena, n, stop);
+	AstExpr* left = parse_postfix(arena, s);
 	if (!left) return NULL;
 
-	while (!is_end(*n, stop))
+	while (true)
 	{
-		int token_count = 1;
-		AstBinaryOp op = get_binop(*n, &token_count);
+		token_t* tok = token_stream_current(s);
+		if (tok == NULL || tok->type == TOK_EOF) break;
+
+		AstBinaryOp op = get_binop(tok->type);
 		if (op == BINOP_NONE) break;
 
 		int prec = get_precedence(op);
 		if (prec < min_prec) break;
 
-		node* op_node = *n;
-		for (int t = 0; t < token_count; t++)
-		{
-			*n = node_advance(*n);
-		}
+		int oline = tok->line;
+		int ocol = tok->col;
+		token_stream_advance(s); /* consume binary operator */
 
-		AstExpr* right = parse_expr_prec(arena, n, stop, prec + 1);
+		token_stream_skip_newlines(s);
+		AstExpr* right = parse_expr_prec(arena, s, prec + 1);
 		if (!right) break;
 
-		left = ast_expr_binary(arena, op, left, right, op_node->line, op_node->col);
+		left = ast_expr_binary(arena, op, left, right, oline, ocol);
 	}
 
 	return left;
 }
 
-static AstExpr* parse_expr(AstArena* arena, node** n, node* stop)
+static AstExpr* parse_expr(AstArena* arena, token_stream_t* s)
 {
-	return parse_expr_prec(arena, n, stop, 1);
+	return parse_expr_prec(arena, s, 1);
 }
 
 /* -------------------------------------------------------------------------
  * Statement Parser
  * ------------------------------------------------------------------------- */
-static AstStmt* parse_block(AstArena* arena, node** n, node* stop)
+static AstStmt* parse_block(AstArena* arena, token_stream_t* s)
 {
-	if (is_end(*n, stop)) return NULL;
+	token_stream_skip_newlines(s);
+	if (token_stream_check(s, TOK_EOF)) return NULL;
 
-	node* b_open = *n;
-	if (b_open->type_ != parentheses1)
+	if (!token_stream_check(s, TOK_LBRACE))
 	{
-		/* Single statement block */
-		AstStmt* s = parse_statement(arena, n, stop);
-		if (!s) return NULL;
-		AstStmt* stmts[1] = { s };
-		return ast_stmt_block(arena, stmts, 1, s->line, s->col);
+		/* Single statement body */
+		AstStmt* single = parse_statement(arena, s);
+		if (!single) return NULL;
+		AstStmt* stmts[1] = { single };
+		return ast_stmt_block(arena, stmts, 1, single->line, single->col);
 	}
 
-	node* b_close = get_close_part(b_open);
-	int line = b_open->line;
-	int col = b_open->col;
-	*n = b_open->next;
+	token_t* btok = token_stream_current(s);
+	int line = btok->line;
+	int col = btok->col;
+	token_stream_advance(s); /* consume '{' */
 
 	AstStmt* stmt_buf[128];
 	int count = 0;
 
-	while (!is_end(*n, b_close) && *n != b_close)
+	while (!token_stream_check(s, TOK_RBRACE) && !token_stream_check(s, TOK_EOF))
 	{
-		skip_endl(n, b_close);
-		if (*n == b_close || is_end(*n, b_close)) break;
+		if (xdiag_get_error_count() > 0) break;
 
-		AstStmt* s = parse_statement(arena, n, b_close);
-		if (s && count < 128)
+		token_stream_skip_newlines(s);
+		while (token_stream_match(s, TOK_SEMICOLON))
 		{
-			stmt_buf[count++] = s;
+			token_stream_skip_newlines(s);
 		}
-		skip_endl(n, b_close);
+		if (token_stream_check(s, TOK_RBRACE) || token_stream_check(s, TOK_EOF)) break;
+
+		token_t* prev_tok = token_stream_current(s);
+		AstStmt* st = parse_statement(arena, s);
+		if (xdiag_get_error_count() > 0) break;
+		if (st && count < 128)
+		{
+			stmt_buf[count++] = st;
+		}
+		else
+		{
+			if (token_stream_current(s) == prev_tok && !token_stream_check(s, TOK_EOF) && !token_stream_check(s, TOK_RBRACE))
+			{
+				token_stream_advance(s);
+			}
+		}
+		token_stream_skip_newlines(s);
+		while (token_stream_match(s, TOK_SEMICOLON))
+		{
+			token_stream_skip_newlines(s);
+		}
 	}
 
-	if (*n == b_close) *n = (*n)->next;
+	token_stream_match(s, TOK_RBRACE);
 	return ast_stmt_block(arena, stmt_buf, count, line, col);
 }
 
-static AstStmt* parse_statement(AstArena* arena, node** n, node* stop)
+static AstStmt* parse_statement(AstArena* arena, token_stream_t* s)
 {
-	skip_endl(n, stop);
-	if (is_end(*n, stop)) return NULL;
+	token_stream_skip_newlines(s);
+	while (token_stream_match(s, TOK_SEMICOLON))
+	{
+		token_stream_skip_newlines(s);
+	}
+	if (token_stream_check(s, TOK_EOF)) return NULL;
 
-	node* curr = *n;
+	token_t* curr = token_stream_current(s);
+	if (curr == NULL) return NULL;
+
 	int line = curr->line;
 	int col = curr->col;
 
 	/* Block: { stmts... } */
-	if (curr->type_ == parentheses1)
+	if (curr->type == TOK_LBRACE)
 	{
-		return parse_block(arena, n, stop);
+		return parse_block(arena, s);
 	}
 
-	/* Keywords */
-	if (curr->type_ == keyword)
+	/* IF / EIF Statement */
+	if (curr->type == TOK_KW_IF || curr->type == TOK_KW_EIF)
 	{
-		/* IF / EIF Statement */
-		if (curr->value_keyword == _if_ || curr->value_keyword == _eif_)
+		token_stream_advance(s); /* consume 'if' or 'eif' */
+		token_stream_skip_newlines(s);
+
+		if (token_stream_match(s, TOK_LPAREN))
 		{
-			*n = curr->next;
-			if (!is_end(*n, stop) && (*n)->type_ == parentheses4)
+			token_stream_skip_newlines(s);
+			AstExpr* cond = parse_expr(arena, s);
+			token_stream_skip_newlines(s);
+			token_stream_match(s, TOK_RPAREN);
+
+			token_stream_skip_newlines(s);
+			AstStmt* then_b = parse_block(arena, s);
+
+			token_stream_skip_newlines(s);
+			AstStmt* else_b = NULL;
+
+			if (token_stream_check(s, TOK_KW_ELSE))
 			{
-				node* pclose = get_close_part(*n);
-				*n = (*n)->next;
-				AstExpr* cond = parse_expr(arena, n, pclose);
-				if (*n == pclose) *n = (*n)->next;
-
-				skip_endl(n, stop);
-				AstStmt* then_b = parse_block(arena, n, stop);
-
-				skip_endl(n, stop);
-				AstStmt* else_b = NULL;
-				if (!is_end(*n, stop) && (*n)->type_ == keyword)
+				token_stream_advance(s); /* consume 'else' */
+				token_stream_skip_newlines(s);
+				if (token_stream_check(s, TOK_KW_IF))
 				{
-					if ((*n)->value_keyword == _else_)
-					{
-						*n = (*n)->next;
-						skip_endl(n, stop);
-						else_b = parse_block(arena, n, stop);
-					}
-					else if ((*n)->value_keyword == _eif_)
-					{
-						/* eif / else if handled recursively */
-						else_b = parse_statement(arena, n, stop);
-					}
+					/* else if -> recursive */
+					else_b = parse_statement(arena, s);
 				}
-				return ast_stmt_if(arena, cond, then_b, else_b, line, col);
+				else
+				{
+					else_b = parse_block(arena, s);
+				}
+			}
+			else if (token_stream_check(s, TOK_KW_EIF))
+			{
+				/* eif -> recursive */
+				else_b = parse_statement(arena, s);
+			}
+
+			return ast_stmt_if(arena, cond, then_b, else_b, line, col);
+		}
+	}
+
+	/* WHILE Statement */
+	if (curr->type == TOK_KW_WHILE)
+	{
+		token_stream_advance(s); /* consume 'while' */
+		token_stream_skip_newlines(s);
+		if (token_stream_match(s, TOK_LPAREN))
+		{
+			token_stream_skip_newlines(s);
+			AstExpr* cond = parse_expr(arena, s);
+			token_stream_skip_newlines(s);
+			token_stream_match(s, TOK_RPAREN);
+
+			token_stream_skip_newlines(s);
+			AstStmt* body = parse_block(arena, s);
+			return ast_stmt_while(arena, cond, body, line, col);
+		}
+	}
+
+	/* DO-WHILE Statement */
+	if (curr->type == TOK_KW_DO)
+	{
+		token_stream_advance(s); /* consume 'do' */
+		token_stream_skip_newlines(s);
+		AstStmt* body = parse_block(arena, s);
+
+		token_stream_skip_newlines(s);
+		AstExpr* cond = NULL;
+		if (token_stream_match(s, TOK_KW_WHILE))
+		{
+			token_stream_skip_newlines(s);
+			if (token_stream_match(s, TOK_LPAREN))
+			{
+				token_stream_skip_newlines(s);
+				cond = parse_expr(arena, s);
+				token_stream_skip_newlines(s);
+				token_stream_match(s, TOK_RPAREN);
+			}
+		}
+		return ast_stmt_do_while(arena, body, cond, line, col);
+	}
+
+	/* FOR Statement */
+	if (curr->type == TOK_KW_FOR)
+	{
+		token_stream_advance(s); /* consume 'for' */
+		token_stream_skip_newlines(s);
+
+		/* Case 1: for (item in coll) */
+		if (token_stream_check(s, TOK_LPAREN))
+		{
+			/* Lookahead to see if there is an 'in' keyword before ')' */
+			int offset = 1;
+			bool has_in = false;
+			while (true)
+			{
+				token_t* t = token_stream_peek(s, offset);
+				if (t == NULL || t->type == TOK_EOF || t->type == TOK_RPAREN) break;
+				if (t->type == TOK_KW_IN) { has_in = true; break; }
+				offset++;
+			}
+
+			if (has_in)
+			{
+				token_stream_advance(s); /* consume '(' */
+				token_stream_skip_newlines(s);
+				token_t* itok = token_stream_current(s);
+				char* item_name = itok ? itok->text : "item";
+				token_stream_advance(s); /* consume item identifier */
+
+				token_stream_skip_newlines(s);
+				token_stream_match(s, TOK_KW_IN); /* consume 'in' */
+
+				token_stream_skip_newlines(s);
+				AstExpr* coll = parse_expr(arena, s);
+				token_stream_skip_newlines(s);
+				token_stream_match(s, TOK_RPAREN);
+
+				token_stream_skip_newlines(s);
+				AstStmt* body = parse_block(arena, s);
+				return ast_stmt_for_in(arena, item_name, coll, body, line, col);
 			}
 		}
 
-		/* WHILE Statement */
-		if (curr->value_keyword == _while_)
+		/* Case 2: for item in coll */
+		token_t* p1 = token_stream_peek(s, 0);
+		token_t* p2 = token_stream_peek(s, 1);
+		if (p1 != NULL && p2 != NULL && p1->type == TOK_IDENT && p2->type == TOK_KW_IN)
 		{
-			*n = curr->next;
-			if (!is_end(*n, stop) && (*n)->type_ == parentheses4)
-			{
-				node* pclose = get_close_part(*n);
-				*n = (*n)->next;
-				AstExpr* cond = parse_expr(arena, n, pclose);
-				if (*n == pclose) *n = (*n)->next;
+			char* item_name = p1->text;
+			token_stream_advance(s); /* consume item */
+			token_stream_advance(s); /* consume 'in' */
 
-				skip_endl(n, stop);
-				AstStmt* body = parse_block(arena, n, stop);
-				return ast_stmt_while(arena, cond, body, line, col);
-			}
+			token_stream_skip_newlines(s);
+			AstExpr* coll = parse_expr(arena, s);
+
+			token_stream_skip_newlines(s);
+			AstStmt* body = parse_block(arena, s);
+			return ast_stmt_for_in(arena, item_name, coll, body, line, col);
 		}
 
-		/* DO-WHILE Statement */
-		if (curr->value_keyword == _do_)
+		/* Case 3: classic for i (0, i+1, i < 10) */
+		if (p1 != NULL && p1->type == TOK_IDENT)
 		{
-			*n = curr->next;
-			skip_endl(n, stop);
-			AstStmt* body = parse_block(arena, n, stop);
+			char* var_name = p1->text;
+			token_stream_advance(s); /* consume loop var name */
+			token_stream_skip_newlines(s);
 
-			skip_endl(n, stop);
-			AstExpr* cond = NULL;
-			if (!is_end(*n, stop) && (*n)->type_ == keyword && (*n)->value_keyword == _while_)
+			if (token_stream_match(s, TOK_LPAREN))
 			{
-				*n = (*n)->next;
-				if (!is_end(*n, stop) && (*n)->type_ == parentheses4)
-				{
-					node* pclose = get_close_part(*n);
-					*n = (*n)->next;
-					cond = parse_expr(arena, n, pclose);
-					if (*n == pclose) *n = (*n)->next;
-				}
-			}
-			return ast_stmt_do_while(arena, body, cond, line, col);
-		}
+				token_stream_skip_newlines(s);
+				AstExpr* init_val = parse_expr_prec(arena, s, 1);
+				token_stream_skip_newlines(s);
+				token_stream_match(s, TOK_COMMA);
 
-		/* FOR Statement (for-in or classic for) */
-		if (curr->value_keyword == _for_)
-		{
-			*n = curr->next;
-			/* Check if next token is for (item in coll) or for item in coll */
-			bool has_paren = (!is_end(*n, stop) && (*n)->type_ == parentheses4);
-			node* pclose = has_paren ? get_close_part(*n) : NULL;
-			if (has_paren) *n = (*n)->next;
+				token_stream_skip_newlines(s);
+				AstExpr* step_expr = parse_expr_prec(arena, s, 1);
+				token_stream_skip_newlines(s);
+				token_stream_match(s, TOK_COMMA);
 
-			/* Check if it has keyword _in_ inside */
-			bool is_for_in = false;
-			node* check = *n;
-			while (!is_end(check, has_paren ? pclose : stop) && check != (has_paren ? pclose : NULL))
-			{
-				if (check->type_ == keyword && check->value_keyword == _in_)
-				{
-					is_for_in = true;
-					break;
-				}
-				check = check->next;
-			}
+				token_stream_skip_newlines(s);
+				AstExpr* cond_expr = parse_expr_prec(arena, s, 1);
+				token_stream_skip_newlines(s);
+				token_stream_match(s, TOK_RPAREN);
 
-			if (is_for_in)
-			{
-				/* for [item] in [collection] */
-				char* item_name = (*n)->value_char_ptr;
-				*n = (*n)->next; /* skip item */
+				token_stream_skip_newlines(s);
+				AstStmt* body = parse_block(arena, s);
 
-				if (!is_end(*n, stop) && (*n)->type_ == keyword && (*n)->value_keyword == _in_)
-				{
-					*n = (*n)->next; /* skip 'in' */
-				}
-
-				AstExpr* coll = parse_expr(arena, n, has_paren ? pclose : stop);
-				if (has_paren && *n == pclose) *n = (*n)->next;
-
-				skip_endl(n, stop);
-				AstStmt* body = parse_block(arena, n, stop);
-				return ast_stmt_for_in(arena, item_name ? item_name : "item", coll, body, line, col);
-			}
-			else
-			{
-				/* Classic for i (0, i+1, i<10) */
-				char* var_name = (*n)->value_char_ptr;
-				*n = (*n)->next; /* skip loop var name */
-
-				node* f_close = NULL;
-				if (!is_end(*n, stop) && (*n)->type_ == parentheses4)
-				{
-					f_close = get_close_part(*n);
-					*n = (*n)->next;
-				}
-
-				AstExpr* init_val = parse_expr_prec(arena, n, f_close, 1);
-				if (!is_end(*n, f_close) && (*n)->type_ == comma) *n = (*n)->next;
-
-				AstExpr* step_expr = parse_expr_prec(arena, n, f_close, 1);
-				if (!is_end(*n, f_close) && (*n)->type_ == comma) *n = (*n)->next;
-
-				AstExpr* cond_expr = parse_expr_prec(arena, n, f_close, 1);
-				if (f_close && *n == f_close) *n = (*n)->next;
-
-				skip_endl(n, stop);
-				AstStmt* body = parse_block(arena, n, stop);
-
-				AstExpr* v_target = ast_expr_identifier(arena, var_name ? var_name : "i", line, col);
+				AstExpr* v_target = ast_expr_identifier(arena, var_name, line, col);
 				AstExpr* assign_init = ast_expr_assign(arena, v_target, "=", init_val, line, col);
 				AstStmt* init_stmt = ast_stmt_expr(arena, assign_init, line, col);
 				if (step_expr && step_expr->type != AST_EXPR_ASSIGN)
@@ -646,321 +750,449 @@ static AstStmt* parse_statement(AstArena* arena, node** n, node* stop)
 				return ast_stmt_for_c(arena, init_stmt, cond_expr, step_expr, body, line, col);
 			}
 		}
-
-		/* RETURN Statement */
-		if (curr->value_keyword == _return_)
-		{
-			*n = curr->next;
-			AstExpr* ret_expr = NULL;
-			if (!is_end(*n, stop) && !((*n)->type_ & endl))
-			{
-				ret_expr = parse_expr(arena, n, stop);
-			}
-			skip_endl(n, stop);
-			return ast_stmt_return(arena, ret_expr, line, col);
-		}
-
-		/* BREAK & CONTINUE */
-		if (curr->value_keyword == _break_)
-		{
-			*n = curr->next;
-			skip_endl(n, stop);
-			return ast_stmt_break(arena, line, col);
-		}
-
-		/* IMPORT Statement (Module code already parsed into token stream) */
-		if (curr->value_keyword == _import_)
-		{
-			while (*n != NULL && !is_end(*n, stop) && !((*n)->type_ & endl))
-			{
-				*n = node_advance(*n);
-			}
-			skip_endl(n, stop);
-			return NULL;
-		}
-
-		/* CLASS Declaration */
-		if (curr->value_keyword == _class_)
-		{
-			*n = curr->next;
-			char* class_name = (*n)->value_char_ptr;
-			*n = (*n)->next;
-
-			char* base_name = NULL;
-			if (!is_end(*n, stop) && (*n)->type_ == parentheses4)
-			{
-				node* pclose = get_close_part(*n);
-				*n = (*n)->next;
-				if (!is_end(*n, pclose) && (*n)->type_ == var_name)
-				{
-					base_name = (*n)->value_char_ptr;
-				}
-				if (pclose) *n = pclose->next;
-			}
-
-			skip_endl(n, stop);
-			AstStmt* members[64];
-			int member_count = 0;
-
-			if (!is_end(*n, stop) && (*n)->type_ == parentheses1)
-			{
-				node* c_close = get_close_part(*n);
-				*n = (*n)->next;
-				s_class_depth++;
-
-				while (!is_end(*n, c_close) && *n != c_close)
-				{
-					skip_endl(n, c_close);
-					if (*n == c_close || is_end(*n, c_close)) break;
-
-					AstStmt* m = parse_statement(arena, n, c_close);
-					if (m && member_count < 64)
-					{
-						members[member_count++] = m;
-					}
-					skip_endl(n, c_close);
-				}
-				s_class_depth--;
-				if (*n == c_close) *n = (*n)->next;
-			}
-
-			return ast_stmt_class_decl(arena, class_name ? class_name : "AnonClass", base_name, members, member_count, line, col);
-		}
 	}
 
-	/* Type Declaration (Variable or Function): int x = 10; or int add(...) { ... } */
-	bool is_static = false;
-	node* saved_curr = *n;
-	if (curr->type_ == keyword && curr->value_keyword == _static_)
+	/* RETURN Statement */
+	if (curr->type == TOK_KW_RETURN)
 	{
-		is_static = true;
-		*n = curr->next;
-		curr = *n;
-		if (is_end(curr, stop)) return NULL;
-	}
+		token_stream_advance(s); /* consume 'return' */
+		AstExpr* ret_expr = NULL;
 
-	if (curr->type_ == itype)
-	{
-		char* type_name = curr->value_type ? curr->value_type->type_name : "object";
-		*n = curr->next;
-
-		if (!is_end(*n, stop) && ((*n)->type_ == var_name || (*n)->type_ == itype))
+		token_t* next = token_stream_current(s);
+		if (next != NULL && next->type != TOK_NEWLINE && next->type != TOK_SEMICOLON &&
+		    next->type != TOK_RBRACE && next->type != TOK_EOF)
 		{
-			node* name_node = *n;
-			char* decl_name = name_node->value_char_ptr;
-			*n = name_node->next;
-
-			/* Check if followed by '(' -> Function Declaration or Constructor Init */
-			if (!is_end(*n, stop) && (*n)->type_ == parentheses4)
-			{
-				node* pclose = get_close_part(*n);
-				/* Look ahead past pclose to see if next non-endl token is '{' (parentheses1) */
-				node* after = pclose ? pclose->next : NULL;
-				while (after != NULL && !is_end(after, stop) && (after->type_ & endl))
-				{
-					after = node_advance(after);
-				}
-				bool is_func_def = (after != NULL && !is_end(after, stop) && after->type_ == parentheses1);
-
-				if (is_func_def)
-				{
-					*n = (*n)->next;
-					AstParam params[16];
-					int param_count = 0;
-
-					while (!is_end(*n, pclose) && *n != pclose)
-					{
-						if ((*n)->type_ == comma)
-						{
-							*n = (*n)->next;
-							continue;
-						}
-						if ((*n)->type_ == itype)
-						{
-							char* ptype = (*n)->value_type ? (*n)->value_type->type_name : "object";
-							*n = (*n)->next;
-							char* pname = (!is_end(*n, pclose) && (*n)->type_ == var_name) ? (*n)->value_char_ptr : "arg";
-							if (!is_end(*n, pclose) && (*n)->type_ == var_name) *n = (*n)->next;
-
-							if (param_count < 16)
-							{
-								params[param_count].type_name = ptype;
-								params[param_count].name = pname;
-								param_count++;
-							}
-						}
-						else
-						{
-							*n = (*n)->next;
-						}
-					}
-					if (*n == pclose) *n = (*n)->next;
-
-					skip_endl(n, stop);
-					AstStmt* body = parse_block(arena, n, stop);
-					return ast_stmt_func_decl(arena, decl_name ? decl_name : "fn", type_name, params, param_count, body, is_static, NULL, line, col);
-				}
-				else
-				{
-					/* Disallowed: Direct constructor call in declaration */
-					xdiag_error("E0010", NULL, line, col, 0, NULL,
-					            "direct constructor call in declaration is disallowed; use '%s %s = new %s(...)'",
-					            type_name, decl_name ? decl_name : "var", type_name);
-					return NULL;
-				}
-			}
-
-			/* Variable Declaration */
-			AstExpr* init_expr = NULL;
-			if (!is_end(*n, stop) && (*n)->type_ == equles)
-			{
-				*n = (*n)->next;
-				init_expr = parse_expr(arena, n, stop);
-			}
-			skip_endl(n, stop);
-
-			if (init_expr == NULL && s_class_depth == 0 && !is_primitive_type_name(type_name))
-			{
-				xdiag_error("E0011", NULL, line, col, 0, NULL,
-				            "implicit default instantiation is disallowed; use '%s %s = new %s()'",
-				            type_name, decl_name ? decl_name : "var", type_name);
-				return NULL;
-			}
-
-			return ast_stmt_var_decl(arena, type_name, decl_name ? decl_name : "var", init_expr, is_static, line, col);
+			ret_expr = parse_expr(arena, s);
 		}
-		else
+		return ast_stmt_return(arena, ret_expr, line, col);
+	}
+
+	/* BREAK Statement */
+	if (curr->type == TOK_KW_BREAK)
+	{
+		token_stream_advance(s);
+		return ast_stmt_break(arena, line, col);
+	}
+
+	/* CONTINUE Statement */
+	if (curr->type == TOK_KW_CONTINUE)
+	{
+		token_stream_advance(s);
+		return ast_stmt_continue(arena, line, col);
+	}
+
+	/* IMPORT Statement */
+	if (curr->type == TOK_KW_IMPORT)
+	{
+		token_stream_advance(s); /* consume 'import' */
+		token_stream_skip_newlines(s);
+		bool has_paren = token_stream_match(s, TOK_LPAREN);
+		token_stream_skip_newlines(s);
+		token_t* mtok = token_stream_current(s);
+		if (mtok != NULL && (mtok->type == TOK_STRING || mtok->type == TOK_IDENT))
 		{
-			*n = saved_curr;
+			char* mod_name = mtok->text;
+			token_stream_advance(s);
+			if (s_current_program != NULL)
+			{
+				x_import_module_ast(s_current_program, mod_name);
+			}
 		}
-	}
-	else if (is_static)
-	{
-		*n = saved_curr;
-	}
-
-	/* Expression / Assignment Statement */
-	AstExpr* expr = parse_expr(arena, n, stop);
-	if (!expr)
-	{
-		if (!is_end(*n, stop)) *n = node_advance(*n);
+		if (has_paren)
+		{
+			token_stream_skip_newlines(s);
+			token_stream_match(s, TOK_RPAREN);
+		}
 		return NULL;
 	}
 
-	/* Check if followed by '=' or compound assignment operator (+=, -=, *=, /=, %=) */
-	if (!is_end(*n, stop))
+	/* CLASS Declaration */
+	if (curr->type == TOK_KW_CLASS)
+	{
+		token_stream_advance(s); /* consume 'class' */
+		token_stream_skip_newlines(s);
+		token_t* ctok = token_stream_current(s);
+		char* class_name = ctok ? ctok->text : "AnonClass";
+		token_stream_advance(s); /* consume class name */
+
+		register_class_name(class_name);
+
+		char* base_name = NULL;
+		token_stream_skip_newlines(s);
+		if (token_stream_match(s, TOK_LPAREN))
+		{
+			token_stream_skip_newlines(s);
+			token_t* btok = token_stream_current(s);
+			if (btok != NULL && btok->type == TOK_IDENT)
+			{
+				base_name = btok->text;
+				token_stream_advance(s);
+			}
+			token_stream_skip_newlines(s);
+			token_stream_match(s, TOK_RPAREN);
+		}
+
+		token_stream_skip_newlines(s);
+		AstStmt* members[64];
+		int member_count = 0;
+
+		if (token_stream_match(s, TOK_LBRACE))
+		{
+			s_class_depth++;
+			const char* prev_class_name = s_current_class_name;
+			s_current_class_name = class_name;
+
+			while (!token_stream_check(s, TOK_RBRACE) && !token_stream_check(s, TOK_EOF))
+			{
+				if (xdiag_get_error_count() > 0) break;
+				token_stream_skip_newlines(s);
+				while (token_stream_match(s, TOK_SEMICOLON)) token_stream_skip_newlines(s);
+				if (token_stream_check(s, TOK_RBRACE) || token_stream_check(s, TOK_EOF)) break;
+
+				token_t* prev_tok = token_stream_current(s);
+				AstStmt* m = parse_statement(arena, s);
+				if (xdiag_get_error_count() > 0) break;
+				if (m && member_count < 64)
+				{
+					members[member_count++] = m;
+				}
+				else
+				{
+					if (token_stream_current(s) == prev_tok && !token_stream_check(s, TOK_EOF) && !token_stream_check(s, TOK_RBRACE))
+					{
+						token_stream_advance(s);
+					}
+				}
+				token_stream_skip_newlines(s);
+				while (token_stream_match(s, TOK_SEMICOLON)) token_stream_skip_newlines(s);
+			}
+
+			s_current_class_name = prev_class_name;
+			s_class_depth--;
+			token_stream_match(s, TOK_RBRACE);
+		}
+
+		type_def* td = get_type_by_name(class_name);
+		if (td == NULL)
+		{
+			td = new_type();
+			td->type_name = strdup(class_name);
+		}
+		if (base_name != NULL)
+		{
+			td->base = get_type_by_name(base_name);
+		}
+		for (int i = 0; i < member_count; i++)
+		{
+			AstStmt* m = members[i];
+			if (m && m->type == AST_STMT_VAR_DECL && !m->as.var_decl.is_static)
+			{
+				type_def* ftype = get_type_by_name(m->as.var_decl.type_name);
+				if (!ftype) ftype = T_INT;
+				var* dummy = NULL;
+				define_class_property(m->as.var_decl.var_name, td, ftype, &dummy);
+			}
+		}
+		type_def_compute_field_offsets(td);
+
+		return ast_stmt_class_decl(arena, class_name, base_name, members, member_count, line, col);
+	}
+
+	/* Variable or Function Declaration */
+	bool is_static = false;
+	if (curr->type == TOK_KW_STATIC)
+	{
+		is_static = true;
+		token_stream_advance(s);
+		token_stream_skip_newlines(s);
+		curr = token_stream_current(s);
+		if (curr == NULL || curr->type == TOK_EOF) return NULL;
+	}
+
+	/* Check if it's a type keyword: int, float, string, bool, char, void, long, double */
+	bool is_type_kw = (curr->type == TOK_TYPE_INT || curr->type == TOK_TYPE_FLOAT ||
+	                   curr->type == TOK_TYPE_STRING || curr->type == TOK_TYPE_BOOL ||
+	                   curr->type == TOK_TYPE_CHAR || curr->type == TOK_TYPE_VOID ||
+	                   curr->type == TOK_TYPE_LONG || curr->type == TOK_TYPE_DOUBLE);
+
+	/* Check if it's an Identifier followed by an Identifier: Point p ... */
+	bool is_class_type_decl = false;
+	if (curr->type == TOK_IDENT)
+	{
+		token_t* next_tok = token_stream_peek(s, 1);
+		if (next_tok != NULL && (next_tok->type == TOK_IDENT || next_tok->type == TOK_LPAREN))
+		{
+			if (next_tok->type == TOK_IDENT)
+			{
+				is_class_type_decl = true;
+			}
+			else if (s_current_class_name != NULL && strcmp(curr->text, s_current_class_name) == 0)
+			{
+				/* Constructor without return type: Point(int a, int b) { ... } */
+				is_type_kw = true;
+			}
+		}
+	}
+
+	if (is_type_kw || is_class_type_decl)
+	{
+		char* type_name = curr->text;
+		token_stream_advance(s); /* consume type name */
+		token_stream_skip_newlines(s);
+
+		token_t* name_tok = token_stream_current(s);
+		char* decl_name = name_tok ? name_tok->text : "var";
+		if (name_tok && name_tok->type == TOK_IDENT)
+		{
+			token_stream_advance(s); /* consume decl name */
+		}
+		else if (s_current_class_name != NULL && strcmp(type_name, s_current_class_name) == 0)
+		{
+			/* Constructor named after class */
+			decl_name = type_name;
+		}
+
+		token_stream_skip_newlines(s);
+
+		/* Check if followed by '(' -> Function Declaration or Constructor Init */
+		if (token_stream_check(s, TOK_LPAREN))
+		{
+			/* Lookahead past closing ')' to check if followed by '{' */
+			int offset = 1;
+			int depth = 1;
+			while (true)
+			{
+				token_t* t = token_stream_peek(s, offset);
+				if (t == NULL || t->type == TOK_EOF) break;
+				if (t->type == TOK_LPAREN) depth++;
+				else if (t->type == TOK_RPAREN)
+				{
+					depth--;
+					if (depth == 0)
+					{
+						offset++;
+						break;
+					}
+				}
+				offset++;
+			}
+
+			/* Skip any newlines after ')' */
+			while (true)
+			{
+				token_t* t = token_stream_peek(s, offset);
+				if (t != NULL && t->type == TOK_NEWLINE) offset++;
+				else break;
+			}
+
+			token_t* after_paren = token_stream_peek(s, offset);
+			bool is_func_def = (after_paren != NULL && after_paren->type == TOK_LBRACE);
+
+			if (is_func_def)
+			{
+				token_stream_advance(s); /* consume '(' */
+				AstParam params[16];
+				int param_count = 0;
+
+				while (!token_stream_check(s, TOK_RPAREN) && !token_stream_check(s, TOK_EOF))
+				{
+					token_stream_skip_newlines(s);
+					if (token_stream_check(s, TOK_RPAREN)) break;
+
+					token_t* ptype_tok = token_stream_current(s);
+					char* ptype = ptype_tok ? ptype_tok->text : "object";
+					token_stream_advance(s); /* consume param type */
+
+					token_stream_skip_newlines(s);
+					token_t* pname_tok = token_stream_current(s);
+					char* pname = (pname_tok && pname_tok->type == TOK_IDENT) ? pname_tok->text : "arg";
+					if (pname_tok && pname_tok->type == TOK_IDENT)
+					{
+						token_stream_advance(s); /* consume param name */
+					}
+
+					if (param_count < 16)
+					{
+						params[param_count].type_name = ptype;
+						params[param_count].name = pname;
+						param_count++;
+					}
+
+					token_stream_skip_newlines(s);
+					if (token_stream_check(s, TOK_COMMA))
+					{
+						token_stream_advance(s);
+					}
+					else
+					{
+						break;
+					}
+				}
+
+				token_stream_skip_newlines(s);
+				token_stream_match(s, TOK_RPAREN);
+
+				token_stream_skip_newlines(s);
+				AstStmt* body = parse_block(arena, s);
+				return ast_stmt_func_decl(arena, decl_name, type_name, params, param_count, body, is_static, s_current_class_name, line, col);
+			}
+			else
+			{
+				/* Disallowed: Direct constructor call in declaration (E0010) */
+				xdiag_error("E0010", NULL, line, col, 0, NULL,
+				            "direct constructor call in declaration is disallowed; use '%s %s = new %s(...)'",
+				            type_name, decl_name, type_name);
+				while (!token_stream_check(s, TOK_NEWLINE) && !token_stream_check(s, TOK_SEMICOLON) && !token_stream_check(s, TOK_EOF))
+				{
+					token_stream_advance(s);
+				}
+				return NULL;
+			}
+		}
+
+		/* Variable Declaration */
+		AstExpr* init_expr = NULL;
+		if (token_stream_match(s, TOK_ASSIGN))
+		{
+			token_stream_skip_newlines(s);
+			init_expr = parse_expr(arena, s);
+		}
+
+		if (init_expr == NULL && s_class_depth == 0 && !is_primitive_type_name(type_name))
+		{
+			/* Disallowed: Implicit default instantiation (E0011) */
+			xdiag_error("E0011", NULL, line, col, 0, NULL,
+			            "implicit default instantiation is disallowed; use '%s %s = new %s()'",
+			            type_name, decl_name, type_name);
+			while (!token_stream_check(s, TOK_NEWLINE) && !token_stream_check(s, TOK_SEMICOLON) && !token_stream_check(s, TOK_EOF))
+			{
+				token_stream_advance(s);
+			}
+			return NULL;
+		}
+
+		return ast_stmt_var_decl(arena, type_name, decl_name, init_expr, is_static, line, col);
+	}
+
+	/* Expression / Assignment Statement */
+	AstExpr* expr = parse_expr(arena, s);
+	if (!expr)
+	{
+		return NULL;
+	}
+
+	/* Check assignment: =, +=, -=, *=, /=, %= */
+	token_t* atok = token_stream_current(s);
+	if (atok != NULL)
 	{
 		char* op_str = NULL;
-		node* next = node_advance(*n);
-
-		if ((*n)->type_ == equles && (next == NULL || next->type_ != equles))
-		{
-			op_str = "=";
-			*n = node_advance(*n);
-		}
-		else if ((*n)->type_ == operators_n && (*n)->value_char_ptr != NULL && next != NULL && next->type_ == equles)
-		{
-			char c = *(*n)->value_char_ptr;
-			if (c == '+' || c == '-' || c == '*' || c == '/' || c == '%')
-			{
-				char op_buf[4] = { c, '=', '\0' };
-				op_str = ast_arena_strdup(arena, op_buf);
-				*n = node_advance(next);
-			}
-		}
-		else if ((*n)->type_ == operators_n && (*n)->value_char_ptr != NULL && next != NULL && next->type_ == operators_n &&
-		         next->value_char_ptr != NULL && *(*n)->value_char_ptr == *next->value_char_ptr)
-		{
-			char c = *(*n)->value_char_ptr;
-			if (c == '+' || c == '-')
-			{
-				char op_buf[4] = { c, '=', '\0' };
-				char* aop_str = ast_arena_strdup(arena, op_buf);
-				*n = node_advance(next);
-				AstExpr* one_lit = ast_expr_literal_int(arena, 1, line, col);
-				expr = ast_expr_assign(arena, expr, aop_str, one_lit, line, col);
-				op_str = NULL;
-			}
-		}
+		if (atok->type == TOK_ASSIGN) op_str = "=";
+		else if (atok->type == TOK_PLUS_ASSIGN) op_str = "+=";
+		else if (atok->type == TOK_MINUS_ASSIGN) op_str = "-=";
+		else if (atok->type == TOK_STAR_ASSIGN) op_str = "*=";
+		else if (atok->type == TOK_SLASH_ASSIGN) op_str = "/=";
+		else if (atok->type == TOK_MOD_ASSIGN) op_str = "%=";
 
 		if (op_str != NULL)
 		{
-			AstExpr* val_expr = parse_expr(arena, n, stop);
+			token_stream_advance(s); /* consume assign operator */
+			token_stream_skip_newlines(s);
+			AstExpr* val_expr = parse_expr(arena, s);
 			expr = ast_expr_assign(arena, expr, op_str, val_expr, line, col);
 		}
 	}
 
-	skip_endl(n, stop);
 	return ast_stmt_expr(arena, expr, line, col);
 }
 
 /* -------------------------------------------------------------------------
  * Public Entry Points
  * ------------------------------------------------------------------------- */
-AstProgram* xast_parse_node_stream(AstArena* arena, node* start_node, node* end_node)
+bool xast_parse_into_program(AstProgram* prog, token_stream_t* stream)
 {
-	if (!arena || !start_node) return NULL;
+	if (prog == NULL || stream == NULL) return false;
 
-	AstProgram* prog = ast_program_create(arena);
-	node* curr = start_node;
+	AstProgram* prev_prog = s_current_program;
+	s_current_program = prog;
 
-	while (!is_end(curr, end_node))
+	while (!token_stream_check(stream, TOK_EOF))
 	{
-		skip_endl(&curr, end_node);
-		if (is_end(curr, end_node)) break;
+		if (xdiag_get_error_count() > 0) break;
 
-		AstStmt* stmt = parse_statement(arena, &curr, end_node);
-		if (stmt)
+		token_stream_skip_newlines(stream);
+		while (token_stream_match(stream, TOK_SEMICOLON))
+		{
+			token_stream_skip_newlines(stream);
+		}
+		if (token_stream_check(stream, TOK_EOF)) break;
+
+		token_t* prev_tok = token_stream_current(stream);
+		AstStmt* stmt = parse_statement(prog->arena, stream);
+		if (xdiag_get_error_count() > 0) break;
+		if (stmt != NULL)
 		{
 			ast_program_add_stmt(prog, stmt);
 		}
-		skip_endl(&curr, end_node);
+		else
+		{
+			if (token_stream_current(stream) == prev_tok && !token_stream_check(stream, TOK_EOF))
+			{
+				token_stream_advance(stream);
+			}
+		}
+		token_stream_skip_newlines(stream);
+		while (token_stream_match(stream, TOK_SEMICOLON))
+		{
+			token_stream_skip_newlines(stream);
+		}
 	}
 
+	s_current_program = prev_prog;
+	return (xdiag_get_error_count() == 0);
+}
+
+AstProgram* xast_parse_token_stream(AstArena* arena, token_stream_t* stream)
+{
+	if (arena == NULL || stream == NULL) return NULL;
+	AstProgram* prog = ast_program_create(arena);
+	if (!xast_parse_into_program(prog, stream))
+	{
+		return NULL;
+	}
 	return prog;
 }
 
 AstProgram* xast_parse_source(const char* source_code, const char* filename)
 {
-	if (!source_code) return NULL;
-
-	AstArena* arena = ast_arena_create(64 * 1024);
-	if (!arena) return NULL;
-
+	if (source_code == NULL) return NULL;
 	xdiag_set_current_file(filename ? filename : "<source>");
 	xdiag_set_source_code(source_code);
 
-	/* Use xlang parser to tokenize into node stream */
-	char* dup_src = strdup(source_code);
-	start_parse_lines(dup_src, false);
-	free(dup_src);
+	token_stream_t* stream = token_stream_tokenize(source_code);
+	AstArena* arena = ast_arena_create(64 * 1024);
+	AstProgram* prog = xast_parse_token_stream(arena, stream);
+	token_stream_free(stream);
+	free(stream);
 
-	extern node_stack* nodes;
-	node* start_node = (nodes != NULL) ? nodes->root : NULL;
-
-	AstProgram* prog = xast_parse_node_stream(arena, start_node, NULL);
+	if (xdiag_get_error_count() > 0)
+	{
+		if (prog != NULL)
+		{
+			ast_program_destroy(prog);
+			prog = NULL;
+		}
+		return NULL;
+	}
 	return prog;
 }
 
 AstProgram* xast_parse_file(const char* filepath)
 {
 	FILE* f = fopen(filepath, "r");
-	if (!f) return NULL;
-
-	fseek(f, 0, SEEK_END);
-	long len = ftell(f);
-	fseek(f, 0, SEEK_SET);
-
-	char* buf = (char*)malloc(len + 1);
-	if (!buf)
-	{
-		fclose(f);
-		return NULL;
-	}
-
-	size_t read_bytes = fread(buf, 1, len, f);
-	buf[read_bytes] = '\0';
+	if (f == NULL) return NULL;
+	char* buf = get_file_buffer(f);
 	fclose(f);
+	if (buf == NULL) return NULL;
 
 	AstProgram* prog = xast_parse_source(buf, filepath);
 	free(buf);

@@ -17,7 +17,6 @@ __  __   ___   | |__    _   _  __  __
 #include "xcollection.h"
 #include "ximport.h"
 #include "xgc.h"
-#include "parse.h"
 #include "xast.h"
 #include "xmath.h"
 #include "xdis_html.h"
@@ -32,22 +31,17 @@ __  __   ___   | |__    _   _  __  __
 clock_t t;
 //C:\Tests\t.xb
 bool load_saved_code = false;
-node_stack* nodes;
 var_stack* varss;
 var_stack* t_varss;
 func_stack* funcs;
 type_stack* types;
 func_stack* t_funcs;
-Debug * debuge;
 bool read_file = true;
 bool save_code = false;
 int print_parse_log = 0;
 bool flag_stats = false;
 extern Arena *g_lex_arena;
 #define STR_VALUE(val) #val
-
-
-void start_compile(void);
 
 void getsavedMD5(FILE* cf);
 unsigned int file_md5[4];
@@ -107,15 +101,12 @@ void int_xlang()
 {
     if (g_lex_arena == NULL)
 		g_lex_arena = arena_create(128 * 1024);
-	nodes = (node_stack*)malloc(sizeof(node_stack));
 	varss = &var_start_stack;
 	funcs = &base_function;
 	types = &simple_type_stack;
 
 	t_varss = (var_stack*)malloc(sizeof(var_stack));
 	t_funcs = (func_stack*)malloc(sizeof(func_stack));
-	debuge = init_debug();
-	stack_init(nodes);
 	var_stack_init(t_varss);
 	func_stack_init(t_funcs);
 
@@ -277,8 +268,14 @@ void interupter(void)
 	}
 
 	bool unclosed = false;
-	node_type which_type = none;
 	char line_buf[1024 * 5];
+	char accum_buf[1024 * 20] = {0};
+	int accum_len = 0;
+	int paren_depth = 0;
+	int brace_depth = 0;
+
+	XVm repl_vm;
+	xvm_init(&repl_vm);
 
 	while (true)
 	{
@@ -330,46 +327,6 @@ void interupter(void)
 				repl_print_classes();
 				continue;
 			}
-			if (strcmp(trimmed, ":ast") == 0)
-			{
-				if (nodes != NULL && nodes->root != NULL)
-				{
-					AstArena* arena = ast_arena_create(32 * 1024);
-					AstProgram* prog = xast_parse_node_stream(arena, nodes->root, NULL);
-					if (prog != NULL)
-					{
-						xast_dump_program(prog);
-					}
-					ast_arena_destroy(arena);
-				}
-				else
-				{
-					printf("No AST nodes in current session.\n");
-				}
-				continue;
-			}
-			if (strcmp(trimmed, ":ir") == 0 || strcmp(trimmed, ":dis") == 0)
-			{
-				if (nodes != NULL && nodes->root != NULL)
-				{
-					AstArena* arena = ast_arena_create(32 * 1024);
-					AstProgram* prog = xast_parse_node_stream(arena, nodes->root, NULL);
-					if (prog != NULL)
-					{
-						XIrChunk chunk;
-						xir_chunk_init(&chunk);
-						xir_compile_program(prog, &chunk);
-						xir_disassemble_chunk(&chunk, "repl_history");
-						xir_chunk_free(&chunk);
-					}
-					ast_arena_destroy(arena);
-				}
-				else
-				{
-					printf("No bytecode instructions in current session.\n");
-				}
-				continue;
-			}
 			if (strcmp(trimmed, ":gc") == 0)
 			{
 				printf("Active objects: %zu, Allocated memory: %zu bytes\n", gc_total_objects(), gc_allocated_bytes());
@@ -381,8 +338,13 @@ void interupter(void)
 			{
 				clean_memory();
 				int_xlang();
-				parser_delim_clear(NULL);
+				xvm_free(&repl_vm);
+				xvm_init(&repl_vm);
 				unclosed = false;
+				accum_len = 0;
+				accum_buf[0] = '\0';
+				paren_depth = 0;
+				brace_depth = 0;
 				printf("Environment reset.\n");
 				continue;
 			}
@@ -395,33 +357,77 @@ void interupter(void)
 		{
 			if (trimmed[0] == '\0')
 			{
-				parser_delim_clear(NULL);
 				unclosed = false;
+				accum_len = 0;
+				accum_buf[0] = '\0';
+				paren_depth = 0;
+				brace_depth = 0;
 				printf("(multi-line block canceled)\n");
 				continue;
 			}
 		}
 
-		if (!unclosed && !repl_is_statement(trimmed))
+		/* Append to accum_buf */
+		size_t l_len = strlen(line_buf);
+		if (accum_len + l_len < sizeof(accum_buf) - 1)
 		{
-			char eval_buf[1024 * 5 + 32];
+			memcpy(accum_buf + accum_len, line_buf, l_len);
+			accum_len += l_len;
+			accum_buf[accum_len] = '\0';
+		}
+
+		/* Update paren/brace depth */
+		for (size_t i = 0; i < l_len; i++)
+		{
+			if (line_buf[i] == '(') paren_depth++;
+			else if (line_buf[i] == ')' && paren_depth > 0) paren_depth--;
+			else if (line_buf[i] == '{') brace_depth++;
+			else if (line_buf[i] == '}' && brace_depth > 0) brace_depth--;
+		}
+
+		if (paren_depth > 0 || brace_depth > 0)
+		{
+			unclosed = true;
+			continue;
+		}
+
+		unclosed = false;
+
+		/* Execute accumulated buffer */
+		xdiag_reset_error_count();
+		AstProgram* prog = NULL;
+
+		if (!repl_is_statement(trimmed))
+		{
+			char eval_buf[1024 * 20 + 32];
 			snprintf(eval_buf, sizeof(eval_buf), "print(%s)\n", trimmed);
-			start_parse_lines(eval_buf, true);
-			unclosed = static_flag_check2x(&which_type);
-			if (unclosed)
-			{
-				parser_delim_clear(NULL);
-				unclosed = false;
-				start_parse_lines(line_buf, true);
-				unclosed = static_flag_check2x(&which_type);
-			}
+			prog = xast_parse_source(eval_buf, "<repl>");
 		}
-		else
+
+		if (prog == NULL || xdiag_get_error_count() > 0)
 		{
-			start_parse_lines(line_buf, true);
-			unclosed = static_flag_check2x(&which_type);
+			if (prog) { ast_program_destroy(prog); prog = NULL; }
+			xdiag_reset_error_count();
+			prog = xast_parse_source(accum_buf, "<repl>");
 		}
+
+		if (prog != NULL && xdiag_get_error_count() == 0)
+		{
+			XIrChunk chunk;
+			xir_chunk_init(&chunk);
+			xir_compile_program(prog, &chunk);
+			xvm_run(&repl_vm, &chunk);
+			xir_chunk_free(&chunk);
+			ast_program_destroy(prog);
+		}
+
+		accum_len = 0;
+		accum_buf[0] = '\0';
+		paren_depth = 0;
+		brace_depth = 0;
 	}
+
+	xvm_free(&repl_vm);
 }
 
 static bool is_xbc_file(const char* path)
@@ -607,19 +613,16 @@ int main(const int argc, char** argv)
 
 	if (flag_dump_ast || flag_dump_ir || flag_vm || flag_compile || flag_view || flag_emit_llvm || flag_build || flag_jit)
 	{
-		g_parse_only = true;
 		print_parse_log = 0;
 	}
 
 	if (flag_compile)
 	{
 		xdiag_reset_error_count();
-		AstArena* arena = ast_arena_create(64 * 1024);
-		start_parse_lines(buff, false);
-		AstProgram* prog = xast_parse_node_stream(arena, nodes->root, NULL);
+		AstProgram* prog = xast_parse_source(buff, script_path);
 		if (xdiag_get_error_count() > 0 || prog == NULL)
 		{
-			ast_arena_destroy(arena);
+			if (prog) ast_program_destroy(prog);
 			free(buff);
 			clean_memory();
 			return 1;
@@ -649,7 +652,7 @@ int main(const int argc, char** argv)
 			fprintf(stderr, "Failed to write bytecode to '%s'\n", target_out);
 		}
 		xir_chunk_free(&chunk);
-		ast_arena_destroy(arena);
+		ast_program_destroy(prog);
 		free(buff);
 		clean_memory();
 		return ok ? 0 : 1;
@@ -658,12 +661,10 @@ int main(const int argc, char** argv)
 	if (flag_emit_llvm)
 	{
 		xdiag_reset_error_count();
-		AstArena* arena = ast_arena_create(64 * 1024);
-		start_parse_lines(buff, false);
-		AstProgram* prog = xast_parse_node_stream(arena, nodes->root, NULL);
+		AstProgram* prog = xast_parse_source(buff, script_path);
 		if (xdiag_get_error_count() > 0 || prog == NULL)
 		{
-			ast_arena_destroy(arena);
+			if (prog) ast_program_destroy(prog);
 			free(buff);
 			clean_memory();
 			return 1;
@@ -690,7 +691,7 @@ int main(const int argc, char** argv)
 		{
 			fprintf(stderr, "Failed to write LLVM IR to '%s'\n", target_out);
 		}
-		ast_arena_destroy(arena);
+		ast_program_destroy(prog);
 		free(buff);
 		clean_memory();
 		return ok ? 0 : 1;
@@ -699,12 +700,10 @@ int main(const int argc, char** argv)
 	if (flag_build)
 	{
 		xdiag_reset_error_count();
-		AstArena* arena = ast_arena_create(64 * 1024);
-		start_parse_lines(buff, false);
-		AstProgram* prog = xast_parse_node_stream(arena, nodes->root, NULL);
+		AstProgram* prog = xast_parse_source(buff, script_path);
 		if (xdiag_get_error_count() > 0 || prog == NULL)
 		{
-			ast_arena_destroy(arena);
+			if (prog) ast_program_destroy(prog);
 			free(buff);
 			clean_memory();
 			return 1;
@@ -728,7 +727,7 @@ int main(const int argc, char** argv)
 		if (!ok)
 		{
 			fprintf(stderr, "Error: Failed to emit intermediate LLVM IR to '%s'\n", ll_path);
-			ast_arena_destroy(arena);
+			ast_program_destroy(prog);
 			free(buff);
 			clean_memory();
 			return 1;
@@ -741,7 +740,7 @@ int main(const int argc, char** argv)
 			fprintf(stderr, "Note: 'clang' compiler not found in PATH to assemble native binary '%s'.\n", bin_target);
 			fprintf(stderr, "You can compile the generated LLVM IR manually using:\n");
 			fprintf(stderr, "  clang -O2 %s -lm -o %s\n", ll_path, bin_target);
-			ast_arena_destroy(arena);
+			ast_program_destroy(prog);
 			free(buff);
 			clean_memory();
 			return 1;
@@ -774,7 +773,7 @@ int main(const int argc, char** argv)
 			fprintf(stderr, "Error: Native compilation command failed with exit code %d\n", compile_res);
 		}
 
-		ast_arena_destroy(arena);
+		ast_program_destroy(prog);
 		free(buff);
 		clean_memory();
 		return (compile_res == 0) ? 0 : 1;
@@ -783,18 +782,16 @@ int main(const int argc, char** argv)
 	if (flag_dump_ast)
 	{
 		xdiag_reset_error_count();
-		AstArena* arena = ast_arena_create(64 * 1024);
-		start_parse_lines(buff, false);
-		AstProgram* prog = xast_parse_node_stream(arena, nodes->root, NULL);
+		AstProgram* prog = xast_parse_source(buff, script_path);
 		if (xdiag_get_error_count() > 0 || prog == NULL)
 		{
-			ast_arena_destroy(arena);
+			if (prog) ast_program_destroy(prog);
 			free(buff);
 			clean_memory();
 			return 1;
 		}
 		xast_dump_program(prog);
-		ast_arena_destroy(arena);
+		ast_program_destroy(prog);
 		free(buff);
 		clean_memory();
 		return 0;
@@ -803,12 +800,10 @@ int main(const int argc, char** argv)
 	if (flag_dump_ir)
 	{
 		xdiag_reset_error_count();
-		AstArena* arena = ast_arena_create(64 * 1024);
-		start_parse_lines(buff, false);
-		AstProgram* prog = xast_parse_node_stream(arena, nodes->root, NULL);
-		if (xdiag_get_error_count() > 0 || prog == NULL)
+		AstProgram* prog = xast_parse_source(buff, script_path);
+		if (prog == NULL || xdiag_get_error_count() > 0)
 		{
-			ast_arena_destroy(arena);
+			if (prog) ast_program_destroy(prog);
 			free(buff);
 			clean_memory();
 			return 1;
@@ -818,7 +813,7 @@ int main(const int argc, char** argv)
 		xir_compile_program(prog, &chunk);
 		xir_disassemble_chunk(&chunk, script_path);
 		xir_chunk_free(&chunk);
-		ast_arena_destroy(arena);
+		ast_program_destroy(prog);
 		free(buff);
 		clean_memory();
 		return 0;
@@ -827,81 +822,29 @@ int main(const int argc, char** argv)
 	if (flag_jit && !flag_vm)
 	{
 		xdiag_reset_error_count();
-		AstArena* arena = ast_arena_create(64 * 1024);
-		start_parse_lines(buff, false);
-		AstProgram* prog = xast_parse_node_stream(arena, nodes->root, NULL);
+		AstProgram* prog = xast_parse_source(buff, script_path);
 		if (xdiag_get_error_count() > 0 || prog == NULL)
 		{
-			ast_arena_destroy(arena);
+			if (prog) ast_program_destroy(prog);
 			free(buff);
 			clean_memory();
 			return 1;
 		}
 
 		int ret = xllvm_jit_run_program(prog, script_path, g_script_argc, g_script_argv);
-		ast_arena_destroy(arena);
+		ast_program_destroy(prog);
 		free(buff);
 		clean_memory();
 		return ret;
 	}
 
-	if (flag_vm)
-	{
-		xdiag_reset_error_count();
-		AstArena* arena = ast_arena_create(64 * 1024);
-		start_parse_lines(buff, false);
-		AstProgram* prog = xast_parse_node_stream(arena, nodes->root, NULL);
-		if (xdiag_get_error_count() > 0 || prog == NULL)
-		{
-			ast_arena_destroy(arena);
-			free(buff);
-			clean_memory();
-			return 1;
-		}
-		XIrChunk chunk;
-		xir_chunk_init(&chunk);
-		xir_compile_program(prog, &chunk);
-		XVm vm;
-		xvm_init(&vm);
-		vm.print_trace = flag_trace_vm;
-		XLLVMJit* jit = NULL;
-		if (flag_jit)
-		{
-			jit = xllvm_jit_create();
-			if (jit)
-			{
-				if (xllvm_jit_add_program(jit, prog, script_path))
-				{
-					xvm_enable_jit(&vm, 20);
-					vm.jit_engine = jit;
-					xllvm_jit_bind_vm(jit, &vm, prog);
-				}
-				else
-				{
-					xllvm_jit_free(jit);
-					jit = NULL;
-				}
-			}
-		}
-		XVmResult res = xvm_run(&vm, &chunk);
-		if (jit) xllvm_jit_free(jit);
-		xvm_free(&vm);
-		xir_chunk_free(&chunk);
-		ast_arena_destroy(arena);
-		free(buff);
-		clean_memory();
-		return (res == VM_OK) ? 0 : 1;
-	}
-
 	if (flag_view)
 	{
 		xdiag_reset_error_count();
-		AstArena* arena = ast_arena_create(64 * 1024);
-		start_parse_lines(buff, false);
-		AstProgram* prog = xast_parse_node_stream(arena, nodes->root, NULL);
+		AstProgram* prog = xast_parse_source(buff, script_path);
 		if (xdiag_get_error_count() > 0 || prog == NULL)
 		{
-			ast_arena_destroy(arena);
+			if (prog) ast_program_destroy(prog);
 			free(buff);
 			clean_memory();
 			return 1;
@@ -941,28 +884,71 @@ int main(const int argc, char** argv)
 		}
 
 		xir_chunk_free(&chunk);
-		ast_arena_destroy(arena);
+		ast_program_destroy(prog);
 		free(buff);
 		clean_memory();
 		return ok ? 0 : 1;
 	}
 
+	/* Standard execution via Virtual Machine */
 	change_dir(argv + script_idx - 1);
 
-	start_compile();
+	xdiag_reset_error_count();
+	AstProgram* prog = xast_parse_source(buff, script_path);
+	if (xdiag_get_error_count() > 0 || prog == NULL)
+	{
+		if (prog) ast_program_destroy(prog);
+		free(saved_code_file_path);
+		free(buff);
+		clean_memory();
+		return 1;
+	}
+
+	XIrChunk chunk;
+	xir_chunk_init(&chunk);
+	xir_compile_program(prog, &chunk);
+
+	XVm vm;
+	xvm_init(&vm);
+	vm.print_trace = flag_trace_vm;
+
+	XLLVMJit* jit = NULL;
+	if (flag_jit)
+	{
+		jit = xllvm_jit_create();
+		if (jit)
+		{
+			if (xllvm_jit_add_program(jit, prog, script_path))
+			{
+				xvm_enable_jit(&vm, 20);
+				vm.jit_engine = jit;
+				xllvm_jit_bind_vm(jit, &vm, prog);
+			}
+			else
+			{
+				xllvm_jit_free(jit);
+				jit = NULL;
+			}
+		}
+	}
+
+	XVmResult res = xvm_run(&vm, &chunk);
+	if (jit) xllvm_jit_free(jit);
+	xvm_free(&vm);
+	xir_chunk_free(&chunk);
+	ast_program_destroy(prog);
 
 	t = clock() - t;
 	if (flag_stats)
 	{
 		const double time_taken = ((double)t) / CLOCKS_PER_SEC; // in seconds
 		printf("\ntook %f seconds to execute \n", time_taken);
-		printf("\nvar num: %d , temp var num: %d\n", varss->size, t_varss->size);
 	}
 
 	free(saved_code_file_path);
 	free(buff);
 	clean_memory();
-	return 0;
+	return (res == VM_OK) ? 0 : 1;
 }
 
 
@@ -970,13 +956,11 @@ int main(const int argc, char** argv)
 
 void clean_memory(void)
 {
-	clean_stack(nodes);
 	var_clean_stack(varss);
 	var_clean_stack(t_varss);
 	func_clean_stack(funcs);
 	func_clean_stack(t_funcs);
 	type_clean_stack(types);
-	free(nodes);
 	if (varss != &var_start_stack)
 		free(varss);
 	if (funcs != &base_function)
@@ -988,25 +972,12 @@ void clean_memory(void)
 	x_collections_cleanup();
 	x_import_cleanup();
 	gc_cleanup();
-	parser_interactive_cleanup();
 	xdiag_set_source_code(NULL);
 	xdiag_reset_error_count();
 	if (g_lex_arena != NULL)
-		{
-			arena_destroy(g_lex_arena);
-			g_lex_arena = NULL;
-		}
-}
-
-void start_compile(void)
-{
-	clock_t t2 = clock();
-	start_parse_lines(buff, false);
-	t2 = clock() - t2;
-	if (flag_stats)
 	{
-		double time_taken = ((double)t2) / CLOCKS_PER_SEC; // in seconds
-		printf("\nstart_parse_lines took %f seconds to execute \n", time_taken);
+		arena_destroy(g_lex_arena);
+		g_lex_arena = NULL;
 	}
 }
 

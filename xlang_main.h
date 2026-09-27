@@ -1,20 +1,5 @@
-// stdafx.h : include file for standard system include files,
-// or project specific include files that are used frequently, but
-// are changed infrequently
-//
-
 #pragma once
-/*#ifdef _DEBUG
 
-__pragma(warning(disable: 4996));
-#define _CRT_SECURE_NO_WARNINGS 1
-
-#endif
-*/
-//#define _CRTDBG_MAP_ALLOC
-//#define DEBUG_P 1
-//#include <stdlib.h>  
-//#include <crtdbg.h>
 #define PCRE_STATIC 1
 
 #include <stdio.h>
@@ -22,34 +7,22 @@ __pragma(warning(disable: 4996));
 #include <string.h>
 #include "pcre.h"
 #include "types.h"
-#include "stack.h"
 #include "var_stack.h"
 #include "func_stack.h"
 #include "type_stack.h"
-#include "debuge.h"
 #include "functions.h"
-#include "compile.h"
-#include "parse.h"
 #include "md5.h"
 #include "xdiag.h"
+#include "lexer.h"
+#include "xast_parser.h"
 
-/**
- * \brief 
- * \param r file name
- * \param a full stack
- * \param MD5_hash 
- */
-
-
-extern  node_stack * nodes;
-extern   var_stack * varss;
+extern var_stack * varss;
 extern var_stack * t_varss;
 extern func_stack * funcs;
-extern struct Debug  *debuge;
 extern type_stack * types;
 extern func_stack* t_funcs;
-/*XLANG*/ void int_xlang();
-/*XLANG*/  void   get_auto_comp(char* y, char** u);
-	// TODO: reference additional headers your program requires here
+
+void int_xlang(void);
+void get_auto_comp(char* y, char** u);
 
 extern int print_parse_log;

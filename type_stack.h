@@ -1,5 +1,5 @@
 #pragma once
-#include "stack.h"
+#include "types.h"
 
 void type_stack_init(type_stack* s);
 type_def* new_type_stack(type_stack* n);

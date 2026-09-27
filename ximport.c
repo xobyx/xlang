@@ -1,6 +1,7 @@
 #include "ximport.h"
 #include "functions.h"
-#include "parse.h"
+#include "lexer.h"
+#include "xast_parser.h"
 #include "xdiag.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -224,7 +225,7 @@ static FILE* resolve_module_file(const char* name, char* resolved_path, size_t r
 	return NULL;
 }
 
-bool x_import_module(const char* module_name)
+bool x_import_module_ast(AstProgram* prog, const char* module_name)
 {
 	if (module_name == NULL || *module_name == '\0')
 		return false;
@@ -269,10 +270,21 @@ bool x_import_module(const char* module_name)
 
 	if (buf != NULL)
 	{
-		start_parse_lines(buf, false);
+		if (prog != NULL)
+		{
+			token_stream_t* stream = token_stream_tokenize(buf);
+			xast_parse_into_program(prog, stream);
+			token_stream_free(stream);
+			free(stream);
+		}
 		free(buf);
 	}
 
 	s_imported[entry_idx].in_progress = false;
 	return true;
+}
+
+bool x_import_module(const char* module_name)
+{
+	return x_import_module_ast(NULL, module_name);
 }

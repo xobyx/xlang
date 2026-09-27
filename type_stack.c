@@ -1,4 +1,5 @@
 #include "type_stack.h"
+#include <stdlib.h>
 
 void type_stack_init(type_stack* S)
 {

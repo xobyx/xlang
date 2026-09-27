@@ -1786,6 +1786,48 @@ static XVmResult xvm_run_loop(XVm* vm, XIrChunk* chunk)
 						}
 						break;
 					}
+					else if (strcmp(method_name, "split") == 0)
+					{
+						const char* str = receiver.as.sval ? receiver.as.sval : "";
+						const char* delim = (arg_count >= 1 && args[0].type == VAL_STRING) ? args[0].as.sval : "";
+						int list_id = x_list_alloc();
+						if (list_id != -1 && str != NULL)
+						{
+							size_t dlen = delim ? strlen(delim) : 0;
+							if (dlen == 0)
+							{
+								char single[2] = {0, 0};
+								for (const char* p = str; *p != '\0'; p++)
+								{
+									single[0] = *p;
+									x_list_append_str(list_id, single);
+								}
+							}
+							else
+							{
+								const char* cur = str;
+								const char* found = strstr(cur, delim);
+								while (found != NULL)
+								{
+									size_t part_len = (size_t)(found - cur);
+									char* part = (char*)malloc(part_len + 1);
+									if (part != NULL)
+									{
+										memcpy(part, cur, part_len);
+										part[part_len] = '\0';
+										x_list_append_str(list_id, part);
+										free(part);
+									}
+									cur = found + dlen;
+									found = strstr(cur, delim);
+								}
+								x_list_append_str(list_id, cur);
+							}
+						}
+						XInstance* inst = xinstance_create_with_id(vm, "List", list_id);
+						xvm_push(vm, xval_obj(inst));
+						break;
+					}
 
 					func_deftion* str_fn = NULL;
 					for (int fi = 0; fi < 30; fi++)

@@ -1,5 +1,5 @@
 #pragma once
-#include "stack.h"
+#include "types.h"
 
 void var_stack_init(var_stack* S);
 var* new_var_on_stack(var_stack* stack, char* name, type_def* vtype);
