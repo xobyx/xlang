@@ -2679,10 +2679,27 @@ static void resolve_class_inheritance_impl(XLLVMEmitter* e, LLVMClassDesc* cd, c
 	/* Check if base fields already copied */
 	if (base->field_count > 0 && cd->field_count + base->field_count <= MAX_FIELDS_PER_CLASS)
 	{
+		/* A derived field can collide with *any* base field, not just the
+		 * first one -- comparing only against base->fields[0] missed
+		 * collisions with later base fields and could duplicate a field
+		 * into the derived layout. Scan the whole base field list. Note
+		 * this still preserves the original's all-or-nothing behavior: a
+		 * single collision anywhere skips copying *all* base fields, it
+		 * does not selectively merge in the non-colliding ones. If xlang
+		 * allows field shadowing, that's a separate, larger change. */
 		bool already_has = false;
 		for (int f = 0; f < cd->field_count; f++)
 		{
-			if (strcmp(cd->fields[f].name, base->fields[0].name) == 0)
+			bool hit = false;
+			for (int bf = 0; bf < base->field_count; bf++)
+			{
+				if (strcmp(cd->fields[f].name, base->fields[bf].name) == 0)
+				{
+					hit = true;
+					break;
+				}
+			}
+			if (hit)
 			{
 				already_has = true;
 				break;
@@ -2818,29 +2835,42 @@ static void hoist_local_allocas(XLLVMEmitter* e, const AstStmt* stmt)
         break;
 
     case AST_STMT_IF:
-        e->scope_depth++;
+        /* emit_stmt's AST_STMT_IF case never calls enter_scope()/exit_scope()
+         * itself -- only a nested AST_STMT_BLOCK body does that, via the
+         * BLOCK case above. Pushing a scope level here as well double-counts
+         * depth relative to the real codegen pass: a local declared directly
+         * inside an if-branch body (no braces) gets hoisted one level deeper
+         * than real codegen will ever reach for it. That mistagged depth
+         * makes it vulnerable to being evicted by some unrelated
+         * exit_scope() call elsewhere in the function, before emit_stmt ever
+         * reaches this branch -- which is exactly the bug this fixes.
+         * Recurse without touching scope_depth, mirroring emit_stmt. */
         hoist_local_allocas(e, stmt->as.if_stmt.then_branch);
-        e->scope_depth--;
-        if (stmt->as.if_stmt.else_branch) {
-            e->scope_depth++;
+        if (stmt->as.if_stmt.else_branch)
             hoist_local_allocas(e, stmt->as.if_stmt.else_branch);
-            e->scope_depth--;
-        }
         break;
 
     case AST_STMT_WHILE:
-        e->scope_depth++;
+        /* Same reasoning as AST_STMT_IF above: emit_stmt's WHILE case does
+         * not push its own scope, it just calls emit_stmt(body) directly.
+         * Only a BLOCK body pushes. Don't double-push here. */
         hoist_local_allocas(e, stmt->as.while_stmt.body);
-        e->scope_depth--;
         break;
 
     case AST_STMT_DO_WHILE:
-        e->scope_depth++;
+        /* Same reasoning again: emit_stmt's DO_WHILE case does not push its
+         * own scope either. */
         hoist_local_allocas(e, stmt->as.do_while_stmt.body);
-        e->scope_depth--;
         break;
 
     case AST_STMT_FOR_C:
+        /* FOR_C is different: emit_stmt's real AST_STMT_FOR_C case DOES call
+         * enter_scope()/exit_scope() itself, wrapping init + condition +
+         * body + step in a single real scope level (so that a C-style
+         * `for (var i = 0; ...)` binds `i` in its own scope). This hoist
+         * case already mirrors that with one push around init+body, so it
+         * is the one container that is supposed to push here -- left
+         * unchanged. */
         e->scope_depth++;
         hoist_local_allocas(e, stmt->as.for_c.init);
         hoist_local_allocas(e, stmt->as.for_c.body);
@@ -2848,6 +2878,12 @@ static void hoist_local_allocas(XLLVMEmitter* e, const AstStmt* stmt)
         break;
 
     case AST_STMT_FOR_IN:
+        /* FOR_IN likewise really does call enter_scope()/exit_scope() in
+         * emit_stmt (wrapping the synthetic index/item allocas and the
+         * body), so this push is correct and left unchanged. Note: the
+         * for-in loop's own idx/item allocas are still emitted inline in
+         * emit_stmt rather than hoisted here -- that is a separate,
+         * unresolved inefficiency, not something this patch addresses. */
         e->scope_depth++;
         hoist_local_allocas(e, stmt->as.for_in.body);
         e->scope_depth--;
