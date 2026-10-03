@@ -1,0 +1,64 @@
+import "raylib"
+
+// ============================================================================
+// Raylib Procedural Art & Headless Image Export Example
+// Demonstrates CPU-based offscreen image creation, shape rasterization, and PNG export
+// ============================================================================
+
+int width = 640
+int height = 480
+
+print("Generating procedural image (%d x %d)...\n", width, height)
+
+// Allocate an offscreen image buffer with a dark navy background
+int bg_color = raylib.color(20, 24, 34, 255)
+any img = raylib.gen_image_color(width, height, bg_color)
+
+// Draw subtle geometric background grid lines
+int x = 0
+while (x < width) {
+    raylib.image_draw_line(img, x, 0, x, height, raylib.color(32, 38, 52, 255))
+    x = x + 32
+}
+int y = 0
+while (y < height) {
+    raylib.image_draw_line(img, 0, y, width, y, raylib.color(32, 38, 52, 255))
+    y = y + 32
+}
+
+// Draw concentric target circles in the center
+int cx = width / 2
+int cy = height / 2
+
+raylib.image_draw_circle(img, cx, cy, 180.0, raylib.color(40, 50, 75, 255))
+raylib.image_draw_circle(img, cx, cy, 140.0, raylib.color(30, 70, 110, 255))
+raylib.image_draw_circle(img, cx, cy, 100.0, raylib.color(20, 100, 150, 255))
+raylib.image_draw_circle(img, cx, cy, 60.0,  raylib.color(10, 140, 200, 255))
+raylib.image_draw_circle(img, cx, cy, 25.0,  raylib.gold())
+
+// Draw colored corner accent bars
+raylib.image_draw_rectangle(img, 30, 30, 120, 8, raylib.red())
+raylib.image_draw_rectangle(img, 30, 44, 80,  8, raylib.green())
+raylib.image_draw_rectangle(img, 30, 58, 40,  8, raylib.blue())
+
+raylib.image_draw_rectangle(img, width - 150, height - 38, 120, 8, raylib.gold())
+raylib.image_draw_rectangle(img, width - 110, height - 52, 80,  8, raylib.skyblue())
+raylib.image_draw_rectangle(img, width - 70,  height - 66, 40,  8, raylib.raywhite())
+
+// Draw title and metadata text onto the image
+raylib.image_draw_text(img, "xlang + Raylib Engine", 30, height - 60, 20, raylib.raywhite())
+raylib.image_draw_text(img, "Procedural CPU Rasterizer Output", 30, height - 34, 14, raylib.lightgray())
+
+// Export the generated image to a PNG file on disk
+string filename = "procedural_art.png"
+int success = raylib.export_image(img, filename)
+
+if (success != 0) {
+    print("Successfully exported procedural art to '%s'!\n", filename)
+} else {
+    print("Failed to export image.\n")
+}
+
+// Free image memory from RAM
+raylib.unload_image(img)
+print("Done.\n")

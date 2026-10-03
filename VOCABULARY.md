@@ -7,11 +7,23 @@ This document provides a comprehensive reference of the vocabulary, grammar, typ
 ## 1. Lexical Structure
 
 ### 1.1 Comments
-Single-line comments begin with `#`. Everything following `#` on that line is ignored by the compiler.
-```xlang
-# This is a single-line comment
-int x = 10 # Inline comment
-```
+xlang supports both single-line and multi-line comments:
+- **Hash Single-line**: Begins with `#` until end-of-line:
+  ```xlang
+  # This is a single-line comment
+  int x = 10 # Inline comment
+  ```
+- **C-style Single-line**: Begins with `//` until end-of-line:
+  ```xlang
+  // Standard C-style comment
+  int y = 20 // Inline comment
+  ```
+- **Multi-line Block Comments**: Enclosed between `/*` and `*/`:
+  ```xlang
+  /* Multi-line comment block
+     spanning multiple lines */
+  int z = 30
+  ```
 
 ### 1.2 Identifiers
 Identifiers are case-sensitive and must begin with an ASCII letter (`a-z`, `A-Z`) or underscore (`_`), followed by any combination of letters, digits (`0-9`), and underscores.
@@ -24,6 +36,7 @@ Identifiers are case-sensitive and must begin with an ASCII letter (`a-z`, `A-Z`
 - **Boolean**: `true` and `false`
 - **Character**: Single characters enclosed in single quotes: `'a'`, `'Z'`, `'\n'`
 - **String**: Sequences of characters enclosed in double quotes: `"hello"`, `"xlang\n"`
+- **Null**: `null` literal representing uninitialized object or pointer reference
 
 ### 1.4 Statement Terminators
 Statements can be terminated either by a newline or by a semicolon (`;`).
@@ -36,7 +49,7 @@ int c = 3
 
 ## 2. Keywords
 
-xlang defines 11 reserved keywords:
+xlang defines 15 reserved keywords:
 
 | Keyword | Description | Example Syntax |
 | :--- | :--- | :--- |
@@ -44,13 +57,17 @@ xlang defines 11 reserved keywords:
 | `eif` | "Else if" conditional branch | `eif (x > 10) { ... }` |
 | `else` | Fallback branch for `if`/`eif` | `else { ... }` |
 | `while` | Loop while condition is true | `while (i < 5) { ... }` |
-| `for` | 3-part stepper loop | `for i (0, i + 1, i < 5) { ... }` |
+| `for` | Stepper and iteration loop | `for (int i = 0, i++, i < 5) { ... }` |
 | `do` | Do-while loop construct | `do { ... } while (i < 5)` |
 | `return` | Return from function with optional value | `return a + b` |
 | `break` | Terminate loop execution | `break` |
+| `continue` | Skip to next loop iteration | `continue` |
 | `class` | Define a user-defined class / type | `class Point(Base) { ... }` |
 | `static` | Static method or property declaration inside class | `static int add(int a, int b)`, `static int count` |
+| `new` | Instantiate class and invoke constructor as an expression | `Calculator c = new Calculator(10)`, `new Box().open()` |
 | `import` | Compile-time multi-file modular import | `import "math.xb"`, `import collections` |
+| `extern` | Declarative direct C-ABI FFI library block | `extern "libm.so" { float sin(float x) }` |
+| `in` | Iterator separator for collection loops | `for (item in list) { ... }` |
 
 ---
 
@@ -68,7 +85,7 @@ xlang defines 11 reserved keywords:
 | `double` | 64-bit double-precision float | 8 bytes | `0.0` |
 | `object` | Generic object reference | Pointer | `null` |
 
-### 3.2 Array Types
+### 3.2 Array Types & Subscript Indexing
 Arrays are declared with size specified inside square brackets after the type:
 ```xlang
 int[5] numbers
@@ -80,7 +97,16 @@ numbers[0] = 42
 int first = numbers[0]
 ```
 
-### 3.3 User-Defined Types (Classes)
+### 3.3 String Subscript Indexing
+Strings support 0-based subscript indexing `str[index]` to read individual character values or test character equality:
+```xlang
+string word = "racecar"
+string first_ch = word[0]     // "r"
+int last_idx = strlen(word) - 1
+bool matches = (word[0] == word[last_idx]) // true
+```
+
+### 3.4 User-Defined Types (Classes)
 Classes are registered as custom types once declared. They can be used as variable types, parameter types, and return types:
 ```xlang
 Point pt
@@ -117,17 +143,35 @@ Animal cat
 | `\|\|` | Logical OR | `a \|\| b` | True if either condition is true |
 | `!` | Logical NOT | `!a` | Inverts boolean truth value |
 
-### 4.4 Assignment Operator
+### 4.4 Bitwise Operators
+| Operator | Name | Example | Description |
+| :---: | :--- | :--- | :--- |
+| `&` | Bitwise AND | `a & b` | Bitwise AND of integer bits |
+| `\|` | Bitwise OR | `a \| b` | Bitwise OR of integer bits |
+| `^` | Bitwise XOR | `a ^ b` | Bitwise exclusive OR |
+| `~` | Bitwise NOT | `~a` | One's complement bitwise inversion |
+| `<<` | Shift Left | `a << 2` | Bitwise shift left |
+| `>>` | Shift Right | `a >> 2` | Bitwise shift right |
+
+### 4.5 Assignment & Compound Operators
 | Operator | Description | Example |
 | :---: | :--- | :--- |
-| `=` | Assigns value on RHS to variable on LHS | `x = 10`, `obj.field = 20` |
+| `=` | Simple assignment | `x = 10`, `obj.field = 20` |
+| `+=` | Add and assign | `x += 5` (equivalent to `x = x + 5`) |
+| `-=` | Subtract and assign | `x -= 2` |
+| `*=` | Multiply and assign | `x *= 3` |
+| `/=` | Divide and assign | `x /= 2` |
+| `%=` | Modulo and assign | `x %= 10` |
+| `++` | Increment by 1 | `i++` |
+| `--` | Decrement by 1 | `i--` |
 
-### 4.5 Member Access & Grouping
+### 4.6 Member Access, Instantiation & Grouping
 | Symbol | Name | Description |
 | :---: | :--- | :--- |
 | `.` | Dot operator | Access object properties and methods (`obj.prop`, `obj.method()`) |
+| `new` | Instantiation operator | Allocates and invokes constructor (`new ClassName(...)`) |
 | `( )` | Parentheses | Parameter lists, argument lists, expression grouping, loop specs |
-| `[ ]` | Brackets | Array declarations and index subscripting (`arr[i]`) |
+| `[ ]` | Brackets | Array declarations and index subscripting (`arr[i]`, `str[i]`) |
 | `{ }` | Braces | Code block delimiters (functions, loops, classes, conditionals) |
 | `,` | Comma | Separator for function parameters, arguments, and loop clauses |
 
@@ -158,13 +202,25 @@ while (i < 5) {
 ```
 
 ### 5.3 For Loop
-In xlang, the `for` loop syntax specifies an existing iterator variable, initialization value, step expression, and termination condition:
-`for <var> (<init>, <step_expression>, <condition>) { ... }`
-
-> **Note:** The iterator variable `<var>` must be declared prior to the loop (e.g. `int i = 0`).
+In xlang, the standard `for` loop syntax declares the iterator variable, step expression, and condition inside parentheses:
+`for (<type> <var> = <init>, <step_expression>, <condition>) { ... }`
 
 ```xlang
-int i = 0
+for (int i = 0, i++, i < 5) {
+    print(i)
+}
+```
+You can also use compound steps (`i += 2`, `i = i + 1`), pre-declared variables (`for (i = 0, i++, i < 5)`), or C-style semicolon delimiters (`for (int i = 0; i < 5; i++)`).
+
+#### 5.3.1 For-in Collection Loop
+```xlang
+for (item in list) {
+    print(item)
+}
+```
+
+#### 5.3.2 Classic Stepper Loop (Backward Compatible)
+```xlang
 for i (0, i + 1, i < 5) {
     print(i)
 }
@@ -259,6 +315,10 @@ class Point() {
 ```
 
 ### 7.4 Object Instantiation
+
+xlang supports both declaration-style instantiation and expression-style `new` instantiation:
+
+#### 7.4.1 Declaration-Style Instantiation
 - **Default Instantiation:** Invokes the 0-argument constructor (or zeroes fields if no constructor is defined):
   ```xlang
   Point p1
@@ -270,6 +330,51 @@ class Point() {
   int vy = 40
   Point p3(vx, vy)
   ```
+
+#### 7.4.2 Expression-Style `new` Instantiation
+The `new` keyword allocates a new instance, invokes the constructor, and returns the instance as an expression value across all execution modes (tree-walk, VM, JIT, AOT):
+```xlang
+# Instantiation in variable declaration / assignment
+Calculator calc = new Calculator(10)
+Box b = new Box()
+
+# Returning newly created instances from functions
+Box make_box(int val) {
+    return new Box(val)
+}
+```
+
+#### 7.4.3 Direct Method Invocations and Fluent Chaining on `new`
+Methods can be called directly on newly instantiated objects without requiring an intermediate variable binding:
+```xlang
+# Direct method call on new instance
+int initial_val = new Calculator(10).result() // 10
+
+# Fluent method chaining on methods that return 'this'
+class Calculator {
+    int total
+    Calculator(int init) { this.total = init }
+    Calculator add(int n) { this.total = this.total + n; return this }
+    Calculator mul(int n) { this.total = this.total * n; return this }
+    int result() { return this.total }
+}
+
+int chained = new Calculator(5).add(15).mul(2).result() // (5 + 15) * 2 = 40
+```
+
+#### 7.4.4 Forward References & Recursive Objects
+Classes can reference other classes declared later in the file or recursively link to each other:
+```xlang
+class NodeA {
+    NodeB next
+    int val
+}
+
+class NodeB {
+    NodeA prev
+    int val
+}
+```
 
 ### 7.5 Inheritance
 Inheritance is specified in parentheses following the class name:
@@ -459,6 +564,21 @@ print("Chained: %d\n", chained_area)  # 25
 | `gc_disable()` | `int` | Disables automated safe-point garbage collection (returns `0`). |
 | `gc_set_threshold(bytes)` | `int` | Sets memory allocation threshold (in bytes) triggering auto collection. |
 | `gc_dump()` | `int` | Prints comprehensive GC heap diagnostic statistics to stdout. |
+| `assert(cond)` | `void` | Evaluates `cond`; terminates execution if falsy. Elided in `--release` builds. |
+| `assert(cond, message)` | `void` | Evaluates `cond`; aborts with `message` if falsy. Elided in `--release` builds. |
+| `strlen(str)` | `int` | Returns the number of characters in string `str`. |
+| `json_is_valid(str)` | `int` | Returns `1` if `str` is valid JSON, `0` otherwise. |
+| `json_parse(str)` | `Map` | Parses JSON string into a structured `Map`. |
+| `json_stringify(map)` | `string` | Serializes `Map` into a formatted JSON string. |
+| `datetime_now()` | `int` | Returns current Unix epoch timestamp in seconds. |
+| `datetime_year(ts)` | `int` | Extracts year component from Unix timestamp `ts`. |
+| `datetime_month(ts)` | `int` | Extracts month (1–12) from Unix timestamp `ts`. |
+| `datetime_day(ts)` | `int` | Extracts day of month (1–31) from Unix timestamp `ts`. |
+| `datetime_hour(ts)` | `int` | Extracts hour (0–23) from Unix timestamp `ts`. |
+| `datetime_minute(ts)` | `int` | Extracts minute (0–59) from Unix timestamp `ts`. |
+| `datetime_second(ts)` | `int` | Extracts second (0–59) from Unix timestamp `ts`. |
+| `datetime_format(ts, fmt)` | `string` | Formats Unix timestamp `ts` using strftime format `fmt`. |
+| `datetime_clock_ms()` | `int` | Returns high-resolution monotonic clock in milliseconds. |
 | `clock_ms()` | `int` | Returns current high-resolution monotonic timestamp in milliseconds. Alias: `time_ms`. |
 | `time_ms()` | `int` | Alias for `clock_ms()`. |
 
@@ -908,43 +1028,382 @@ print("Map item: %s", map1.get("k"))
 
 ---
 
-## 17. Comprehensive Example
+## 17. JSON & DateTime Standard Library
+
+xlang includes built-in standard library modules for JSON parsing/serialization and DateTime manipulation located in `lib/json.xb` and `lib/datetime.xb`.
+
+### 17.1 JSON Module (`lib/json.xb`)
+
+The `JSON` class provides static methods to validate, parse, and serialize JSON text:
 
 ```xlang
-# Define a 2D Vector class with constructors, methods, and inheritance
+import "lib/json.xb"
+
+// 1. Syntax validation without memory overhead
+string payload = "{\"user\": \"alice\", \"score\": 100, \"active\": true}"
+if (JSON.is_valid(payload)) {
+    print("Valid JSON payload")
+}
+
+// 2. Parsing into Map structure
+Map data = JSON.parse(payload)
+print("User: %s", data.get("user"))     // alice
+print("Score: %s", data.get("score"))   // 100
+
+// 3. Serialization back to JSON
+data.put("rank", "pro")
+string serialized = JSON.stringify(data)
+print("Serialized: %s", serialized)
+data.free()
+```
+
+Low-level built-in functions `json_is_valid(str)`, `json_parse(str)`, and `json_stringify(map)` can also be invoked directly without importing `lib/json.xb`.
+
+### 17.2 DateTime Module (`lib/datetime.xb`)
+
+The `DateTime` class provides an object-oriented interface for calendar timestamps and high-resolution profiling:
+
+```xlang
+import "lib/datetime.xb"
+
+// Instantiate with current system time
+DateTime now = DateTime.now()
+
+// Component getters
+print("Year:   %d", now.year())
+print("Month:  %d", now.month())
+print("Day:    %d", now.day())
+print("Hour:   %d", now.hour())
+print("Minute: %d", now.minute())
+print("Second: %d", now.second())
+
+// Standard formatting (YYYY-MM-DD HH:MM:SS)
+string dt_str = now.to_str()
+print("Timestamp: %s", dt_str)
+
+// Custom strftime formatting
+string formatted = now.format("%Y/%m/%d %H:%M")
+print("Custom: %s", formatted)
+
+// High-resolution monotonic clock (milliseconds)
+int t0 = DateTime.clock_ms()
+// ... execution workload ...
+int t1 = DateTime.clock_ms()
+print("Elapsed: %d ms", t1 - t0)
+```
+
+Direct procedural built-ins are also available: `datetime_now()`, `datetime_year(ts)`, `datetime_month(ts)`, `datetime_day(ts)`, `datetime_hour(ts)`, `datetime_minute(ts)`, `datetime_second(ts)`, `datetime_format(ts, fmt)`, and `datetime_clock_ms()`.
+
+---
+
+## 18. Testing, Assertions & Build Profiles
+
+xlang integrates built-in assertion primitives and dual build profiles (`--debug` vs `--release`), enabling robust unit testing during development without paying runtime penalties in production.
+
+### 18.1 Built-in `assert` Primitive
+
+`assert(condition, [message])` evaluates an expression. If the condition evaluates to `0` or `false`, the runtime immediately halts execution with an assertion failure:
+
+```xlang
+int x = 10
+int y = 20
+
+// Single argument assertion
+assert(x < y)
+
+// Two-argument assertion with descriptive failure message
+assert(x + y == 30, "Sum of x and y must equal 30")
+```
+
+If an assertion fails, the engine outputs diagnostics and terminates:
+```text
+Assertion failed: Sum of x and y must equal 30
+```
+
+### 18.2 Debug vs. Release Profiles
+
+- **Debug Mode (`--debug`, `-g` - Default)**:
+  - All `assert(...)` statements are actively evaluated at runtime.
+  - Full source line location, symbols, and diagnostics are preserved in VM bytecode and LLVM IR.
+- **Release Mode (`--release`)**:
+  - The compiler completely elides all `assert(...)` statements during parsing and code generation (zero AST nodes, zero VM opcodes, and zero LLVM IR instructions).
+  - Produces optimized binaries with maximum execution throughput and minimal binary footprint.
+
+Example CLI invocation:
+```bash
+# Debug execution with assertions enabled
+xlang script.xb
+xlang --vm script.xb
+
+# Optimized release binary compilation (asserts stripped)
+xlang build --release script.xb -o app
+```
+
+---
+
+## 19. C Extensions SDK & Native Modules
+
+xlang features a high-performance native C extension system based on a uniform **Vectorcall** calling convention (`XVectorFn`), defined in `include/xlang.h`. This allows seamless integration of C/C++ libraries (such as math accelerators, game engines, or OS bindings) with both the Bytecode VM and the LLVM AOT/JIT compiler.
+
+### 19.1 The Extension SDK (`include/xlang.h`)
+
+Native modules export the standard initialization entrypoint `xlang_module_init` using `XLANG_EXTENSION_ENTRY`:
+
+```c
+#include "xlang.h"
+
+// 1. Direct C function
+XLANG_EXPORT int fast_gcd(int a, int b) {
+    while (b != 0) {
+        int t = b;
+        b = a % b;
+        a = t;
+    }
+    return a < 0 ? -a : a;
+}
+
+// 2. Vectorcall wrapper for xlang VM and dynamic calls
+static XValue vec_fast_gcd(XVm* vm, XValue receiver, int argc, const XValue* args) {
+    (void)vm; (void)receiver;
+    int a = (argc > 0 && args[0].type == XLANG_VAL_INT) ? (int)args[0].as.ival : 0;
+    int b = (argc > 1 && args[1].type == XLANG_VAL_INT) ? (int)args[1].as.ival : 0;
+    return xval_int(fast_gcd(a, b));
+}
+
+// 3. Function descriptors table
+static const XExtensionFunc s_funcs[] = {
+    { "gcd", vec_fast_gcd, 2, XLANG_TYPE_INT, { XLANG_TYPE_INT, XLANG_TYPE_INT } },
+    { NULL, NULL, 0, XLANG_TYPE_VOID, { XLANG_TYPE_VOID } }
+};
+
+// 4. Module entrypoint
+XLANG_EXPORT XLANG_EXTENSION_ENTRY {
+    return ctx->register_module(ctx, "fastmath", s_funcs);
+}
+```
+
+### 19.2 Loading Native Modules in xlang
+
+Shared objects (`.so` on Linux, `.dylib` on macOS, `.dll` on Windows) are loaded using standard `import` syntax:
+
+```xlang
+import "fastmath"
+
+int g = fastmath.gcd(48, 18)
+print("GCD: %d\n", g) // 6
+```
+
+### 19.3 First-Class Native Integrations: Raylib 2D/3D Engine
+
+The xlang repository includes complete Raylib bindings (`examples/c_extension/raylib/`), enabling rich real-time graphics, physics simulations, audio, and interactive game loops directly from xlang:
+
+```xlang
+import "examples/c_extension/raylib/raylib.so"
+
+InitWindow(800, 600, "xlang + Raylib")
+SetTargetFPS(60)
+
+while (!WindowShouldClose()) {
+    BeginDrawing()
+    ClearBackground(245, 245, 245, 255)
+    DrawText("Hello from xlang Native Engine!", 190, 200, 20, 20, 20, 20, 255)
+    DrawCircle(400, 350, 40.0, 230, 41, 55, 255)
+    EndDrawing()
+}
+
+CloseWindow()
+```
+
+### 19.4 Tier 2: Direct C-ABI FFI (Zero-Wrapper System Library Binding)
+
+xlang provides a zero-wrapper dynamic C-ABI Foreign Function Interface that allows consuming unmodified existing shared libraries (such as `libm.so`, `libc.so`, `libsqlite3.so`, or any custom `.so` / `.dylib` / `.dll`) directly without writing glue code, C wrappers, or recompiling.
+
+#### Declarative Syntax: `extern "<lib>" { ... }`
+Functions exported by standard dynamic shared libraries can be declared using the `extern` block:
+
+```xlang
+extern "libm.so" {
+    float sin(float x)
+    float cos(float x)
+    float pow(float base, float exp)
+}
+
+extern "libc.so.6" {
+    int abs(int x)
+    int atoi(string s)
+    double atof(string s)
+}
+```
+
+#### Calling Conventions & Dual Dispatch
+Functions declared inside `extern` blocks are automatically registered:
+1. **Direct Symbol Call**: Callable directly by name:
+   ```xlang
+   float s = sin(0.0)      // 0.0
+   int val = abs(-42)      // 42
+   ```
+2. **Namespaced Module Call**: Also exposed under their module name (e.g. `libm.<func>`, `m.<func>`, `libc.<func>`):
+   ```xlang
+   float s2 = libm.sin(0.0)
+   float c2 = m.cos(0.0)
+   int v2 = libc.abs(-100)
+   ```
+
+#### Dynamic Frame Synthesis via `libffi`
+During VM and bytecode execution, `extern` blocks are backed by:
+- Dynamic symbol resolution (`dlopen` and `dlsym`).
+- Dynamic call frame synthesis via `libffi` (`ffi_prep_cif` and `ffi_call`).
+- Automated type marshalling between xlang `XValue` representations and native C types (`int`, `long`, `float`, `double`, `bool`, `char`, `string` / `char*`, `object` / `void*`).
+
+### 19.5 Tier 3: LLVM AOT Native Compiler Integration (`xlang build`)
+
+When producing standalone native binaries via `xlang build`, xlang eliminates all interpreter and FFI overhead by compiling C function calls directly to native assembly instructions via LLVM.
+
+#### LLVM IR External Declarations
+The compiler parses the function declarations from the `extern` block and emits exact LLVM IR external declarations at the top of the compilation unit:
+
+```llvm
+; Direct C-ABI FFI External Declarations
+; From "libmylib.so"
+declare i32 @c_custom_calc(i32, i32)
+declare double @sin(double)
+```
+
+Direct call sites generate standard LLVM `call` instructions conforming to the platform ABI:
+```llvm
+%t1 = call i32 @c_custom_calc(i32 10, i32 5)
+```
+
+#### Linker Flag Forwarding & Automatic RPATH Baking
+`xlang build` seamlessly integrates with the host Clang/LLVM linker:
+- **Search Paths (`-L`) and Libraries (`-l`)**: Automatically passed to Clang:
+  ```bash
+  xlang build app.xb -L/usr/local/lib -lmylib -o app
+  ```
+- **Automated Library Detection**: Any library declared in an `extern "<lib>.so"` block is automatically tracked and translated to `-l<lib>` for Clang linkage.
+- **Embedded RPATHs**: Linker flags automatically embed `-Wl,-rpath,'$ORIGIN'`, `-Wl,-rpath,'$ORIGIN/lib'`, and the `-L` search paths into the binary header, ensuring that standalone executables locate their dependencies at runtime without requiring manual `LD_LIBRARY_PATH` configuration.
+
+---
+
+## 20. Tooling, CLI Flags & Interactive Compiler Explorer
+
+The `xlang` unified executable provides a comprehensive toolchain supporting tree-walk interpretation, bytecode compilation, virtual machine execution, LLVM native binary compilation, and interactive web visualization.
+
+### 20.1 Command-Line Interface Usage
+
+```text
+xlang [options] <script.xb | bytecode.xbc> [args...]
+xlang build [--debug|--release] <script.xb> [-o <binary>] [-L<dir>] [-l<lib>]
+```
+
+| Flag | Purpose | Description |
+| :--- | :--- | :--- |
+| `script.xb` | Interpreter | Executes script using the tree-walking runtime. |
+| `--vm` | Virtual Machine | Compiles to bytecode in-memory and executes via the high-speed VM. |
+| `--trace-vm` | VM Debugger | Executes in VM while printing every opcode instruction executed and stack state. |
+| `-c`, `--compile` | Bytecode Compiler | Compiles script to persistent binary bytecode file (`.xbc`). |
+| `-o <file>` | Output File | Specifies target path for output bytecode, LLVM IR, or compiled binary. |
+| `--emit-llvm`, `-S` | LLVM IR Emitter | Generates textual LLVM IR (`.ll`) representation of the program. |
+| `build` | Native Compiler | Compiles script to a standalone native ELF/Mach-O/PE executable via LLVM AOT. |
+| `--release` | Release Profile | Generates optimized release binary with assertions elided and maximum optimization. |
+| `--debug`, `-g` | Debug Profile | Builds native executable with debug symbols and runtime assertion checks enabled. |
+| `-L<dir>` | Linker Path | Adds library search directory for native module linking. |
+| `-l<lib>` | Link Library | Links native shared or static library into executable. |
+| `--jit` | LLVM JIT Engine | Compiles and executes in-process using LLVM ORC JIT. |
+| `--dump-ast` | AST Visualizer | Parses script and dumps structured Abstract Syntax Tree to terminal. |
+| `--dump-ir` | IR Disassembler | Disassembles compiled bytecode instructions and constant pools. |
+| `--view` | HTML Compiler Explorer | Generates a modern self-contained interactive HTML inspection tool (`xir_view.html`). |
+| `--stats` | Profiler | Prints detailed execution metrics (elapsed time, memory usage, GC cycles). |
+
+### 20.2 Interactive HTML Compiler & AST Explorer (`--view`)
+
+Executing `xlang --view <script.xb>` generates a zero-dependency, self-contained HTML explorer (`xir_view.html`):
+- **Split View**: Synchronized side-by-side view highlighting high-level source lines alongside their corresponding VM bytecode instructions.
+- **AST Explorer**: Interactive hierarchical tree navigator displaying tokens, expression nodes, statement blocks, and class declarations with folding.
+- **Bytecode Disassembly**: Full opcode listing with instruction hex offsets, register operands, jump targets, and constant pool indices.
+- **LLVM IR Tab**: Syntax-highlighted LLVM Intermediate Representation generated by the compiler.
+- **Symbol & Constant Tables**: String tables, class prototypes, field offsets, and function signatures.
+- **Analytics & Metrics**: Opcodes distribution chart, heap memory stats, and compiler timing breakdowns.
+
+---
+
+## 21. Formal PEG Grammar Reference
+
+The formal syntax of xlang is specified in a machine-readable Parsing Expression Grammar located at [`grammar/xlang.peg`](file:///home/xobyx/xlang/grammar/xlang.peg).
+
+Key grammatical rules include:
+- **Lexical Tokens**: Whitespace `_`, keywords (`class`, `new`, `static`, `if`, `while`, `for`, `do`, `return`, `break`, `continue`, `import`, `in`), identifiers `[a-zA-Z_][a-zA-Z0-9_]*`, integer, float, string, and character literals.
+- **Expressions & Precedence**: Primary, postfix (`.`, `()`, `[]`), unary (`!`, `-`, `~`, `++`, `--`), multiplicative (`*`, `/`, `%`), additive (`+`, `-`), bitwise shifts (`<<`, `>>`), relational (`<`, `<=`, `>`, `>=`), equality (`==`, `!=`), bitwise AND/XOR/OR (`&`, `^`, `|`), logical AND (`&&`), logical OR (`||`), and assignment (`=`, `+=`, `-=`, etc.).
+- **Object Model**: Class declarations with single inheritance, fields, instance methods, static methods, static properties, and constructors.
+- **Instantiation**: Support for both declaration syntax `ClassName var(args)` and operator syntax `new ClassName(args)`.
+- **Iteration Constructs**: Standard C-style 3-part for loops `for (int i=0, i++, i<5)`, iterator for loops `for (item in collection)`, stepper loops `for i (0, i+1, i<5)`, while loops, and do-while loops.
+
+---
+
+## 22. Comprehensive Modern Example
+
+```xlang
+import "lib/json.xb"
+import "lib/datetime.xb"
+
+// 1. Class definition with constructor, fields, methods, and static factory
 class Vector2D() {
     int x
     int y
 
     Vector2D() {
-        x = 0
-        y = 0
+        this.x = 0
+        this.y = 0
     }
 
     Vector2D(int a, int b) {
-        x = a
-        y = b
+        this.x = a
+        this.y = b
+    }
+
+    static Vector2D origin() {
+        return new Vector2D(0, 0)
     }
 
     int magnitude_squared() {
-        return (x * x) + (y * y)
+        return (this.x * this.x) + (this.y * this.y)
+    }
+
+    Vector2D add(Vector2D other) {
+        return new Vector2D(this.x + other.x, this.y + other.y)
     }
 }
 
-# Instantiation with constructor arguments
-Vector2D v1(3, 4)
-print("Magnitude squared: %d", v1.magnitude_squared())
+// 2. Object creation via 'new' and method invocation
+Vector2D v1 = new Vector2D(3, 4)
+assert(v1.magnitude_squared() == 25, "Vector magnitude check")
 
-# Conditional check
-if (v1.magnitude_squared() == 25) {
-    print("Vector is 3-4-5 triangle")
-} else {
-    print("Other vector")
+Vector2D v2 = new Vector2D(1, 2)
+Vector2D v3 = v1.add(v2)
+assert(v3.x == 4 && v3.y == 6, "Vector addition check")
+
+// 3. String indexing and character validation
+string greeting = "Hello, xlang!"
+assert(greeting[0] == "H", "First character check")
+assert(strlen(greeting) == 13, "Length check")
+
+// 4. DateTime and JSON integration
+DateTime now = DateTime.now()
+print("Execution Timestamp: %s", now.to_str())
+
+string json_data = "{\"project\": \"xlang\", \"version\": \"2.0\"}"
+if (JSON.is_valid(json_data)) {
+    Map m = JSON.parse(json_data)
+    print("Loaded project: %s", m.get("project"))
+    m.free()
 }
 
-# Stepper loop
-int i = 0
-for i (0, i + 1, i < 3) {
-    print("Step: %d", i)
+// 5. C-style for loop with compound assignment
+int total = 0
+for (int i = 0, i++, i < 5) {
+    total += i
 }
+assert(total == 10, "Sum verification")
+
+print("All verifications succeeded!")
 ```

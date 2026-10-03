@@ -67,7 +67,8 @@ typedef enum AstNodeType {
 	AST_STMT_BREAK,
 	AST_STMT_CONTINUE,
 	AST_STMT_FUNC_DECL,
-	AST_STMT_CLASS_DECL
+	AST_STMT_CLASS_DECL,
+	AST_STMT_EXTERN_BLOCK
 } AstNodeType;
 
 typedef enum AstBinaryOp {
@@ -280,6 +281,13 @@ struct AstStmt {
 			AstStmt** members;
 			int member_count;
 		} class_decl;
+
+		/* AST_STMT_EXTERN_BLOCK */
+		struct {
+			char* lib_name;
+			AstStmt** func_decls;
+			int func_count;
+		} extern_block;
 	} as;
 };
 
@@ -325,6 +333,7 @@ AstStmt* ast_stmt_break(AstArena* arena, int line, int col);
 AstStmt* ast_stmt_continue(AstArena* arena, int line, int col);
 AstStmt* ast_stmt_func_decl(AstArena* arena, const char* name, const char* ret_type, AstParam* params, int pcount, AstStmt* body, bool is_static, const char* class_name, int line, int col);
 AstStmt* ast_stmt_class_decl(AstArena* arena, const char* name, const char* base, AstStmt** members, int mcount, int line, int col);
+AstStmt* ast_stmt_extern_block(AstArena* arena, const char* lib_name, AstStmt** funcs, int count, int line, int col);
 
 AstProgram* ast_program_create(AstArena* arena);
 void ast_program_add_stmt(AstProgram* prog, AstStmt* stmt);

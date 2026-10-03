@@ -1,0 +1,28 @@
+// Test string indexing, strlen, and palindrome logic
+string str = "racecar"
+int j = strlen(str)
+int i = 0
+int mid = j / 2
+j = j - 1
+
+while ((i < mid) && (str[i] == str[j])) {
+    i = i + 1
+    j = j - 1
+}
+bool is_pal = (i == mid)
+assert(is_pal == true, "racecar should be a palindrome")
+
+string str2 = "hello"
+int j2 = strlen(str2)
+int i2 = 0
+int mid2 = j2 / 2
+j2 = j2 - 1
+
+while ((i2 < mid2) && (str2[i2] == str2[j2])) {
+    i2 = i2 + 1
+    j2 = j2 - 1
+}
+bool is_pal2 = (i2 == mid2)
+assert(is_pal2 == false, "hello should NOT be a palindrome")
+
+print("test_string_index PASS\n")

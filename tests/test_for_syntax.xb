@@ -1,0 +1,78 @@
+// Comprehensive test suite for for loop syntax:
+// 1. for (int i = 0, i++, i < 5) - requested syntax
+// 2. for (int i = 0, i = i + 1, i < 5)
+// 3. for (int i = 0, i += 2, i < 10)
+// 4. for (i = 0, i++, i < 4) - re-using existing variable
+// 5. for (int i = 0; i < 5; i++) - C-style semicolons
+// 6. for (int i = 0, i < 5, i++) - C-order with commas
+// 7. Nested for loops
+// 8. Classic for i (0, i + 1, i < 5)
+
+// 1. User requested syntax: for (int i = 0, i++, i < 5)
+int sum1 = 0;
+for (int i = 0, i++, i < 5) {
+    sum1 = sum1 + i;
+}
+echo("sum1: " + sum1);
+assert(sum1 == 10, "sum1 should be 10 (0+1+2+3+4)");
+
+// 2. Expression step: i = i + 1
+int sum2 = 0;
+for (int j = 0, j = j + 1, j < 4) {
+    sum2 = sum2 + j;
+}
+echo("sum2: " + sum2);
+assert(sum2 == 6, "sum2 should be 6 (0+1+2+3)");
+
+// 3. Compound assignment step: i += 2
+int sum3 = 0;
+for (int k = 0, k += 2, k < 10) {
+    sum3 = sum3 + k;
+}
+echo("sum3: " + sum3);
+assert(sum3 == 20, "sum3 should be 20 (0+2+4+6+8)");
+
+// 4. Re-using existing variable: for (i = 0, i++, i < 4)
+int idx = 999;
+int count = 0;
+for (idx = 0, idx++, idx < 4) {
+    count = count + 1;
+}
+echo("count: " + count);
+assert(count == 4, "count should be 4");
+
+// 5. C-style with semicolons: for (int i = 0; i < 5; i++)
+int sum_c = 0;
+for (int c = 0; c < 5; c++) {
+    sum_c = sum_c + c;
+}
+echo("sum_c: " + sum_c);
+assert(sum_c == 10, "sum_c should be 10");
+
+// 6. C-order with commas: for (int i = 0, i < 5, i++)
+int sum_c2 = 0;
+for (int c2 = 0, c2 < 5, c2++) {
+    sum_c2 = sum_c2 + c2;
+}
+echo("sum_c2: " + sum_c2);
+assert(sum_c2 == 10, "sum_c2 should be 10");
+
+// 7. Nested loops
+int nested_sum = 0;
+for (int x = 0, x++, x < 3) {
+    for (int y = 0, y++, y < 2) {
+        nested_sum = nested_sum + 1;
+    }
+}
+echo("nested_sum: " + nested_sum);
+assert(nested_sum == 6, "nested_sum should be 6 (3 * 2)");
+
+// 8. Backward-compatible classic syntax: for i (0, i + 1, i < 5)
+int sum_classic = 0;
+for i (0, i + 1, i < 5) {
+    sum_classic = sum_classic + i;
+}
+echo("sum_classic: " + sum_classic);
+assert(sum_classic == 10, "sum_classic should be 10");
+
+echo("test_for_syntax PASS");

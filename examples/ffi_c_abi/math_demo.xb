@@ -1,0 +1,99 @@
+// ============================================================================
+// Direct C-ABI FFI: Math and Libc Example (Tier 2 & Tier 3)
+// ============================================================================
+// This example demonstrates zero-wrapper binding to standard system libraries:
+// - libm.so: sin, cos, sqrt, pow, log, ceil, floor
+// - libc.so.6: abs, atoi, atof, puts
+//
+// You can run this directly with:
+//   xlang examples/ffi_c_abi/math_demo.xb
+// Or compile to a standalone native binary:
+//   xlang build examples/ffi_c_abi/math_demo.xb -o math_demo_bin
+// ============================================================================
+
+extern "libm.so" {
+    float sin(float x)
+    float cos(float x)
+    float sqrt(float x)
+    float pow(float base, float exp)
+    float log(float x)
+    float ceil(float x)
+    float floor(float x)
+}
+
+extern "libc.so.6" {
+    int abs(int n)
+    int atoi(string s)
+    double atof(string s)
+    int puts(string s)
+}
+
+print("=== 1. Standard C Math (libm.so) ===")
+
+float angle = 0.0
+float s0 = sin(angle)
+float c0 = cos(angle)
+print("sin(0.0) = %f, cos(0.0) = %f", s0, c0)
+assert(s0 == 0.0, "sin(0) should be 0.0")
+assert(c0 == 1.0, "cos(0) should be 1.0")
+
+float val = 16.0
+float sq = sqrt(val)
+print("sqrt(16.0) = %f", sq)
+assert(sq == 4.0, "sqrt(16.0) should be 4.0")
+
+float base = 2.0
+float exponent = 10.0
+float power = pow(base, exponent)
+print("pow(2.0, 10.0) = %f", power)
+assert(power == 1024.0, "2^10 should be 1024.0")
+
+float num = 4.7
+float c_val = ceil(num)
+float f_val = floor(num)
+print("ceil(4.7) = %f, floor(4.7) = %f", c_val, f_val)
+assert(c_val == 5.0, "ceil(4.7) should be 5.0")
+assert(f_val == 4.0, "floor(4.7) should be 4.0")
+
+print("\n=== 2. Namespaced Module Calls (libm.<func> & m.<func>) ===")
+
+float s_mod = libm.sin(0.0)
+float c_mod = libm.cos(0.0)
+print("libm.sin(0.0) = %f, libm.cos(0.0) = %f", s_mod, c_mod)
+assert(s_mod == 0.0, "libm.sin(0.0) check")
+assert(c_mod == 1.0, "libm.cos(0.0) check")
+
+float s_short = m.sin(0.0)
+print("m.sin(0.0) = %f", s_short)
+assert(s_short == 0.0, "m.sin(0.0) check")
+
+print("\n=== 3. Standard C Library (libc.so.6) ===")
+
+int negative = -12345
+int positive = abs(negative)
+print("abs(-12345) = %d", positive)
+assert(positive == 12345, "abs(-12345) should be 12345")
+
+string int_str = "987654"
+int parsed_int = atoi(int_str)
+print("atoi('987654') = %d", parsed_int)
+assert(parsed_int == 987654, "atoi('987654') check")
+
+string flt_str = "2.71828"
+float parsed_flt = atof(flt_str)
+print("atof('2.71828') = %f", parsed_flt)
+assert(parsed_flt > 2.71 && parsed_flt < 2.72, "atof('2.71828') check")
+
+// Namespaced libc calls
+int pos_mod = libc.abs(-50)
+assert(pos_mod == 50, "libc.abs(-50) check")
+
+print("\n=== 4. Practical Computation: Euclidean Distance ===")
+
+float x1 = 3.0
+float y1 = 4.0
+float dist = sqrt(pow(x1, 2.0) + pow(y1, 2.0))
+print("Distance between (0,0) and (3,4) = %f", dist)
+assert(dist == 5.0, "Euclidean distance check")
+
+print("\nAll Math & Libc FFI demonstrations completed successfully!")

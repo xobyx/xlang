@@ -1,0 +1,67 @@
+// Direct C-ABI FFI Tests (Tier 2 & Tier 3)
+
+extern "libm.so" {
+    float sin(float x)
+    float cos(float x)
+    float pow(float base, float exp)
+}
+
+extern "libc.so.6" {
+    int abs(int x)
+    int atoi(string s)
+    double atof(string s)
+}
+
+extern "libmylib.so" {
+    int c_custom_calc(int a, int b)
+}
+
+// 1. Math Functions (libm.so)
+float s = sin(0.0)
+print("sin(0.0) = %f", s)
+assert(s == 0.0, "sin(0.0) should be 0.0")
+
+float c = cos(0.0)
+print("cos(0.0) = %f", c)
+assert(c == 1.0, "cos(0.0) should be 1.0")
+
+float p = pow(2.0, 3.0)
+print("pow(2.0, 3.0) = %f", p)
+assert(p == 8.0, "pow(2.0, 3.0) should be 8.0")
+
+// Namespaced Math calls
+float s_mod = libm.sin(0.0)
+assert(s_mod == 0.0, "libm.sin(0.0) check")
+
+float c_mod = libm.cos(0.0)
+assert(c_mod == 1.0, "libm.cos(0.0) check")
+
+float s_short = m.sin(0.0)
+assert(s_short == 0.0, "m.sin(0.0) check")
+
+// 2. Libc Functions (libc.so.6)
+int a_val = abs(-99)
+print("abs(-99) = %d", a_val)
+assert(a_val == 99, "abs(-99) should be 99")
+
+int a_mod = libc.abs(-42)
+assert(a_mod == 42, "libc.abs(-42) check")
+
+int num = atoi("1234")
+print("atoi('1234') = %d", num)
+assert(num == 1234, "atoi('1234') should be 1234")
+
+float pi = atof("3.14159")
+print("atof('3.14159') = %f", pi)
+assert(pi > 3.14 && pi < 3.15, "atof('3.14159') check")
+
+// 3. Custom C Library Functions (libmylib.so)
+int calc = c_custom_calc(10, 20)
+print("c_custom_calc(10, 20) = %d", calc)
+assert(calc == 80, "c_custom_calc(10, 20) should be 10*2 + 20*3 = 80")
+
+int calc_mod = mylib.c_custom_calc(5, 7)
+print("mylib.c_custom_calc(5, 7) = %d", calc_mod)
+assert(calc_mod == 31, "mylib.c_custom_calc(5, 7) should be 5*2 + 7*3 = 31")
+
+print("All Direct C-ABI FFI Tests PASSED!")

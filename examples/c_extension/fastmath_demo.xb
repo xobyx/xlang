@@ -1,0 +1,44 @@
+// ============================================================================
+// Tier 1 Demo: High-Performance Vectorcall Native C Extension
+// ============================================================================
+// Consumes fastmath.so (compiled from examples/c_extension/fastmath.c)
+// using the xlang Extension SDK (include/xlang.h).
+//
+// Build the extension:
+//   make -C examples/c_extension
+//
+// Run in VM:
+//   xlang examples/c_extension/fastmath_demo.xb
+//
+// Compile to native standalone binary:
+//   xlang build examples/c_extension/fastmath_demo.xb -o fastmath_demo_bin
+//   ./fastmath_demo_bin
+// ============================================================================
+
+import "fastmath"
+
+print("==================================================")
+print("  xlang Vectorcall Native Extension: fastmath     ")
+print("==================================================")
+
+// 1. fastmath.hypot(3.0, 4.0) -> 5.0
+float h = fastmath.hypot(3.0, 4.0)
+print("fastmath.hypot(3.0, 4.0) = %f", h)
+assert(h == 5.0, "hypot(3, 4) should be 5.0")
+
+// 2. fastmath.gcd(48, 18) -> 6
+int g = fastmath.gcd(48, 18)
+print("fastmath.gcd(48, 18) = %d", g)
+assert(g == 6, "gcd(48, 18) should be 6")
+
+int g2 = fastmath.gcd(101, 103)
+print("fastmath.gcd(101, 103) = %d", g2)
+assert(g2 == 1, "gcd(101, 103) should be 1")
+
+// 3. fastmath.reverse("hello xlang") -> "gnalx olleh"
+string msg = "hello xlang"
+string reversed = fastmath.reverse(msg)
+print("fastmath.reverse('%s') = '%s'", msg, reversed)
+assert(reversed == "gnalx olleh", "reverse check")
+
+print("\nFastmath native extension demo completed successfully!")

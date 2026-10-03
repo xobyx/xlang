@@ -30,19 +30,4 @@
   #define xsocket_close_fd(s) close(s)
 #endif
 
-/* Native socket functions callable from xlang */
-void x_socket_create(fcall* fc);
-void x_socket_connect(fcall* fc);
-void x_socket_bind(fcall* fc);
-void x_socket_listen(fcall* fc);
-void x_socket_accept(fcall* fc);
-void x_socket_send(fcall* fc);
-void x_socket_recv(fcall* fc);
-void x_socket_close(fcall* fc);
-void x_socket_set_timeout(fcall* fc);
-void x_socket_set_reuseaddr(fcall* fc);
-void x_socket_sendto(fcall* fc);
-void x_socket_recvfrom(fcall* fc);
-void x_http_get(fcall* fc);
-
 #endif /* XSOCKET_H */

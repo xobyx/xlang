@@ -136,12 +136,19 @@ XValue xval_int(int64_t i);
 XValue xval_float(double f);
 XValue xval_str(const char* s);
 XValue xval_obj(void* o);
+XValue xval_pointer(void* ptr);
+void* xval_as_pointer(XValue v);
 XValue xval_func(XFunction* fn);
 XValue xval_closure(XClosure* c);
 
 void xval_print(XValue v);
+void xval_snprint(char* buf, size_t size, XValue v);
 bool xval_is_truthy(XValue v);
 bool xval_equal(XValue a, XValue b);
+
+/* Vectorcall protocol for native functions */
+struct XVm;
+typedef XValue (*XVectorFn)(struct XVm* vm, XValue receiver, int argc, const XValue* args);
 
 /* -------------------------------------------------------------------------
  * Constant Pool & Symbol Table
@@ -210,6 +217,9 @@ int xir_add_symbol(XIrChunk* chunk, const char* name);
  * ------------------------------------------------------------------------- */
 void xir_disassemble_chunk(const XIrChunk* chunk, const char* name);
 int xir_disassemble_instruction(const XIrChunk* chunk, int offset);
+void xir_disassemble_instruction_text(const XIrChunk* chunk, int offset,
+                                      char* op_name, size_t op_size,
+                                      char* operands, size_t opnd_size);
 
 /* -------------------------------------------------------------------------
  * Bytecode File Serialization (.xbc)

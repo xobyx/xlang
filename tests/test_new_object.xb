@@ -1,0 +1,133 @@
+// Test instantiation and direct method calling on new objects:
+// 1. new object().function()
+// 2. new object() returns instance
+// 3. direct field access on new object
+// 4. methods returning this for chaining
+// 5. forward-referenced and recursive object structures
+
+class ForwardChild {
+    ForwardParent parent;
+    int child_id;
+
+    ForwardChild() {
+        child_id = 99;
+    }
+
+    int get_id() {
+        return child_id;
+    }
+}
+
+class ForwardParent {
+    ForwardChild child;
+    int parent_id;
+
+    ForwardParent() {
+        parent_id = 42;
+    }
+
+    int get_id() {
+        return parent_id;
+    }
+}
+
+class Calculator {
+    int total;
+
+    Calculator(int initial) {
+        total = initial;
+    }
+
+    Calculator add(int n) {
+        total = total + n;
+        return this;
+    }
+
+    Calculator mul(int n) {
+        total = total * n;
+        return this;
+    }
+
+    int result() {
+        return total;
+    }
+}
+
+class Greeter {
+    string prefix;
+
+    Greeter() {
+        prefix = "Hello, ";
+    }
+
+    string greet(string name) {
+        return prefix + name;
+    }
+
+    int get_length(string name) {
+        string full = prefix + name;
+        return len(full);
+    }
+}
+
+class Box {
+    int value;
+
+    Box(int v) {
+        value = v;
+    }
+
+    int get_value() {
+        return value;
+    }
+}
+
+Box make_box(int val) {
+    return new Box(val);
+}
+
+int extract_box(Box b) {
+    return b.get_value();
+}
+
+// 1. Calling method directly on newly created instance
+int direct_res = new Calculator(10).result();
+echo("direct_res: " + direct_res);
+assert(direct_res == 10, "new Calculator(10).result() == 10");
+
+// 2. Chained method calls starting from new object
+int chained_res = new Calculator(5).add(15).mul(2).result();
+echo("chained_res: " + chained_res);
+assert(chained_res == 40, "new Calculator(5).add(15).mul(2).result() == 40");
+
+// 3. String-returning method directly on new instance
+string greeting = new Greeter().greet("World");
+echo("greeting: " + greeting);
+assert(greeting == "Hello, World", "new Greeter().greet('World')");
+
+// 4. Int-returning method with arguments on default ctor instance
+int greet_len = new Greeter().get_length("xlang");
+echo("greet_len: " + greet_len);
+assert(greet_len == 12, "new Greeter().get_length('xlang') == 12");
+
+// 5. Function returning new instance
+Box b = make_box(1234);
+assert(b.get_value() == 1234, "make_box returns instance");
+
+// 6. Passing new instance directly to function
+int extracted = extract_box(new Box(5678));
+echo("extracted: " + extracted);
+assert(extracted == 5678, "extract_box(new Box(5678)) == 5678");
+
+// 7. Direct field access on returned instance
+Box b2 = new Box(777);
+assert(b2.value == 777, "b2.value == 777");
+
+// 8. Forward-referenced classes
+ForwardChild fc = new ForwardChild();
+assert(fc.get_id() == 99, "fc.get_id() == 99");
+
+ForwardParent fp = new ForwardParent();
+assert(fp.get_id() == 42, "fp.get_id() == 42");
+
+echo("test_new_object PASS");

@@ -1,4 +1,5 @@
 #include "ximport.h"
+#include "xextension.h"
 #include "functions.h"
 #include "lexer.h"
 #include "xast_parser.h"
@@ -7,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <sys/stat.h>
 
 #if defined(_MSC_VER)
 #include <direct.h>
@@ -14,6 +16,18 @@
 #else
 #include <unistd.h>
 #endif
+
+static bool is_regular_file(const char* path)
+{
+	if (!path || *path == '\0') return false;
+	struct stat st;
+	if (stat(path, &st) != 0) return false;
+#if defined(_MSC_VER)
+	return (st.st_mode & _S_IFREG) != 0;
+#else
+	return S_ISREG(st.st_mode);
+#endif
+}
 
 typedef struct {
 	char* canonical_path;
@@ -58,6 +72,7 @@ void x_import_cleanup(void)
 static FILE* try_open(const char* path, char* resolved_out, size_t resolved_size)
 {
 	if (path == NULL || *path == '\0') return NULL;
+	if (!is_regular_file(path)) return NULL;
 	FILE* f = fopen(path, "r");
 	if (f == NULL) return NULL;
 
@@ -225,6 +240,121 @@ static FILE* resolve_module_file(const char* name, char* resolved_path, size_t r
 	return NULL;
 }
 
+static bool try_resolve_lib(const char* path, char* resolved_out, size_t resolved_size)
+{
+	if (path == NULL || *path == '\0') return false;
+	if (!is_regular_file(path)) return false;
+	FILE* f = fopen(path, "rb");
+	if (f == NULL) return false;
+	fclose(f);
+
+#if !defined(_MSC_VER)
+	char real[PATH_MAX];
+	if (realpath(path, real) != NULL)
+	{
+		size_t l = strlen(real);
+		if (l >= resolved_size) l = resolved_size - 1;
+		memcpy(resolved_out, real, l);
+		resolved_out[l] = '\0';
+	}
+	else
+	{
+		size_t l = strlen(path);
+		if (l >= resolved_size) l = resolved_size - 1;
+		memcpy(resolved_out, path, l);
+		resolved_out[l] = '\0';
+	}
+#else
+	size_t l = strlen(path);
+	if (l >= resolved_size) l = resolved_size - 1;
+	memcpy(resolved_out, path, l);
+	resolved_out[l] = '\0';
+#endif
+	return true;
+}
+
+#if defined(_WIN32) || defined(_MSC_VER)
+static const char* s_native_exts[] = { ".dll" };
+#elif defined(__APPLE__)
+static const char* s_native_exts[] = { ".dylib", ".so" };
+#else
+static const char* s_native_exts[] = { ".so" };
+#endif
+#define NUM_NATIVE_EXTS (int)(sizeof(s_native_exts) / sizeof(s_native_exts[0]))
+
+static bool resolve_native_library(const char* name, char* resolved_path, size_t resolved_size)
+{
+	char test_path[PATH_MAX * 4];
+
+	/* 1. As provided */
+	if (try_resolve_lib(name, resolved_path, resolved_size)) return true;
+
+	for (int e = 0; e < NUM_NATIVE_EXTS; e++)
+	{
+		const char* ext = s_native_exts[e];
+
+		/* 2. With extension and with lib prefix */
+		snprintf(test_path, sizeof(test_path), "%s%s", name, ext);
+		if (try_resolve_lib(test_path, resolved_path, resolved_size)) return true;
+
+		snprintf(test_path, sizeof(test_path), "lib%s%s", name, ext);
+		if (try_resolve_lib(test_path, resolved_path, resolved_size)) return true;
+
+		/* 2b. Relative to directory of current source file */
+		const char* cur_file = xdiag_get_current_file();
+		if (cur_file != NULL && *cur_file != '\0' && strcmp(cur_file, "<stdin>") != 0)
+		{
+			char dir[PATH_MAX];
+			snprintf(dir, sizeof(dir), "%s", cur_file);
+			char* slash = strrchr(dir, '/');
+			if (slash == NULL) slash = strrchr(dir, '\\');
+			if (slash != NULL)
+			{
+				*slash = '\0';
+				snprintf(test_path, sizeof(test_path), "%s/%s%s", dir, name, ext);
+				if (try_resolve_lib(test_path, resolved_path, resolved_size)) return true;
+
+				snprintf(test_path, sizeof(test_path), "%s/lib%s%s", dir, name, ext);
+				if (try_resolve_lib(test_path, resolved_path, resolved_size)) return true;
+			}
+		}
+
+		/* 3. Relative to initial working directory */
+		if (s_initial_cwd[0] != '\0')
+		{
+			snprintf(test_path, sizeof(test_path), "%s/%s%s", s_initial_cwd, name, ext);
+			if (try_resolve_lib(test_path, resolved_path, resolved_size)) return true;
+
+			snprintf(test_path, sizeof(test_path), "%s/lib%s%s", s_initial_cwd, name, ext);
+			if (try_resolve_lib(test_path, resolved_path, resolved_size)) return true;
+
+			snprintf(test_path, sizeof(test_path), "%s/lib/%s%s", s_initial_cwd, name, ext);
+			if (try_resolve_lib(test_path, resolved_path, resolved_size)) return true;
+		}
+
+		/* 4. Look in lib/ */
+		snprintf(test_path, sizeof(test_path), "lib/%s%s", name, ext);
+		if (try_resolve_lib(test_path, resolved_path, resolved_size)) return true;
+
+		snprintf(test_path, sizeof(test_path), "lib/lib%s%s", name, ext);
+		if (try_resolve_lib(test_path, resolved_path, resolved_size)) return true;
+
+		/* 5. XLANG_PATH or XLANG_HOME */
+		const char* env_path = getenv("XLANG_PATH");
+		if (env_path == NULL) env_path = getenv("XLANG_HOME");
+		if (env_path != NULL && *env_path != '\0')
+		{
+			snprintf(test_path, sizeof(test_path), "%s/%s%s", env_path, name, ext);
+			if (try_resolve_lib(test_path, resolved_path, resolved_size)) return true;
+
+			snprintf(test_path, sizeof(test_path), "%s/lib/%s%s", env_path, name, ext);
+			if (try_resolve_lib(test_path, resolved_path, resolved_size)) return true;
+		}
+	}
+
+	return false;
+}
+
 bool x_import_module_ast(AstProgram* prog, const char* module_name)
 {
 	if (module_name == NULL || *module_name == '\0')
@@ -234,6 +364,31 @@ bool x_import_module_ast(AstProgram* prog, const char* module_name)
 	FILE* f = resolve_module_file(module_name, canonical, sizeof(canonical));
 	if (f == NULL)
 	{
+		/* Check if this is a native C extension library (.so / .dll / .dylib) */
+		if (resolve_native_library(module_name, canonical, sizeof(canonical)))
+		{
+			/* Check if already in registry */
+			for (int i = 0; i < s_imported_count; i++)
+			{
+				if (s_imported[i].canonical_path != NULL && strcmp(s_imported[i].canonical_path, canonical) == 0)
+				{
+					return true;
+				}
+			}
+
+			/* Register new entry */
+			if (s_imported_count >= s_imported_cap)
+			{
+				s_imported_cap = s_imported_cap == 0 ? 16 : s_imported_cap * 2;
+				s_imported = (imported_file_entry_t*)realloc(s_imported, s_imported_cap * sizeof(imported_file_entry_t));
+			}
+			int entry_idx = s_imported_count++;
+			s_imported[entry_idx].canonical_path = strdup(canonical);
+			s_imported[entry_idx].in_progress = false;
+
+			return xextension_load(canonical, NULL);
+		}
+
 		printf("\nError: Cannot import module '%s' - file not found\n", module_name);
 		return false;
 	}

@@ -211,6 +211,29 @@ int xllvm_jit_run_program(const AstProgram* prog, const char* source_file, int a
 	return ret;
 }
 
+static bool is_class_method_overloaded_in_prog(const AstProgram* prog, const char* class_name, const char* method_name)
+{
+	if (!prog || !class_name || !method_name) return false;
+	int matches = 0;
+	for (int i = 0; i < prog->statement_count; i++)
+	{
+		const AstStmt* stmt = prog->statements[i];
+		if (stmt && stmt->type == AST_STMT_CLASS_DECL && strcmp(stmt->as.class_decl.name, class_name) == 0)
+		{
+			for (int m = 0; m < stmt->as.class_decl.member_count; m++)
+			{
+				const AstStmt* mem = stmt->as.class_decl.members[m];
+				if (mem && mem->type == AST_STMT_FUNC_DECL && strcmp(mem->as.func_decl.name, method_name) == 0)
+				{
+					matches++;
+					if (matches > 1) return true;
+				}
+			}
+		}
+	}
+	return false;
+}
+
 int xllvm_jit_bind_vm(XLLVMJit* jit, XVm* vm, const AstProgram* prog)
 {
 	if (!jit || !vm || !prog) return 0;
@@ -225,7 +248,8 @@ int xllvm_jit_bind_vm(XLLVMJit* jit, XVm* vm, const AstProgram* prog)
 		{
 			const char* fname = stmt->as.func_decl.name;
 			if (!fname) continue;
-			void* native_fn = xllvm_jit_lookup(jit, fname);
+			const char* lookup_name = (strcmp(fname, "main") == 0) ? "_user_main" : fname;
+			void* native_fn = xllvm_jit_lookup(jit, lookup_name);
 			if (native_fn)
 			{
 				XValue val = xval_null();
@@ -261,11 +285,23 @@ int xllvm_jit_bind_vm(XLLVMJit* jit, XVm* vm, const AstProgram* prog)
 				if (!mname) continue;
 
 				char mangled[256];
-				snprintf(mangled, sizeof(mangled), "%s_%s", cname, mname);
+				int arity = mstmt->as.func_decl.param_count;
+				if (is_class_method_overloaded_in_prog(prog, cname, mname) && arity > 0)
+					snprintf(mangled, sizeof(mangled), "%s_%s_%d", cname, mname, arity);
+				else
+					snprintf(mangled, sizeof(mangled), "%s_%s", cname, mname);
+
 				void* native_m = xllvm_jit_lookup(jit, mangled);
+				if (!native_m && arity > 0)
+				{
+					/* Fallback attempt to un-suffixed symbol if overloaded lookup failed */
+					snprintf(mangled, sizeof(mangled), "%s_%s", cname, mname);
+					native_m = xllvm_jit_lookup(jit, mangled);
+				}
+
 				if (native_m)
 				{
-					XClosure* clo = xclass_find_method(klass, mname, mstmt->as.func_decl.param_count);
+					XClosure* clo = xclass_find_method(klass, mname, arity);
 					if (clo && clo->function)
 					{
 						clo->function->jit_native_entry = native_m;

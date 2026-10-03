@@ -1,0 +1,52 @@
+import "raylib"
+
+print("Testing C extension module 'raylib'...\n")
+
+// 1. Color tests
+int c_red = raylib.red()
+int c_custom = raylib.color(10, 20, 30, 255)
+print("raylib colors: red=%d, custom=%d\n", c_red, c_custom)
+assert(c_red != 0, "red color should not be 0")
+
+// 2. CPU Image operations (Headless / Offscreen drawing)
+any img = raylib.gen_image_color(200, 150, raylib.darkgray())
+raylib.image_draw_rectangle(img, 10, 10, 50, 40, raylib.gold())
+raylib.image_draw_circle(img, 100, 75, 30.0, raylib.skyblue())
+raylib.image_draw_line(img, 0, 0, 200, 150, raylib.red())
+raylib.image_draw_text(img, "xlang raylib", 20, 120, 10, raylib.white())
+
+int exported = raylib.export_image(img, "test_raylib_output.png")
+print("raylib.export_image result: %d\n", exported)
+assert(exported == 1, "image should export successfully")
+raylib.unload_image(img)
+
+// 3. Window Lifecycle and 2D Drawing (Hidden window mode)
+raylib.set_config_flags(raylib.flag_window_hidden())
+raylib.init_window(320, 240, "xlang raylib test window")
+
+int ready = raylib.is_window_ready()
+print("raylib.is_window_ready: %d\n", ready)
+assert(ready == 1, "window should be ready")
+
+raylib.set_target_fps(60)
+int w = raylib.get_screen_width()
+int h = raylib.get_screen_height()
+print("screen size: %d x %d\n", w, h)
+assert(w == 320, "screen width should be 320")
+assert(h == 240, "screen height should be 240")
+
+// Perform one drawing frame
+raylib.begin_drawing()
+raylib.clear_background(raylib.raywhite())
+raylib.draw_text("Hello from xlang raylib!", 20, 50, 20, raylib.darkgray())
+raylib.draw_circle(160, 140, 40.0, raylib.red())
+raylib.draw_rectangle(20, 120, 60, 40, raylib.blue())
+raylib.draw_line(0, 0, 320, 240, raylib.green())
+raylib.draw_fps(10, 10)
+raylib.end_drawing()
+
+float t = raylib.get_time()
+print("raylib.get_time: %f\n", t)
+
+raylib.close_window()
+print("test_raylib PASS\n")

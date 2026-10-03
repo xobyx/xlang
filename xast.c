@@ -477,6 +477,23 @@ AstStmt* ast_stmt_class_decl(AstArena* arena, const char* name, const char* base
 	return s;
 }
 
+AstStmt* ast_stmt_extern_block(AstArena* arena, const char* lib_name, AstStmt** funcs, int count, int line, int col)
+{
+	AstStmt* s = alloc_stmt(arena, AST_STMT_EXTERN_BLOCK, line, col);
+	s->as.extern_block.lib_name = ast_arena_strdup(arena, lib_name);
+	s->as.extern_block.func_count = count;
+	if (count > 0 && funcs != NULL)
+	{
+		s->as.extern_block.func_decls = (AstStmt**)ast_arena_alloc(arena, sizeof(AstStmt*) * count);
+		memcpy(s->as.extern_block.func_decls, funcs, sizeof(AstStmt*) * count);
+	}
+	else
+	{
+		s->as.extern_block.func_decls = NULL;
+	}
+	return s;
+}
+
 /* -------------------------------------------------------------------------
  * Complete AST Program
  * ------------------------------------------------------------------------- */
@@ -733,6 +750,12 @@ void xast_dump_stmt(const AstStmt* stmt, int indent, bool is_last)
 		       stmt->line);
 		for (int i = 0; i < stmt->as.class_decl.member_count; i++)
 			xast_dump_stmt(stmt->as.class_decl.members[i], indent + 1, i == stmt->as.class_decl.member_count - 1);
+		break;
+	case AST_STMT_EXTERN_BLOCK:
+		printf("\033[1;35mExternBlock\033[0m \"%s\" [line %d]\n",
+		       stmt->as.extern_block.lib_name, stmt->line);
+		for (int i = 0; i < stmt->as.extern_block.func_count; i++)
+			xast_dump_stmt(stmt->as.extern_block.func_decls[i], indent + 1, i == stmt->as.extern_block.func_count - 1);
 		break;
 	default:
 		printf("UnknownStmt (%d)\n", stmt->type);

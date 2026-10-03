@@ -1,0 +1,111 @@
+// ============================================================================
+// Direct C-ABI FFI: SQLite3 System Library Example (Tier 2 & Tier 3)
+// ============================================================================
+// This example demonstrates zero-wrapper binding to an unmodified existing
+// system shared library: libsqlite3.so.0.
+//
+// You can run this directly with:
+//   xlang examples/ffi_c_abi/sqlite_demo.xb
+// Or compile to a standalone native binary:
+//   xlang build examples/ffi_c_abi/sqlite_demo.xb -o sqlite_demo_bin
+// ============================================================================
+
+extern "libsqlite3.so.0" {
+    string sqlite3_libversion()
+    string sqlite3_sourceid()
+    long sqlite3_memory_used()
+    long sqlite3_memory_highwater(int resetFlag)
+    int sqlite3_strglob(string zGlob, string zStr)
+    int sqlite3_strlike(string zGlob, string zStr, int cEsc)
+}
+
+print("==================================================")
+print("  SQLite3 Direct C-ABI FFI Zero-Wrapper Binding   ")
+print("==================================================")
+
+// 1. Query SQLite Engine Metadata
+string version = sqlite3_libversion()
+string source_id = sqlite3_sourceid()
+print("SQLite3 Engine Version : %s", version)
+print("SQLite3 Source ID      : %s", source_id)
+assert(strlen(version) > 0, "SQLite version string should not be empty")
+
+// 2. Memory Subsystem Stats
+long mem_used = sqlite3_memory_used()
+long mem_peak = sqlite3_memory_highwater(0)
+print("SQLite Memory In-Use   : %d bytes", mem_used)
+print("SQLite Memory Highwater: %d bytes", mem_peak)
+
+// 3. Built-in Pattern Matching Utilities: sqlite3_strglob
+// sqlite3_strglob(glob, string) returns 0 if match succeeds
+print("\n--- Testing sqlite3_strglob Pattern Matching ---")
+
+int g1 = sqlite3_strglob("*.xb", "script.xb")
+int g2 = sqlite3_strglob("*.xb", "script.cpp")
+int g3 = sqlite3_strglob("app_[0-9]*", "app_42")
+int g4 = sqlite3_strglob("app_[0-9]*", "app_beta")
+
+if (g1 == 0) {
+    print("Glob '*.xb' matches 'script.xb'        : YES (expected)")
+} else {
+    print("Glob '*.xb' matches 'script.xb'        : NO")
+}
+assert(g1 == 0, "g1 should match")
+
+if (g2 != 0) {
+    print("Glob '*.xb' matches 'script.cpp'       : NO (expected)")
+} else {
+    print("Glob '*.xb' matches 'script.cpp'       : YES")
+}
+assert(g2 != 0, "g2 should not match")
+
+if (g3 == 0) {
+    print("Glob 'app_[0-9]*' matches 'app_42'     : YES (expected)")
+} else {
+    print("Glob 'app_[0-9]*' matches 'app_42'     : NO")
+}
+assert(g3 == 0, "g3 should match")
+
+if (g4 != 0) {
+    print("Glob 'app_[0-9]*' matches 'app_beta'   : NO (expected)")
+} else {
+    print("Glob 'app_[0-9]*' matches 'app_beta'   : YES")
+}
+assert(g4 != 0, "g4 should not match")
+
+// 4. SQL LIKE Pattern Matching: sqlite3_strlike (case-insensitive)
+// sqlite3_strlike(like, string, escape_char) returns 0 on match
+print("\n--- Testing sqlite3_strlike Pattern Matching ---")
+
+int l1 = sqlite3_strlike("%world%", "Hello WORLD! Welcome to xlang", 0)
+int l2 = sqlite3_strlike("user_%@%.com", "user_123@example.com", 0)
+int l3 = sqlite3_strlike("user_%@%.com", "admin@domain.org", 0)
+
+if (l1 == 0) {
+    print("Like '%%world%%' matches 'Hello WORLD!'       : YES (expected)")
+} else {
+    print("Like '%%world%%' matches 'Hello WORLD!'       : NO")
+}
+assert(l1 == 0, "l1 should match")
+
+if (l2 == 0) {
+    print("Like 'user_%%@%%.com' matches valid email      : YES (expected)")
+} else {
+    print("Like 'user_%%@%%.com' matches valid email      : NO")
+}
+assert(l2 == 0, "l2 should match")
+
+if (l3 != 0) {
+    print("Like 'user_%%@%%.com' rejects mismatched email: YES (expected)")
+} else {
+    print("Like 'user_%%@%%.com' rejects mismatched email: NO")
+}
+assert(l3 != 0, "l3 should reject")
+
+// 5. Namespaced Module Access
+print("\n--- Testing Namespaced Access (sqlite3.<func>) ---")
+string ver_namespaced = sqlite3.sqlite3_libversion()
+print("sqlite3.sqlite3_libversion() = %s", ver_namespaced)
+assert(ver_namespaced == version, "Namespaced version should match direct call")
+
+print("\nSQLite3 FFI demonstration completed successfully!")

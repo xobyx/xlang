@@ -1,0 +1,691 @@
+// ============================================================================
+// Google Chrome Dino Run Clone in xlang + Raylib
+// ============================================================================
+// Features:
+// - T-Rex character with running animation, jumping physics, and ducking
+// - Multi-type obstacles: Small Cacti, Tall Cacti, Triple Clusters, & Flying Pterodactyls
+// - Dynamic acceleration: speed increases gradually with distance
+// - Parallax scrolling clouds & textured ground particles
+// - Day / Night theme transitions every 500 points
+// - High score persistence
+// - Full soundless arcade game feel with accurate AABB hitboxes
+//
+// Controls:
+//   SPACE / UP / Left Mouse Click : Jump / Start / Restart
+//   DOWN Arrow                    : Duck
+//   ESC                           : Quit
+// ============================================================================
+
+import "raylib"
+
+// ----------------------------------------------------------------------------
+// 1. Constants
+// ----------------------------------------------------------------------------
+int SCREEN_W = 800
+int SCREEN_H = 340
+int ground_y_pos = 270
+
+int STATE_START = 0
+int STATE_PLAYING = 1
+int STATE_GAMEOVER = 2
+
+// ----------------------------------------------------------------------------
+// 2. Parallax Cloud Class
+// ----------------------------------------------------------------------------
+class Cloud() {
+    float x
+    float y
+    float speed
+
+    Cloud() {
+        x = 0.0
+        y = 0.0
+        speed = 1.0
+    }
+
+    void reset(float start_x, float start_y, float spd) {
+        x = start_x
+        y = start_y
+        speed = spd
+    }
+
+    void update() {
+        x = x - speed
+        if (x < -80.0) {
+            x = 850.0
+        }
+    }
+
+    void draw(int col) {
+        int ix = x
+        int iy = y
+        // Fluffy cloud made of 3 overlapping shapes
+        raylib.draw_circle(ix + 16, iy + 10, 10.0, col)
+        raylib.draw_circle(ix + 28, iy + 6, 13.0, col)
+        raylib.draw_circle(ix + 42, iy + 10, 9.0, col)
+        raylib.draw_rectangle(ix + 12, iy + 8, 36, 10, col)
+    }
+}
+
+// ----------------------------------------------------------------------------
+// 3. Ground Texture Segment
+// ----------------------------------------------------------------------------
+class GroundTile() {
+    float x
+    int length
+    int offset_y
+
+    GroundTile() {
+        x = 0.0
+        length = 12
+        offset_y = 4
+    }
+
+    void init(float init_x, int len, int oy) {
+        x = init_x
+        length = len
+        offset_y = oy
+    }
+
+    void update(float speed) {
+        x = x - speed
+        if (x < -50.0) {
+            x = x + 850.0
+        }
+    }
+
+    void draw(int gy, int col) {
+        int ix = x
+        raylib.draw_line(ix, gy + offset_y, ix + length, gy + offset_y, col)
+    }
+}
+
+// ----------------------------------------------------------------------------
+// 4. Obstacle Class (Cactus & Flying Pterodactyl)
+// ----------------------------------------------------------------------------
+class Obstacle() {
+    float x
+    float y
+    float ground_y
+    int obs_type  // 0: Small Cactus, 1: Tall Cactus, 2: Double Cactus, 3: Bird
+    int width
+    int height
+    int anim_timer
+
+    Obstacle() {
+        x = -100.0
+        ground_y = 270.0
+        y = 0.0
+        obs_type = 0
+        width = 20
+        height = 36
+        anim_timer = 0
+    }
+
+    void spawn(float start_x, int type_id) {
+        x = start_x
+        obs_type = type_id
+        anim_timer = 0
+
+        if (obs_type == 0) {
+            // Small Cactus
+            width = 18
+            height = 36
+            y = ground_y - height
+        }
+        if (obs_type == 1) {
+            // Tall Cactus
+            width = 24
+            height = 50
+            y = ground_y - height
+        }
+        if (obs_type == 2) {
+            // Double Cactus
+            width = 38
+            height = 40
+            y = ground_y - height
+        }
+        if (obs_type == 3) {
+            // Pterodactyl (Bird) - Flying at mid height
+            width = 38
+            height = 26
+            y = ground_y - 56.0
+        }
+        if (obs_type == 4) {
+            // Pterodactyl (Bird) - Flying low (must jump)
+            width = 38
+            height = 26
+            y = ground_y - 32.0
+        }
+    }
+
+    void update(float speed) {
+        x = x - speed
+        anim_timer = anim_timer + 1
+    }
+
+    void draw(int col) {
+        int ix = x
+        int iy = y
+
+        if (obs_type == 0) {
+            // Small Cactus: trunk + 2 side arms
+            raylib.draw_rectangle(ix + 5, iy, 8, 36, col)
+            // Left arm
+            raylib.draw_rectangle(ix, iy + 10, 5, 4, col)
+            raylib.draw_rectangle(ix, iy + 6, 4, 8, col)
+            // Right arm
+            raylib.draw_rectangle(ix + 13, iy + 14, 5, 4, col)
+            raylib.draw_rectangle(ix + 14, iy + 8, 4, 10, col)
+        }
+        if (obs_type == 1) {
+            // Tall Cactus
+            raylib.draw_rectangle(ix + 7, iy, 10, 50, col)
+            // Left arm
+            raylib.draw_rectangle(ix, iy + 14, 7, 5, col)
+            raylib.draw_rectangle(ix, iy + 8, 5, 12, col)
+            // Right arm
+            raylib.draw_rectangle(ix + 17, iy + 18, 7, 5, col)
+            raylib.draw_rectangle(ix + 19, iy + 10, 5, 14, col)
+        }
+        if (obs_type == 2) {
+            // Double Cactus: two side-by-side cacti
+            raylib.draw_rectangle(ix + 4, iy + 6, 8, 34, col)
+            raylib.draw_rectangle(ix, iy + 14, 4, 10, col)
+
+            raylib.draw_rectangle(ix + 20, iy, 10, 40, col)
+            raylib.draw_rectangle(ix + 30, iy + 12, 6, 12, col)
+        }
+        if (obs_type == 3 || obs_type == 4) {
+            // Pterodactyl (Bird) with flapping wings!
+            // Body & Head
+            raylib.draw_rectangle(ix + 10, iy + 8, 20, 8, col)
+            raylib.draw_rectangle(ix + 4, iy + 6, 8, 7, col)
+            // Beak
+            raylib.draw_rectangle(ix, iy + 8, 5, 3, col)
+            // Tail feathers
+            raylib.draw_rectangle(ix + 30, iy + 10, 8, 4, col)
+
+            // Flap animation: alternate wing up / wing down every 10 frames
+            int flap = (anim_timer / 10) % 2
+            if (flap == 0) {
+                // Wing UP
+                raylib.draw_rectangle(ix + 14, iy - 6, 7, 14, col)
+                raylib.draw_rectangle(ix + 16, iy - 10, 4, 5, col)
+            } else {
+                // Wing DOWN
+                raylib.draw_rectangle(ix + 14, iy + 12, 7, 14, col)
+                raylib.draw_rectangle(ix + 16, iy + 24, 4, 5, col)
+            }
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// 5. Dino Character Class
+// ----------------------------------------------------------------------------
+class Dino() {
+    float x
+    float y
+    float ground_y
+    float vy
+    float gravity
+    float jump_force
+    bool is_jumping
+    bool is_ducking
+    int anim_tick
+    int width
+    int height
+
+    Dino() {
+        x = 60.0
+        ground_y = 270.0
+        y = ground_y - 48.0
+        vy = 0.0
+        gravity = 0.82
+        jump_force = -14.2
+        is_jumping = false
+        is_ducking = false
+        anim_tick = 0
+        width = 44
+        height = 48
+    }
+
+    void reset() {
+        y = ground_y - 48.0
+        vy = 0.0
+        is_jumping = false
+        is_ducking = false
+        anim_tick = 0
+        width = 44
+        height = 48
+    }
+
+    void jump() {
+        if (!is_jumping) {
+            vy = jump_force
+            is_jumping = true
+        }
+    }
+
+    void update(bool duck_key) {
+        anim_tick = anim_tick + 1
+
+        if (is_jumping) {
+            // In air physics
+            vy = vy + gravity
+            y = y + vy
+
+            // Check ground contact
+            if (y >= ground_y - 48.0) {
+                y = ground_y - 48.0
+                vy = 0.0
+                is_jumping = false
+            }
+        } else {
+            // On ground: handle ducking
+            if (duck_key) {
+                is_ducking = true
+                width = 56
+                height = 30
+                y = ground_y - 30.0
+            } else {
+                is_ducking = false
+                width = 44
+                height = 48
+                y = ground_y - 48.0
+            }
+        }
+    }
+
+    void draw(int dino_col, int eye_col, bool is_dead) {
+        int ix = x
+        int iy = y
+
+        if (is_ducking && !is_jumping) {
+            // ----------------------------------------------------------------
+            // Ducking Dino Rendering (low profile)
+            // ----------------------------------------------------------------
+            // Body
+            raylib.draw_rectangle(ix + 10, iy + 6, 32, 16, dino_col)
+            // Stretched low head
+            raylib.draw_rectangle(ix + 40, iy + 4, 16, 12, dino_col)
+            raylib.draw_rectangle(ix + 48, iy + 10, 8, 6, dino_col)
+            // Eye
+            raylib.draw_rectangle(ix + 44, iy + 6, 3, 3, eye_col)
+            // Tail
+            raylib.draw_rectangle(ix, iy + 8, 10, 8, dino_col)
+            // Legs alternating
+            int step = (anim_tick / 6) % 2
+            if (step == 0) {
+                raylib.draw_rectangle(ix + 16, iy + 22, 6, 8, dino_col)
+                raylib.draw_rectangle(ix + 28, iy + 22, 6, 5, dino_col)
+            } else {
+                raylib.draw_rectangle(ix + 16, iy + 22, 6, 5, dino_col)
+                raylib.draw_rectangle(ix + 28, iy + 22, 6, 8, dino_col)
+            }
+        } else {
+            // ----------------------------------------------------------------
+            // Standing / Running / Jumping Dino Rendering
+            // ----------------------------------------------------------------
+            // Head & Snout
+            raylib.draw_rectangle(ix + 20, iy, 22, 16, dino_col)
+            raylib.draw_rectangle(ix + 34, iy + 8, 10, 8, dino_col)
+            // Mouth notch
+            raylib.draw_rectangle(ix + 32, iy + 12, 8, 2, eye_col)
+
+            // Eye (X if dead, otherwise dot)
+            if (is_dead) {
+                raylib.draw_rectangle(ix + 26, iy + 4, 4, 4, eye_col)
+                raylib.draw_line(ix + 25, iy + 3, ix + 30, iy + 8, dino_col)
+                raylib.draw_line(ix + 25, iy + 8, ix + 30, iy + 3, dino_col)
+            } else {
+                raylib.draw_rectangle(ix + 26, iy + 4, 3, 3, eye_col)
+            }
+
+            // Torso / Body
+            raylib.draw_rectangle(ix + 10, iy + 16, 24, 20, dino_col)
+            // Tiny T-Rex Arm
+            raylib.draw_rectangle(ix + 32, iy + 22, 6, 4, dino_col)
+            raylib.draw_rectangle(ix + 36, iy + 24, 2, 4, dino_col)
+
+            // Tail
+            raylib.draw_rectangle(ix, iy + 18, 10, 10, dino_col)
+            raylib.draw_rectangle(ix + 2, iy + 26, 8, 6, dino_col)
+
+            // Legs
+            if (is_jumping) {
+                // Tucked legs when airborne
+                raylib.draw_rectangle(ix + 14, iy + 36, 6, 6, dino_col)
+                raylib.draw_rectangle(ix + 24, iy + 36, 6, 6, dino_col)
+            } else {
+                // Running leg cycle
+                int step = (anim_tick / 6) % 2
+                if (step == 0) {
+                    // Left leg down, Right leg raised
+                    raylib.draw_rectangle(ix + 14, iy + 36, 4, 12, dino_col)
+                    raylib.draw_rectangle(ix + 18, iy + 45, 4, 3, dino_col)
+                    raylib.draw_rectangle(ix + 24, iy + 36, 4, 7, dino_col)
+                } else {
+                    // Right leg down, Left leg raised
+                    raylib.draw_rectangle(ix + 14, iy + 36, 4, 7, dino_col)
+                    raylib.draw_rectangle(ix + 24, iy + 36, 4, 12, dino_col)
+                    raylib.draw_rectangle(ix + 28, iy + 45, 4, 3, dino_col)
+                }
+            }
+        }
+    }
+
+    // AABB Collision Detection with inner margin for fair hitboxes
+    bool check_collision(Obstacle obs) {
+        float dino_left = x + 4.0
+        float dino_right = x + width - 4.0
+        float dino_top = y + 4.0
+        float dino_bottom = y + height
+
+        float obs_left = obs.x + 3.0
+        float obs_right = obs.x + obs.width - 3.0
+        float obs_top = obs.y + 3.0
+        float obs_bottom = obs.y + obs.height
+
+        if (dino_right > obs_left && dino_left < obs_right) {
+            if (dino_bottom > obs_top && dino_top < obs_bottom) {
+                return true
+            }
+        }
+        return false
+    }
+}
+
+// ----------------------------------------------------------------------------
+// 6. Game Initialization
+// ----------------------------------------------------------------------------
+
+raylib.init_window(SCREEN_W, SCREEN_H, "xlang Dino Run - Google Chrome Clone")
+raylib.set_target_fps(60)
+
+Dino dino = new Dino()
+
+// Obstacle pool
+Obstacle obs1 = new Obstacle()
+Obstacle obs2 = new Obstacle()
+Obstacle obs3 = new Obstacle()
+
+obs1.spawn(750.0, 0)
+obs2.spawn(1100.0, 1)
+obs3.spawn(1450.0, 3)
+
+// Parallax clouds
+Cloud c1 = new Cloud()
+Cloud c2 = new Cloud()
+Cloud c3 = new Cloud()
+c1.reset(120.0, 50.0, 0.8)
+c2.reset(420.0, 75.0, 0.6)
+c3.reset(720.0, 40.0, 1.0)
+
+// Ground texture tiles
+GroundTile g1 = new GroundTile()
+GroundTile g2 = new GroundTile()
+GroundTile g3 = new GroundTile()
+GroundTile g4 = new GroundTile()
+GroundTile g5 = new GroundTile()
+g1.init(50.0, 16, 4)
+g2.init(210.0, 24, 6)
+g3.init(390.0, 12, 3)
+g4.init(580.0, 30, 7)
+g5.init(740.0, 18, 5)
+
+int game_state = STATE_START
+float game_speed = 6.5
+int score = 0
+int high_score = 0
+int score_timer = 0
+int night_mode_timer = 0
+
+// Sound-effect visual indicator (score blink on hundreds)
+int flash_timer = 0
+
+print("==================================================")
+print("  xlang Dino Run: Game Launched Successfully!     ")
+print("==================================================")
+
+// ----------------------------------------------------------------------------
+// 7. Main Game Loop
+// ----------------------------------------------------------------------------
+
+while (raylib.window_should_close() == 0) {
+
+    // ------------------------------------------------------------------------
+    // A. Input Handling
+    // ------------------------------------------------------------------------
+    bool space_key = (raylib.is_key_pressed(raylib.key_space()) != 0)
+    bool up_key = (raylib.is_key_pressed(raylib.key_up()) != 0)
+    bool click = (raylib.is_mouse_button_pressed(raylib.mouse_button_left()) != 0)
+    bool jump_requested = space_key || up_key || click
+
+    bool duck_held = (raylib.is_key_down(raylib.key_down()) != 0)
+
+    if (raylib.is_key_pressed(raylib.key_escape()) != 0) {
+        break
+    }
+
+    // ------------------------------------------------------------------------
+    // B. State Transitions & Logic Updates
+    // ------------------------------------------------------------------------
+
+    if (game_state == STATE_START) {
+        if (jump_requested) {
+            game_state = STATE_PLAYING
+            dino.jump()
+        }
+    }
+
+    if (game_state == STATE_PLAYING) {
+        // Jump input
+        if (jump_requested) {
+            dino.jump()
+        }
+
+        // Update Dino
+        dino.update(duck_held)
+
+        // Update obstacles
+        obs1.update(game_speed)
+        obs2.update(game_speed)
+        obs3.update(game_speed)
+
+        // Recycle obstacles with smart pacing
+        if (obs1.x < -60.0) {
+            int nxt_type = score % 3
+            if (score > 300 && (score % 3 == 0)) {
+                nxt_type = 3
+            }
+            obs1.spawn(obs3.x + 320.0, nxt_type)
+        }
+        if (obs2.x < -60.0) {
+            int nxt_type = (score + 1) % 3
+            if (score > 450 && (score % 4 == 0)) {
+                nxt_type = 4
+            }
+            obs2.spawn(obs1.x + 340.0, nxt_type)
+        }
+        if (obs3.x < -60.0) {
+            int nxt_type = 0
+            if (score % 2 == 0) {
+                nxt_type = 1
+            }
+            obs3.spawn(obs2.x + 330.0, nxt_type)
+        }
+
+        // Update clouds
+        c1.update()
+        c2.update()
+        c3.update()
+
+        // Update ground texture lines
+        g1.update(game_speed)
+        g2.update(game_speed)
+        g3.update(game_speed)
+        g4.update(game_speed)
+        g5.update(game_speed)
+
+        // Score tracking: increment every 4 frames
+        score_timer = score_timer + 1
+        if (score_timer >= 4) {
+            score = score + 1
+            score_timer = 0
+
+            // Milestone flash every 100 points
+            if (score > 0 && score % 100 == 0) {
+                flash_timer = 30
+            }
+
+            // Progressive acceleration: speed up every 100 points
+            if (score % 100 == 0 && game_speed < 13.5) {
+                game_speed = game_speed + 0.35
+            }
+        }
+
+        // Collision detection
+        if (dino.check_collision(obs1) || dino.check_collision(obs2) || dino.check_collision(obs3)) {
+            game_state = STATE_GAMEOVER
+            if (score > high_score) {
+                high_score = score
+            }
+        }
+    }
+
+    if (game_state == STATE_GAMEOVER) {
+        if (jump_requested) {
+            // Restart game
+            dino.reset()
+            obs1.spawn(750.0, 0)
+            obs2.spawn(1100.0, 1)
+            obs3.spawn(1450.0, 3)
+            score = 0
+            score_timer = 0
+            game_speed = 6.5
+            game_state = STATE_PLAYING
+            dino.jump()
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // C. Theme & Color Calculation (Day / Night Cycle)
+    // ------------------------------------------------------------------------
+    // Switch between Day and Night mode every 500 points!
+    bool is_night = false
+    if ((score / 500) % 2 == 1) {
+        is_night = true
+    }
+
+    int col_bg = 0
+    int col_fg = 0
+    int col_cloud = 0
+    int col_eye = 0
+    int col_ground = 0
+
+    if (is_night) {
+        col_bg = raylib.color(32, 33, 36, 255)
+        col_fg = raylib.color(230, 230, 230, 255)
+        col_cloud = raylib.color(55, 58, 64, 255)
+        col_eye = col_bg
+        col_ground = raylib.color(100, 105, 115, 255)
+    } else {
+        col_bg = raylib.color(247, 247, 247, 255)
+        col_fg = raylib.color(83, 83, 83, 255)
+        col_cloud = raylib.color(218, 220, 224, 255)
+        col_eye = raylib.white()
+        col_ground = raylib.color(180, 180, 180, 255)
+    }
+
+    // ------------------------------------------------------------------------
+    // D. Rendering
+    // ------------------------------------------------------------------------
+    raylib.begin_drawing()
+    raylib.clear_background(col_bg)
+
+    // 1. Draw Clouds
+    c1.draw(col_cloud)
+    c2.draw(col_cloud)
+    c3.draw(col_cloud)
+
+    // 2. Draw Ground Horizon Line & Texture Dots
+    raylib.draw_line(0, ground_y_pos, SCREEN_W, ground_y_pos, col_fg)
+    g1.draw(ground_y_pos, col_ground)
+    g2.draw(ground_y_pos, col_ground)
+    g3.draw(ground_y_pos, col_ground)
+    g4.draw(ground_y_pos, col_ground)
+    g5.draw(ground_y_pos, col_ground)
+
+    // 3. Draw Obstacles
+    obs1.draw(col_fg)
+    obs2.draw(col_fg)
+    obs3.draw(col_fg)
+
+    // 4. Draw Dino
+    bool is_dead = (game_state == STATE_GAMEOVER)
+    dino.draw(col_fg, col_eye, is_dead)
+
+    // 5. Draw Digital Score Board (HI 00000  00000)
+    int display_score = score
+    if (flash_timer > 0) {
+        // Flash score display on 100-point milestones
+        flash_timer = flash_timer - 1
+        if ((flash_timer / 4) % 2 == 1) {
+            display_score = (score / 100) * 100
+        }
+    }
+
+
+
+    // Render formatted digital scores (5 digits: 00000)
+    int cur_ten_thousands = (display_score / 10000) % 10
+    int cur_thousands     = (display_score / 1000) % 10
+    int cur_hundreds      = (display_score / 100) % 10
+    int cur_tens          = (display_score / 10) % 10
+    int cur_ones          = display_score % 10
+
+    int hi_ten_thousands  = (high_score / 10000) % 10
+    int hi_thousands      = (high_score / 1000) % 10
+    int hi_hundreds       = (high_score / 100) % 10
+    int hi_tens           = (high_score / 10) % 10
+    int hi_ones           = high_score % 10
+
+    string s_buf = "" + cur_ten_thousands + cur_thousands + cur_hundreds + cur_tens + cur_ones
+    string h_buf = "HI " + hi_ten_thousands + hi_thousands + hi_hundreds + hi_tens + hi_ones
+
+    raylib.draw_text(h_buf, SCREEN_W - 220, 22, 18, col_ground)
+    raylib.draw_text(s_buf, SCREEN_W - 95, 22, 18, col_fg)
+
+    // 6. State Overlays
+    if (game_state == STATE_START) {
+        raylib.draw_text("P R E S S   S P A C E   T O   J U M P", SCREEN_W / 2 - 210, 130, 20, col_fg)
+        raylib.draw_text("Controls: [SPACE / UP] Jump   [DOWN] Duck   [ESC] Exit", SCREEN_W / 2 - 195, 170, 14, col_ground)
+    }
+
+    if (game_state == STATE_GAMEOVER) {
+        // Iconic "G A M E  O V E R" header
+        raylib.draw_text("G  A  M  E     O  V  E  R", SCREEN_W / 2 - 145, 110, 22, col_fg)
+
+        // Restart circular arrow icon
+        int rx = SCREEN_W / 2
+        int ry = 160
+        raylib.draw_circle_lines(rx, ry, 16.0, col_fg)
+        raylib.draw_circle_lines(rx, ry, 17.0, col_fg)
+        raylib.draw_rectangle(rx - 8, ry - 18, 16, 8, col_bg)
+        // Arrow head
+        raylib.draw_line(rx + 2, ry - 18, rx + 10, ry - 14, col_fg)
+        raylib.draw_line(rx + 10, ry - 14, rx + 4, ry - 10, col_fg)
+
+        raylib.draw_text("Press SPACE or CLICK to Restart", SCREEN_W / 2 - 120, 195, 14, col_ground)
+    }
+
+    raylib.end_drawing()
+}
+
+// ----------------------------------------------------------------------------
+// 8. Cleanup & Shutdown
+// ----------------------------------------------------------------------------
+raylib.close_window()
+print("Dino Run session ended. High score: %d\n", high_score)

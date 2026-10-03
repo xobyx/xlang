@@ -1,5 +1,7 @@
 #include "xir_compiler.h"
 #include "functions.h"
+#include "xextension.h"
+#include "xffi.h"
 
 typedef struct XIrLocal {
 	char* name;
@@ -500,7 +502,7 @@ static void compile_expr_node(XCompiler* c, const AstExpr* expr)
 			{
 				const char* obj_name = expr->as.method_call.object->as.identifier_name;
 				if (resolve_local(c, obj_name) == -1 && resolve_upvalue(c, obj_name) == -1 &&
-				    (get_type_by_name((char*)obj_name) != NULL || find_class_in_program(c->program, obj_name) != NULL))
+				    (get_type_by_name((char*)obj_name) != NULL || find_class_in_program(c->program, obj_name) != NULL || xextension_is_module(obj_name) || xffi_is_module(obj_name)))
 				{
 					char static_full_name[256];
 					snprintf(static_full_name, sizeof(static_full_name), "%s.%s", obj_name, expr->as.method_call.method_name);
@@ -802,21 +804,45 @@ static void compile_expr_node(XCompiler* c, const AstExpr* expr)
 						}
 						else if (m->as.var_decl.type_name && !is_primitive_type_name(m->as.var_decl.type_name))
 						{
-							const AstStmt* nested_cls = find_class_in_program(c->program, m->as.var_decl.type_name);
-							if (nested_cls != NULL)
+							static const char* s_xir_instantiating[64];
+							static int s_xir_instantiating_depth = 0;
+
+							bool cycle = false;
+							for (int d = 0; d < s_xir_instantiating_depth; d++)
 							{
-								xir_emit_op(c->chunk, OP_DUP, line);
-								AstExpr dummy_new;
-								dummy_new.type = AST_EXPR_NEW;
-								dummy_new.line = line;
-								dummy_new.col = 0;
-								dummy_new.as.new_expr.class_name = m->as.var_decl.type_name;
-								dummy_new.as.new_expr.args = NULL;
-								dummy_new.as.new_expr.arg_count = 0;
-								compile_expr_node(c, &dummy_new);
-								xir_emit_op(c->chunk, OP_SET_FIELD_INDEX, line);
-								xir_emit_short(c->chunk, (uint16_t)slot, line);
-								xir_emit_op(c->chunk, OP_POP, line);
+								if (s_xir_instantiating[d] && strcmp(s_xir_instantiating[d], m->as.var_decl.type_name) == 0)
+								{
+									cycle = true;
+									break;
+								}
+							}
+							if (strcmp(m->as.var_decl.type_name, class_name) == 0)
+							{
+								cycle = true;
+							}
+
+							if (!cycle)
+							{
+								const AstStmt* nested_cls = find_class_in_program(c->program, m->as.var_decl.type_name);
+								if (nested_cls != NULL)
+								{
+									if (s_xir_instantiating_depth < 64)
+										s_xir_instantiating[s_xir_instantiating_depth++] = class_name;
+									xir_emit_op(c->chunk, OP_DUP, line);
+									AstExpr dummy_new;
+									dummy_new.type = AST_EXPR_NEW;
+									dummy_new.line = line;
+									dummy_new.col = 0;
+									dummy_new.as.new_expr.class_name = m->as.var_decl.type_name;
+									dummy_new.as.new_expr.args = NULL;
+									dummy_new.as.new_expr.arg_count = 0;
+									compile_expr_node(c, &dummy_new);
+									xir_emit_op(c->chunk, OP_SET_FIELD_INDEX, line);
+									xir_emit_short(c->chunk, (uint16_t)slot, line);
+									xir_emit_op(c->chunk, OP_POP, line);
+									if (s_xir_instantiating_depth > 0)
+										s_xir_instantiating_depth--;
+								}
 							}
 						}
 					}
@@ -1311,8 +1337,90 @@ static void compile_stmt_node(XCompiler* c, const AstStmt* stmt)
 			break;
 		}
 
+	case AST_STMT_EXTERN_BLOCK:
+		break;
+
 	default:
 		break;
+	}
+}
+
+static bool expr_calls_func(const AstExpr* e, const char* name)
+{
+	if (!e || !name) return false;
+	switch (e->type)
+	{
+	case AST_EXPR_CALL:
+		if (e->as.call.name && strcmp(e->as.call.name, name) == 0) return true;
+		for (int i = 0; i < e->as.call.arg_count; i++)
+			if (expr_calls_func(e->as.call.args[i], name)) return true;
+		return false;
+	case AST_EXPR_BINARY:
+		return expr_calls_func(e->as.binary.left, name) || expr_calls_func(e->as.binary.right, name);
+	case AST_EXPR_UNARY:
+		return expr_calls_func(e->as.unary.operand, name);
+	case AST_EXPR_ASSIGN:
+		return expr_calls_func(e->as.assign.target, name) || expr_calls_func(e->as.assign.value, name);
+	case AST_EXPR_METHOD_CALL:
+		for (int i = 0; i < e->as.method_call.arg_count; i++)
+			if (expr_calls_func(e->as.method_call.args[i], name)) return true;
+		return expr_calls_func(e->as.method_call.object, name);
+	case AST_EXPR_INDEX:
+		return expr_calls_func(e->as.index.target, name) || expr_calls_func(e->as.index.index, name);
+	case AST_EXPR_MEMBER:
+		return expr_calls_func(e->as.member.object, name);
+	case AST_EXPR_NEW:
+		for (int i = 0; i < e->as.new_expr.arg_count; i++)
+			if (expr_calls_func(e->as.new_expr.args[i], name)) return true;
+		return false;
+	case AST_EXPR_LIST:
+		for (int i = 0; i < e->as.list.element_count; i++)
+			if (expr_calls_func(e->as.list.elements[i], name)) return true;
+		return false;
+	default:
+		return false;
+	}
+}
+
+static bool stmt_calls_func(const AstStmt* s, const char* name)
+{
+	if (!s || !name) return false;
+	switch (s->type)
+	{
+	case AST_STMT_EXPR:
+		return expr_calls_func(s->as.expr, name);
+	case AST_STMT_VAR_DECL:
+		return s->as.var_decl.init_expr ? expr_calls_func(s->as.var_decl.init_expr, name) : false;
+	case AST_STMT_BLOCK:
+		for (int i = 0; i < s->as.block.stmt_count; i++)
+			if (stmt_calls_func(s->as.block.stmts[i], name)) return true;
+		return false;
+	case AST_STMT_IF:
+		return expr_calls_func(s->as.if_stmt.condition, name) ||
+		       stmt_calls_func(s->as.if_stmt.then_branch, name) ||
+		       (s->as.if_stmt.else_branch && stmt_calls_func(s->as.if_stmt.else_branch, name));
+	case AST_STMT_WHILE:
+		return expr_calls_func(s->as.while_stmt.condition, name) ||
+		       stmt_calls_func(s->as.while_stmt.body, name);
+	case AST_STMT_DO_WHILE:
+		return expr_calls_func(s->as.do_while_stmt.condition, name) ||
+		       stmt_calls_func(s->as.do_while_stmt.body, name);
+	case AST_STMT_FOR_C:
+		return (s->as.for_c.init && stmt_calls_func(s->as.for_c.init, name)) ||
+		       (s->as.for_c.condition && expr_calls_func(s->as.for_c.condition, name)) ||
+		       (s->as.for_c.step && expr_calls_func(s->as.for_c.step, name)) ||
+		       stmt_calls_func(s->as.for_c.body, name);
+	case AST_STMT_FOR_IN:
+		return expr_calls_func(s->as.for_in.collection, name) ||
+		       stmt_calls_func(s->as.for_in.body, name);
+	case AST_STMT_RETURN:
+		return s->as.return_expr ? expr_calls_func(s->as.return_expr, name) : false;
+	case AST_STMT_FUNC_DECL:
+	case AST_STMT_CLASS_DECL:
+	case AST_STMT_EXTERN_BLOCK:
+		return false;
+	default:
+		return false;
 	}
 }
 
@@ -1326,9 +1434,51 @@ bool xir_compile_program(const AstProgram* prog, XIrChunk* out_chunk)
 	XCompiler compiler;
 	compiler_init(&compiler, out_chunk, prog);
 
+	bool has_user_main = false;
+	int main_line = 1;
+	for (int i = 0; i < prog->statement_count; i++)
+	{
+		const AstStmt* stmt = prog->statements[i];
+		if (stmt && stmt->type == AST_STMT_FUNC_DECL && stmt->as.func_decl.name &&
+		    (!stmt->as.func_decl.class_name || strlen(stmt->as.func_decl.class_name) == 0))
+		{
+			if (strcmp(stmt->as.func_decl.name, "main") == 0)
+			{
+				has_user_main = true;
+				main_line = stmt->line;
+			}
+		}
+	}
+
+	bool top_level_called_main = false;
+	if (has_user_main)
+	{
+		for (int i = 0; i < prog->statement_count; i++)
+		{
+			const AstStmt* stmt = prog->statements[i];
+			if (stmt->type != AST_STMT_FUNC_DECL && stmt->type != AST_STMT_CLASS_DECL)
+			{
+				if (stmt_calls_func(stmt, "main"))
+				{
+					top_level_called_main = true;
+					break;
+				}
+			}
+		}
+	}
+
 	for (int i = 0; i < prog->statement_count; i++)
 	{
 		compile_stmt_node(&compiler, prog->statements[i]);
+	}
+
+	if (has_user_main && !top_level_called_main)
+	{
+		int s_idx = xir_add_symbol(out_chunk, "main");
+		xir_emit_op(out_chunk, OP_CALL, main_line);
+		xir_emit_short(out_chunk, (uint16_t)s_idx, main_line);
+		xir_emit_byte(out_chunk, 0, main_line);
+		xir_emit_op(out_chunk, OP_POP, main_line);
 	}
 
 	xir_emit_op(out_chunk, OP_HALT, prog->statement_count > 0 ? prog->statements[prog->statement_count - 1]->line : 1);

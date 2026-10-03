@@ -22,6 +22,7 @@ char* _lower(const char* s);
 char* _upper(const char* s);
 char* substr(const char* s, int start, int len);
 char* chr(int code);
+char* x_readline(void);
 int index_of(const char* s, const char* needle);
 int str_eq(const char* s1, const char* s2);
 int starts_with(const char* s, const char* prefix);

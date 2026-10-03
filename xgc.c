@@ -16,7 +16,6 @@ gc_state_t g_gc_state = {
 	.bytes_collected_total = 0,
 	.enabled = true,
 	.blocks_head = NULL,
-	.call_depth = 0,
 	.roots_count = 0
 };
 
@@ -99,7 +98,6 @@ void gc_init(void)
 	g_gc_state.bytes_collected_total = 0;
 	g_gc_state.enabled = true;
 	g_gc_state.blocks_head = NULL;
-	g_gc_state.call_depth = 0;
 	g_gc_state.roots_count = 0;
 
 	if (g_gc_hash_buckets != NULL)
@@ -124,7 +122,6 @@ void gc_cleanup(void)
 	g_gc_state.blocks_head = NULL;
 	g_gc_state.allocated_bytes = 0;
 	g_gc_state.total_objects = 0;
-	g_gc_state.call_depth = 0;
 	g_gc_state.roots_count = 0;
 
 	if (g_gc_hash_buckets != NULL)
@@ -363,30 +360,6 @@ void gc_remove_root(void* ptr)
 	}
 }
 
-void gc_push_frame(fcall* fc)
-{
-	if (fc == NULL) return;
-	if (g_gc_state.call_depth < 256)
-	{
-		g_gc_state.call_stack[g_gc_state.call_depth++] = fc;
-	}
-}
-
-void gc_pop_frame(void)
-{
-	if (g_gc_state.call_depth > 0)
-	{
-		g_gc_state.call_depth--;
-	}
-}
-
-fcall* gc_peek_frame(void)
-{
-	if (g_gc_state.call_depth > 0)
-		return g_gc_state.call_stack[g_gc_state.call_depth - 1];
-	return NULL;
-}
-
 void gc_mark_ptr(void* ptr)
 {
 	if (ptr == NULL) return;
@@ -622,25 +595,6 @@ size_t gc_collect(void)
 		}
 	}
 
-	/* 2b. Active call frames on stack */
-	for (int i = 0; i < g_gc_state.call_depth; i++)
-	{
-		fcall* fc = g_gc_state.call_stack[i];
-		if (fc != NULL)
-		{
-			gc_mark_ptr(fc);
-			for (int p = 0; p < fc->parm_count_c; p++)
-			{
-				gc_mark_var(&fc->func_parmeters[p]);
-			}
-			gc_mark_var(&fc->_return);
-			if (fc->context != NULL)
-			{
-				gc_mark_var(fc->context);
-			}
-		}
-	}
-
 	/* 2c. Static class properties */
 	if (types != NULL)
 	{
@@ -801,68 +755,6 @@ void gc_dump(void)
 	printf("  Collections Triggered:%lu\n", (unsigned long)g_gc_state.collections_count);
 	printf("  Total Bytes Swept:    %lu bytes (%.2f KB)\n",
 	       (unsigned long)g_gc_state.bytes_collected_total, (double)g_gc_state.bytes_collected_total / 1024.0);
-	printf("  Call Stack Depth:     %d frames\n", g_gc_state.call_depth);
 	printf("  Temp Stack Count:     %d vars\n", t_varss != NULL ? t_varss->size : 0);
 	printf("============================================\n");
-}
-
-/* ------------------------------------------------------------------------- */
-/* Native Simple Function Bindings                                           */
-/* ------------------------------------------------------------------------- */
-
-void x_gc_collect(fcall* fc)
-{
-	size_t collected = gc_collect();
-	fc->_return.type_define = T_INT;
-	fc->_return.value_int = new_int(1, (int)collected);
-}
-
-void x_gc_allocated_bytes(fcall* fc)
-{
-	size_t bytes = gc_allocated_bytes();
-	fc->_return.type_define = T_INT;
-	fc->_return.value_int = new_int(1, (int)bytes);
-}
-
-void x_gc_total_objects(fcall* fc)
-{
-	size_t objs = gc_total_objects();
-	fc->_return.type_define = T_INT;
-	fc->_return.value_int = new_int(1, (int)objs);
-}
-
-void x_gc_enable(fcall* fc)
-{
-	gc_enable();
-	fc->_return.type_define = T_INT;
-	fc->_return.value_int = new_int(1, 1);
-}
-
-void x_gc_disable(fcall* fc)
-{
-	gc_disable();
-	fc->_return.type_define = T_INT;
-	fc->_return.value_int = new_int(1, 0);
-}
-
-void x_gc_set_threshold(fcall* fc)
-{
-	int bytes = 0;
-	if (fc->parm_count_c > 0 && fc->func_parmeters[0].value_int != NULL)
-	{
-		bytes = *fc->func_parmeters[0].value_int;
-	}
-	if (bytes > 0)
-	{
-		gc_set_threshold((size_t)bytes);
-	}
-	fc->_return.type_define = T_INT;
-	fc->_return.value_int = new_int(1, bytes);
-}
-
-void x_gc_dump(fcall* fc)
-{
-	gc_dump();
-	fc->_return.type_define = T_INT;
-	fc->_return.value_int = new_int(1, 0);
 }

@@ -35,6 +35,7 @@ typedef enum {
 	TOK_KW_STATIC,
 	TOK_KW_NEW,
 	TOK_KW_IN,
+	TOK_KW_EXTERN,
 
 	/* Types */
 	TOK_TYPE_INT,

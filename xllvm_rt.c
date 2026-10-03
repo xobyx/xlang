@@ -154,6 +154,19 @@ char* chr(int code)
 	return buf;
 }
 
+char* x_readline(void)
+{
+	char buf[4096];
+	if (fgets(buf, sizeof(buf), stdin) != NULL)
+	{
+		size_t len = strlen(buf);
+		if (len > 0 && buf[len - 1] == '\n') buf[len - 1] = '\0';
+		if (len > 1 && buf[len - 2] == '\r') buf[len - 2] = '\0';
+		return strdup(buf);
+	}
+	return strdup("");
+}
+
 int index_of(const char* s, const char* needle)
 {
 	if (!s || !needle) return -1;
@@ -870,12 +883,31 @@ int socket_create(const char* type)
 
 int socket_connect(int fd, const char* host, int port)
 {
-	struct sockaddr_in sin;
-	memset(&sin, 0, sizeof(sin));
-	sin.sin_family = AF_INET;
-	sin.sin_port = htons((uint16_t)port);
-	inet_pton(AF_INET, host, &sin.sin_addr);
-	return connect(fd, (struct sockaddr*)&sin, sizeof(sin));
+	if (fd < 0 || host == NULL || port <= 0) return -1;
+	char port_str[16];
+	snprintf(port_str, sizeof(port_str), "%d", port);
+
+	struct addrinfo hints, *res = NULL, *p;
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+
+	if (getaddrinfo(host, port_str, &hints, &res) != 0 || res == NULL)
+	{
+		return -1;
+	}
+
+	int ret = -1;
+	for (p = res; p != NULL; p = p->ai_next)
+	{
+		if (connect(fd, p->ai_addr, (socklen_t)p->ai_addrlen) == 0)
+		{
+			ret = 0;
+			break;
+		}
+	}
+	freeaddrinfo(res);
+	return ret;
 }
 
 int socket_bind(int fd, const char* host, int port)

@@ -7,14 +7,6 @@ static inline void print_indent(int level)
 		printf("%*s", level * 4, " ");
 }
 
-void _echo(fcall* func_call)
-{
-	printf("{\n");
-	if (func_call != NULL && func_call->param_count > 0)
-		echo_var(func_call->func_parameters[0], 1);
-	printf("}\n");
-}
-
 void echo_var(var variable, int indent_level)
 {
 	if (indent_level > 4) return;
@@ -116,7 +108,7 @@ void echo_func_def(func_deftion func_def, int indent_level)
 	print_indent(indent_level);
 	printf("}\n");
 	print_indent(indent_level);
-	printf("function code: %p \n", func_def.func_code);
+	printf("vector func: %p \n", func_def.vector_func);
 
 	print_indent(indent_level);
 	printf("return type : %s\n", (func_def.return_type && func_def.return_type->type_name) ? func_def.return_type->type_name : "(void)");

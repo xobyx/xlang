@@ -502,39 +502,14 @@ static void stringify_list(str_buf_t* sb, int list_id)
 	buf_append_len(sb, "]", 1);
 }
 
+
 /* ------------------------------------------------------------------------- */
-/* Module Entry Points                                                       */
+/* C API for JSON                                                            */
 /* ------------------------------------------------------------------------- */
 
-static const char* get_str_arg(fcall* fc, int index, const char* default_val)
+int x_json_parse_to_id(const char* json_str, int* out_is_list)
 {
-	if (fc == NULL || index >= fc->parm_count_c) return default_val;
-	var* p = &fc->func_parmeters[index];
-	if (p == NULL) return default_val;
-
-	if (p->type_define == T_STRING || (p->type_define != NULL && p->type_define->type_id == 1))
-	{
-		if (p->value_str_ptr != NULL && *p->value_str_ptr != NULL)
-			return *p->value_str_ptr;
-	}
-	else if (p->type_define == T_CHAR || (p->type_define != NULL && p->type_define->type_id == 2))
-	{
-		if (p->value_char_ptr != NULL)
-			return p->value_char_ptr;
-	}
-	return default_val;
-}
-
-void x_json_parse(fcall* fc)
-{
-	const char* json_str = get_str_arg(fc, 0, "");
-	if (json_str == NULL || json_str[0] == '\0')
-	{
-		fc->_return.value_int = new_int(1, -1);
-		fc->_return.type_define = T_INT;
-		return;
-	}
-
+	if (json_str == NULL || json_str[0] == '\0') return -1;
 	json_parser_t p;
 	p.src = json_str;
 	p.pos = 0;
@@ -545,170 +520,50 @@ void x_json_parse(fcall* fc)
 	char c = peek_char(&p);
 	if (c == '{')
 	{
-		int map_id = parse_object(&p);
-		type_def* map_td = get_type_by_name("Map");
-		if (map_td != NULL && !is_base_type(map_td))
-		{
-			type_instance* inst = type_instance_create(map_td);
-			inst->id = map_id;
-			var* id_prop = type_instance_get_field(inst, "id");
-			if (id_prop != NULL && id_prop->value_int != NULL)
-				*id_prop->value_int = map_id;
-			fc->_return.type_define = map_td;
-			fc->_return.values = inst;
-			fc->_return.value_type_instsance = inst;
-			fc->_return.size = 1;
-		}
-		else
-		{
-			fc->_return.value_int = new_int(1, map_id);
-			fc->_return.type_define = T_INT;
-		}
+		if (out_is_list) *out_is_list = 0;
+		return parse_object(&p);
 	}
 	else if (c == '[')
 	{
-		int list_id = parse_array(&p);
-		type_def* list_td = get_type_by_name("List");
-		if (list_td != NULL && !is_base_type(list_td))
-		{
-			type_instance* inst = type_instance_create(list_td);
-			inst->id = list_id;
-			var* id_prop = type_instance_get_field(inst, "id");
-			if (id_prop != NULL && id_prop->value_int != NULL)
-				*id_prop->value_int = list_id;
-			fc->_return.type_define = list_td;
-			fc->_return.values = inst;
-			fc->_return.value_type_instsance = inst;
-			fc->_return.size = 1;
-		}
-		else
-		{
-			fc->_return.value_int = new_int(1, list_id);
-			fc->_return.type_define = T_INT;
-		}
+		if (out_is_list) *out_is_list = 1;
+		return parse_array(&p);
 	}
-	else
-	{
-		fc->_return.value_int = new_int(1, -1);
-		fc->_return.type_define = T_INT;
-	}
+	return -1;
 }
 
-void x_json_stringify(fcall* fc)
+char* x_json_stringify_id(int id, int is_list)
 {
 	str_buf_t sb;
 	buf_init(&sb);
-
-	if (fc != NULL && fc->parm_count_c > 0)
-	{
-		var* arg = &fc->func_parmeters[0];
-		if (arg != NULL)
-		{
-			/* Check if argument is a Map or List object */
-			int id = -1;
-			if (arg->value_type_instsance != NULL)
-			{
-				id = type_instance_get_id(arg->value_type_instsance);
-			}
-			if (id <= 0 && arg->value_int != NULL)
-			{
-				id = *arg->value_int;
-			}
-			if (id > 0)
-			{
-				if (arg->type_define != NULL && strcmp(arg->type_define->type_name, "List") == 0)
-				{
-					stringify_list(&sb, id);
-				}
-				else
-				{
-					stringify_map(&sb, id);
-				}
-			}
-			else if (arg->type_define == T_INT && arg->value_int != NULL)
-			{
-				int id = *arg->value_int;
-				/* Check if it refers to a valid map or list id */
-				if (x_map_count(id) > 0 || x_map_contains_key(id, ""))
-				{
-					stringify_map(&sb, id);
-				}
-				else if (x_list_count(id) > 0)
-				{
-					stringify_list(&sb, id);
-				}
-				else
-				{
-					char numbuf[32];
-					snprintf(numbuf, sizeof(numbuf), "%d", id);
-					buf_append(&sb, numbuf);
-				}
-			}
-			else if (arg->type_define == T_STRING)
-			{
-				const char* s = (arg->value_str_ptr && *arg->value_str_ptr) ? *arg->value_str_ptr :
-				                (arg->value_char_ptr ? arg->value_char_ptr : "");
-				buf_append_escaped_str(&sb, s);
-			}
-			else if (arg->type_define == T_FLOAT && arg->value_float != NULL)
-			{
-				char numbuf[32];
-				snprintf(numbuf, sizeof(numbuf), "%g", *arg->value_float);
-				buf_append(&sb, numbuf);
-			}
-			else if (arg->type_define == T_BOOL && arg->value_bool != NULL)
-			{
-				buf_append(&sb, *arg->value_bool ? "true" : "false");
-			}
-			else
-			{
-				buf_append(&sb, "null");
-			}
-		}
-	}
-
-	char* result = (char*)gc_malloc(sb.len + 1, GC_KIND_STRING);
-	if (result != NULL)
-	{
-		memcpy(result, sb.data, sb.len + 1);
-	}
+	if (is_list)
+		stringify_list(&sb, id);
 	else
-	{
-		result = (char*)calloc(1, 1);
-	}
-	free(sb.data);
-
-	fc->_return.value_str_ptr = get_pptr_string(result);
-	fc->_return.type_define = T_STRING;
+		stringify_map(&sb, id);
+	return sb.data;
 }
 
-void x_json_is_valid(fcall* fc)
+int x_json_validate(const char* json_str)
 {
-	const char* json_str = get_str_arg(fc, 0, "");
-	int valid = 0;
-	if (json_str != NULL && json_str[0] != '\0')
-	{
-		json_parser_t p;
-		p.src = json_str;
-		p.pos = 0;
-		p.len = strlen(json_str);
-		p.has_error = false;
+	if (json_str == NULL || json_str[0] == '\0') return 0;
+	json_parser_t p;
+	p.src = json_str;
+	p.pos = 0;
+	p.len = strlen(json_str);
+	p.has_error = false;
 
+	skip_ws(&p);
+	char c = peek_char(&p);
+	if (c == '{')
+	{
+		parse_object(&p);
 		skip_ws(&p);
-		char c = peek_char(&p);
-		if (c == '{')
-		{
-			parse_object(&p);
-			skip_ws(&p);
-			if (!p.has_error && p.pos == p.len) valid = 1;
-		}
-		else if (c == '[')
-		{
-			parse_array(&p);
-			skip_ws(&p);
-			if (!p.has_error && p.pos == p.len) valid = 1;
-		}
+		if (!p.has_error && p.pos == p.len) return 1;
 	}
-	fc->_return.value_int = new_int(1, valid);
-	fc->_return.type_define = T_INT;
+	else if (c == '[')
+	{
+		parse_array(&p);
+		skip_ws(&p);
+		if (!p.has_error && p.pos == p.len) return 1;
+	}
+	return 0;
 }

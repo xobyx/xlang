@@ -1,0 +1,390 @@
+# =============================================================================
+# XLANG Parsing Expression Grammar (PEG)
+# Formal Syntax Specification for xlang
+# =============================================================================
+#
+# Language: xlang (.xb)
+# Formalism: Parsing Expression Grammar (Ford 2004)
+# Conventions:
+#   A <- B C     Sequence: B followed by C
+#   A / B        Ordered Choice: try A; if it fails, try B
+#   A*           Zero or more repetitions of A
+#   A+           One or more repetitions of A
+#   A?           Optional (zero or one) occurrence of A
+#   &A           Positive lookahead (succeeds if A matches without consuming)
+#   !A           Negative lookahead (succeeds if A fails to match)
+#   [a-z]        Character class range
+#   [^a-z]       Negated character class
+#   "text"       Literal string
+#   'c'          Literal character
+#   .            Any single character
+#   _            Optional whitespace & comments
+#   __           Mandatory whitespace & comments
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 1. Top-Level Program & Statements
+# -----------------------------------------------------------------------------
+
+Program <-
+    _ ( Statement ( _ StatementTerminator )* )* _ EOF
+
+StatementTerminator <-
+    ";"
+  / "\n"
+  / "\r\n"
+
+Statement <-
+    ImportStmt
+  / ExternBlock
+  / ClassDecl
+  / FunctionDecl
+  / VarDecl
+  / IfStmt
+  / WhileStmt
+  / DoWhileStmt
+  / ForStmt
+  / ReturnStmt
+  / BreakStmt
+  / ContinueStmt
+  / Block
+  / ExprStmt
+
+Block <-
+    "{" _ ( Statement ( _ StatementTerminator )* )* _ "}"
+
+# Import statement: import "mod.xb", import ("mod.xb"), or import mod
+ImportStmt <-
+    "import" __ "(" _ ImportTarget _ ")"
+  / "import" __ ImportTarget
+
+ImportTarget <-
+    StringLiteral
+  / Identifier
+
+# Direct C-ABI FFI Extern block: extern "libm.so" { float sin(float x) ... }
+ExternBlock <-
+    "extern" __ StringLiteral _ "{" _ ( ExternFuncDecl ( _ StatementTerminator )* )* _ "}"
+
+ExternFuncDecl <-
+    Type __ Identifier _ "(" _ ParameterList? _ ")"
+  / Identifier _ "(" _ ParameterList? _ ")"
+
+# Class declaration: class Name(Base) { ... }, class Name() { ... }, or class Name { ... }
+ClassDecl <-
+    "class" __ Identifier ( _ "(" _ Identifier? _ ")" )? _ "{" _ ( ClassMember ( _ StatementTerminator )* )* _ "}"
+
+ClassMember <-
+    MethodDecl
+  / FieldDecl
+
+# Method or constructor inside a class
+MethodDecl <-
+    "static"? _ Type __ Identifier _ "(" _ ParameterList? _ ")" _ Block
+  / "static"? _ Identifier _ "(" _ ParameterList? _ ")" _ Block
+
+# Field declaration inside a class
+FieldDecl <-
+    "static"? _ Type __ Identifier ( _ "=" _ Expression )?
+
+# Global function declaration
+FunctionDecl <-
+    "static"? _ Type __ Identifier _ "(" _ ParameterList? _ ")" _ Block
+  / "static"? _ Identifier _ "(" _ ParameterList? _ ")" _ Block
+
+# Variable declaration
+VarDecl <-
+    "static"? _ Type __ Identifier ( _ "=" _ Expression )?
+
+ParameterList <-
+    Parameter ( _ "," _ Parameter )*
+
+Parameter <-
+    Type __ Identifier
+  / Identifier
+
+# Control Flow: if / eif / else
+IfStmt <-
+    ("if" / "eif") _ "(" _ Expression _ ")" _ ( Block / Statement )
+    ( _ ElseClause )?
+
+ElseClause <-
+    "else" __ IfStmt
+  / "else" _ ( Block / Statement )
+  / IfStmt
+
+WhileStmt <-
+    "while" _ "(" _ Expression _ ")" _ ( Block / Statement )
+
+DoWhileStmt <-
+    "do" _ Block _ "while" _ "(" _ Expression _ ")"
+
+ForStmt <-
+    # For-in loop with parentheses: for (item in coll) { ... }
+    "for" _ "(" _ Identifier __ "in" __ Expression _ ")" _ ( Block / Statement )
+    # For-in loop without parentheses: for item in coll { ... }
+  / "for" __ Identifier __ "in" __ Expression _ ( Block / Statement )
+    # 3-part for loop inside parentheses: for (int i = 0, i++, i < 5) { ... }
+  / "for" _ "(" _ ( VarDecl / Expression ) _ (";" / ",") _ Expression _ (";" / ",") _ Expression _ ")" _ ( Block / Statement )
+    # Classic stepper loop: for i (start, step, cond) { ... }
+  / "for" __ Identifier _ "(" _ Expression _ "," _ Expression _ "," _ Expression _ ")" _ ( Block / Statement )
+
+ReturnStmt <-
+    "return" ( !LineTerminator __ Expression )?
+
+BreakStmt <-
+    "break"
+
+ContinueStmt <-
+    "continue"
+
+ExprStmt <-
+    AssignmentExpr
+  / Expression
+
+LineTerminator <-
+    [ \t\r]* ( ";" / "\n" / "#" / "//" )
+  / _ ( "}" / EOF )
+
+# -----------------------------------------------------------------------------
+# 2. Expressions & Operator Precedence
+# -----------------------------------------------------------------------------
+# Precedence climbing from lowest to highest:
+#  1. Assignment (=, +=, -=, *=, /=, %=)
+#  2. Logical OR (||)
+#  3. Logical AND (&&)
+#  4. Bitwise OR (|)
+#  5. Bitwise XOR (^)
+#  6. Bitwise AND (&)
+#  7. Equality (==, !=)
+#  8. Relational (<, <=, >, >=)
+#  9. Bit Shift (<<, >>)
+# 10. Additive (+, -)
+# 11. Multiplicative (*, /, %)
+# 12. Unary Prefix (-, !, ~)
+# 13. Postfix (.member, .method(), [index], ++, --)
+# 14. Primary (new, literals, calls, identifiers, grouping)
+# -----------------------------------------------------------------------------
+
+Expression <-
+    AssignmentExpr
+  / ExprOr
+
+AssignmentExpr <-
+    ExprPostfix _ AssignOp _ Expression
+
+AssignOp <-
+    "="
+  / "+="
+  / "-="
+  / "*="
+  / "/="
+  / "%="
+
+# Precedence Level 2: Logical OR
+ExprOr <-
+    ExprAnd ( _ "||" _ ExprAnd )*
+
+# Precedence Level 3: Logical AND
+ExprAnd <-
+    ExprBitOr ( _ "&&" _ ExprBitOr )*
+
+# Precedence Level 4: Bitwise OR
+ExprBitOr <-
+    ExprBitXor ( _ ("|" !"|") _ ExprBitXor )*
+
+# Precedence Level 5: Bitwise XOR
+ExprBitXor <-
+    ExprBitAnd ( _ "^" _ ExprBitAnd )*
+
+# Precedence Level 6: Bitwise AND
+ExprBitAnd <-
+    ExprEquality ( _ ("&" !"&") _ ExprEquality )*
+
+# Precedence Level 7: Equality
+ExprEquality <-
+    ExprRelational ( _ ("==" / "!=") _ ExprRelational )*
+
+# Precedence Level 8: Relational
+ExprRelational <-
+    ExprShift ( _ ("<=" / ">=" / "<" / ">") _ ExprShift )*
+
+# Precedence Level 9: Bit Shift
+ExprShift <-
+    ExprAdditive ( _ ("<<" / ">>") _ ExprAdditive )*
+
+# Precedence Level 10: Additive (+, -)
+ExprAdditive <-
+    ExprMultiplicative ( _ ( ("+" !"+") / ("-" !"-") ) _ ExprMultiplicative )*
+
+# Precedence Level 11: Multiplicative (*, /, %)
+ExprMultiplicative <-
+    ExprUnary ( _ ("*" / "/" / "%") _ ExprUnary )*
+
+# Precedence Level 12: Unary Prefix (-, !, ~)
+ExprUnary <-
+    ( ("-" !"-") / "!" / "~" ) _ ExprUnary
+  / ExprPostfix
+
+# Precedence Level 13: Postfix (Chained member access, method calls, indexing, ++, --)
+ExprPostfix <-
+    ExprPrimary (
+        _ "." _ Identifier _ "(" _ ArgumentList? _ ")"   # Chained method call
+      / _ "." _ Identifier                              # Field / member access
+      / _ "[" _ Expression _ "]"                        # Index subscript
+      / _ "++"                                          # Postfix increment
+      / _ "--"                                          # Postfix decrement
+    )*
+
+# Precedence Level 14: Primary Expressions
+ExprPrimary <-
+    NewExpr
+  / FunctionCall
+  / Literal
+  / ThisExpr
+  / Identifier
+  / "(" _ Expression _ ")"
+
+# Instantiation: new ClassName(args) or new ClassName()
+NewExpr <-
+    "new" __ Identifier ( _ "(" _ ArgumentList? _ ")" )?
+
+# Global / local function invocation: func(args)
+FunctionCall <-
+    Identifier _ "(" _ ArgumentList? _ ")"
+
+ArgumentList <-
+    Expression ( _ "," _ Expression )*
+
+ThisExpr <-
+    "this" !IdentRest
+
+# -----------------------------------------------------------------------------
+# 3. Types
+# -----------------------------------------------------------------------------
+
+Type <-
+    BaseType ( _ "[" _ IntLiteral? _ "]" )*
+
+BaseType <-
+    TypeKeyword
+  / Identifier
+
+TypeKeyword <-
+    ( "int"
+    / "long"
+    / "float"
+    / "double"
+    / "string"
+    / "char"
+    / "bool"
+    / "void"
+    / "object"
+    ) !IdentRest
+
+# -----------------------------------------------------------------------------
+# 4. Literals
+# -----------------------------------------------------------------------------
+
+Literal <-
+    FloatLiteral
+  / HexLiteral
+  / BinaryLiteral
+  / IntLiteral
+  / BoolLiteral
+  / NullLiteral
+  / CharLiteral
+  / StringLiteral
+  / ListLiteral
+
+IntLiteral <-
+    [0-9]+ [lL]? !IdentRest
+
+HexLiteral <-
+    "0" [xX] [0-9a-fA-F]+ [lL]?
+
+BinaryLiteral <-
+    "0" [bB] [01]+ [lL]?
+
+FloatLiteral <-
+    [0-9]+ "." [0-9]+ ([eE] [+-]? [0-9]+)?
+  / [0-9]+ [eE] [+-]? [0-9]+
+
+BoolLiteral <-
+    ("true" / "false") !IdentRest
+
+NullLiteral <-
+    "null" !IdentRest
+
+CharLiteral <-
+    "'" ( EscapeSeq / [^'\\\n\r] ) "'"
+
+StringLiteral <-
+    '"' ( EscapeSeq / [^"\\\n\r] )* '"'
+
+EscapeSeq <-
+    "\\" ( [ntr\\'"] / "0" / . )
+
+ListLiteral <-
+    "[" _ ( Expression ( _ "," _ Expression )* ( _ "," )? )? _ "]"
+
+# -----------------------------------------------------------------------------
+# 5. Identifiers & Keywords
+# -----------------------------------------------------------------------------
+
+Keyword <-
+    ( "if"
+    / "else"
+    / "eif"
+    / "while"
+    / "for"
+    / "do"
+    / "return"
+    / "class"
+    / "break"
+    / "continue"
+    / "import"
+    / "static"
+    / "new"
+    / "in"
+    / "this"
+    / "null"
+    / "true"
+    / "false"
+    / TypeKeyword
+    ) !IdentRest
+
+IdentStart <-
+    [a-zA-Z_]
+
+IdentRest <-
+    [a-zA-Z0-9_]
+
+Identifier <-
+    !Keyword IdentStart IdentRest*
+
+# -----------------------------------------------------------------------------
+# 6. Whitespace, Comments & End of File
+# -----------------------------------------------------------------------------
+
+_ <-
+    ( Whitespace / Comment )*
+
+__ <-
+    ( Whitespace / Comment )+
+
+Whitespace <-
+    [ \t\r\n]
+
+Comment <-
+    SingleLineComment
+  / MultiLineComment
+
+SingleLineComment <-
+    ("//" / "#") [^\r\n]*
+
+MultiLineComment <-
+    "/*" (!"*/" .)* "*/"
+
+EOF <-
+    !.

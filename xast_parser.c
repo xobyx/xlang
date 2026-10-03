@@ -2,6 +2,7 @@
 #include "xdiag.h"
 #include "ximport.h"
 #include "functions.h"
+#include "xffi.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -693,6 +694,194 @@ static AstStmt* parse_statement(AstArena* arena, token_stream_t* s)
 				AstStmt* body = parse_block(arena, s);
 				return ast_stmt_for_in(arena, item_name, coll, body, line, col);
 			}
+			else
+			{
+				/* 3-part for loop inside parentheses:
+				 * e.g. for (int i = 0, i++, i < 5)
+				 *      for (int i = 0, i = i + 1, i < 5)
+				 *      for (i = 0, i++, i < 5)
+				 *      for (int i = 0; i < 5; i++)
+				 */
+				token_stream_advance(s); /* consume '(' */
+				token_stream_skip_newlines(s);
+
+				/* 1. Parse Init */
+				AstStmt* init_stmt = NULL;
+				char* loop_var_name = NULL;
+
+				token_t* ctok = token_stream_current(s);
+				bool is_type = (ctok != NULL && (ctok->type == TOK_TYPE_INT || ctok->type == TOK_TYPE_FLOAT ||
+				                                 ctok->type == TOK_TYPE_STRING || ctok->type == TOK_TYPE_BOOL ||
+				                                 ctok->type == TOK_TYPE_CHAR || ctok->type == TOK_TYPE_VOID ||
+				                                 ctok->type == TOK_TYPE_LONG || ctok->type == TOK_TYPE_DOUBLE));
+				if (!is_type && ctok != NULL && ctok->type == TOK_IDENT)
+				{
+					token_t* nxt = token_stream_peek(s, 1);
+					if (nxt != NULL && nxt->type == TOK_IDENT)
+					{
+						is_type = true;
+					}
+				}
+
+				if (is_type)
+				{
+					char* type_name = ctok->text;
+					token_stream_advance(s); /* consume type */
+					token_stream_skip_newlines(s);
+
+					token_t* ntok = token_stream_current(s);
+					char* var_name = ntok ? ntok->text : "i";
+					loop_var_name = var_name;
+					if (ntok && ntok->type == TOK_IDENT)
+					{
+						token_stream_advance(s); /* consume var name */
+					}
+					token_stream_skip_newlines(s);
+
+					AstExpr* init_expr = NULL;
+					if (token_stream_match(s, TOK_ASSIGN))
+					{
+						token_stream_skip_newlines(s);
+						init_expr = parse_expr_prec(arena, s, 1);
+					}
+					init_stmt = ast_stmt_var_decl(arena, type_name, var_name, init_expr, false, line, col);
+				}
+				else
+				{
+					/* Expression or assignment init: e.g. i = 0 */
+					AstExpr* ie = parse_expr_prec(arena, s, 1);
+					if (ie != NULL)
+					{
+						if (ie->type == AST_EXPR_IDENTIFIER)
+						{
+							loop_var_name = ie->as.identifier_name;
+						}
+						token_stream_skip_newlines(s);
+						if (token_stream_check(s, TOK_ASSIGN) ||
+						    token_stream_check(s, TOK_PLUS_ASSIGN) ||
+						    token_stream_check(s, TOK_MINUS_ASSIGN) ||
+						    token_stream_check(s, TOK_STAR_ASSIGN) ||
+						    token_stream_check(s, TOK_SLASH_ASSIGN) ||
+						    token_stream_check(s, TOK_MOD_ASSIGN))
+						{
+							token_t* atok = token_stream_current(s);
+							char* op_str = atok->text;
+							token_stream_advance(s);
+							token_stream_skip_newlines(s);
+							AstExpr* val_expr = parse_expr_prec(arena, s, 1);
+							ie = ast_expr_assign(arena, ie, op_str, val_expr, line, col);
+						}
+						init_stmt = ast_stmt_expr(arena, ie, line, col);
+					}
+				}
+
+				/* Delimiter between part 1 and part 2 */
+				token_stream_skip_newlines(s);
+				bool is_semi = token_stream_match(s, TOK_SEMICOLON);
+				if (!is_semi)
+				{
+					token_stream_match(s, TOK_COMMA);
+				}
+
+				/* 2. Parse Part 2 */
+				token_stream_skip_newlines(s);
+				AstExpr* part2 = parse_expr_prec(arena, s, 1);
+				token_stream_skip_newlines(s);
+				if (part2 != NULL && (token_stream_check(s, TOK_ASSIGN) ||
+				                      token_stream_check(s, TOK_PLUS_ASSIGN) ||
+				                      token_stream_check(s, TOK_MINUS_ASSIGN) ||
+				                      token_stream_check(s, TOK_STAR_ASSIGN) ||
+				                      token_stream_check(s, TOK_SLASH_ASSIGN) ||
+				                      token_stream_check(s, TOK_MOD_ASSIGN)))
+				{
+					token_t* atok = token_stream_current(s);
+					char* op_str = atok->text;
+					token_stream_advance(s);
+					token_stream_skip_newlines(s);
+					AstExpr* val_expr = parse_expr_prec(arena, s, 1);
+					part2 = ast_expr_assign(arena, part2, op_str, val_expr, line, col);
+				}
+
+				/* Delimiter between part 2 and part 3 */
+				token_stream_skip_newlines(s);
+				if (is_semi)
+				{
+					token_stream_match(s, TOK_SEMICOLON);
+				}
+				else
+				{
+					token_stream_match(s, TOK_COMMA);
+				}
+
+				/* 3. Parse Part 3 */
+				token_stream_skip_newlines(s);
+				AstExpr* part3 = parse_expr_prec(arena, s, 1);
+				token_stream_skip_newlines(s);
+				if (part3 != NULL && (token_stream_check(s, TOK_ASSIGN) ||
+				                      token_stream_check(s, TOK_PLUS_ASSIGN) ||
+				                      token_stream_check(s, TOK_MINUS_ASSIGN) ||
+				                      token_stream_check(s, TOK_STAR_ASSIGN) ||
+				                      token_stream_check(s, TOK_SLASH_ASSIGN) ||
+				                      token_stream_check(s, TOK_MOD_ASSIGN)))
+				{
+					token_t* atok = token_stream_current(s);
+					char* op_str = atok->text;
+					token_stream_advance(s);
+					token_stream_skip_newlines(s);
+					AstExpr* val_expr = parse_expr_prec(arena, s, 1);
+					part3 = ast_expr_assign(arena, part3, op_str, val_expr, line, col);
+				}
+
+				token_stream_skip_newlines(s);
+				token_stream_match(s, TOK_RPAREN);
+
+				token_stream_skip_newlines(s);
+				AstStmt* body = parse_block(arena, s);
+
+				AstExpr* cond_expr = NULL;
+				AstExpr* step_expr = NULL;
+
+				if (is_semi)
+				{
+					/* for (init; cond; step) */
+					cond_expr = part2;
+					step_expr = part3;
+				}
+				else
+				{
+					/* Check if part2 is comparison and part3 is step/assign */
+					bool part2_is_cond = (part2 != NULL && part2->type == AST_EXPR_BINARY &&
+					                      (part2->as.binary.op == BINOP_LT ||
+					                       part2->as.binary.op == BINOP_LTE ||
+					                       part2->as.binary.op == BINOP_GT ||
+					                       part2->as.binary.op == BINOP_GTE ||
+					                       part2->as.binary.op == BINOP_EQ ||
+					                       part2->as.binary.op == BINOP_NEQ));
+					bool part3_is_step = (part3 != NULL && (part3->type == AST_EXPR_ASSIGN));
+
+					if (part2_is_cond && (part3_is_step || part3->type != AST_EXPR_BINARY))
+					{
+						/* for (init, cond, step) */
+						cond_expr = part2;
+						step_expr = part3;
+					}
+					else
+					{
+						/* for (init, step, cond) - user's exact specification */
+						step_expr = part2;
+						cond_expr = part3;
+					}
+				}
+
+				/* If step_expr is not an assignment (e.g. i + 1), wrap as i = i + 1 */
+				if (step_expr != NULL && step_expr->type != AST_EXPR_ASSIGN && loop_var_name != NULL)
+				{
+					AstExpr* v_target = ast_expr_identifier(arena, loop_var_name, line, col);
+					step_expr = ast_expr_assign(arena, v_target, "=", step_expr, line, col);
+				}
+
+				return ast_stmt_for_c(arena, init_stmt, cond_expr, step_expr, body, line, col);
+			}
 		}
 
 		/* Case 2: for item in coll */
@@ -740,8 +929,7 @@ static AstStmt* parse_statement(AstArena* arena, token_stream_t* s)
 				AstStmt* body = parse_block(arena, s);
 
 				AstExpr* v_target = ast_expr_identifier(arena, var_name, line, col);
-				AstExpr* assign_init = ast_expr_assign(arena, v_target, "=", init_val, line, col);
-				AstStmt* init_stmt = ast_stmt_expr(arena, assign_init, line, col);
+				AstStmt* init_stmt = ast_stmt_var_decl(arena, "int", var_name, init_val, false, line, col);
 				if (step_expr && step_expr->type != AST_EXPR_ASSIGN)
 				{
 					step_expr = ast_expr_assign(arena, v_target, "=", step_expr, line, col);
@@ -804,6 +992,114 @@ static AstStmt* parse_statement(AstArena* arena, token_stream_t* s)
 			token_stream_match(s, TOK_RPAREN);
 		}
 		return NULL;
+	}
+
+	/* EXTERN Declaration Block */
+	if (curr->type == TOK_KW_EXTERN)
+	{
+		token_stream_advance(s); /* consume 'extern' */
+		token_stream_skip_newlines(s);
+		token_t* ltok = token_stream_current(s);
+		char* lib_name = (ltok && (ltok->type == TOK_STRING || ltok->type == TOK_IDENT)) ? ltok->text : "";
+		if (ltok && (ltok->type == TOK_STRING || ltok->type == TOK_IDENT))
+		{
+			token_stream_advance(s); /* consume library name */
+		}
+		token_stream_skip_newlines(s);
+
+		AstStmt* func_decls[128];
+		int func_count = 0;
+
+		if (token_stream_match(s, TOK_LBRACE))
+		{
+			while (!token_stream_check(s, TOK_RBRACE) && !token_stream_check(s, TOK_EOF))
+			{
+				if (xdiag_get_error_count() > 0) break;
+				token_stream_skip_newlines(s);
+				while (token_stream_match(s, TOK_SEMICOLON)) token_stream_skip_newlines(s);
+				if (token_stream_check(s, TOK_RBRACE) || token_stream_check(s, TOK_EOF)) break;
+
+				token_t* fcurr = token_stream_current(s);
+				if (fcurr == NULL || fcurr->type == TOK_EOF) break;
+
+				int f_line = fcurr->line;
+				int f_col = fcurr->col;
+
+				/* Parse return type */
+				char* ret_type = fcurr->text;
+				token_stream_advance(s);
+				token_stream_skip_newlines(s);
+
+				/* Parse function name */
+				token_t* ntok = token_stream_current(s);
+				char* fn_name = ntok ? ntok->text : "extern_fn";
+				if (ntok && ntok->type == TOK_IDENT)
+				{
+					token_stream_advance(s);
+				}
+				token_stream_skip_newlines(s);
+
+				/* Parse parameter list: '(' [ type [name], ... ] ')' */
+				AstParam params[32];
+				int pcount = 0;
+				if (token_stream_match(s, TOK_LPAREN))
+				{
+					while (!token_stream_check(s, TOK_RPAREN) && !token_stream_check(s, TOK_EOF))
+					{
+						token_stream_skip_newlines(s);
+						if (token_stream_check(s, TOK_RPAREN)) break;
+
+						token_t* ptype_tok = token_stream_current(s);
+						char* ptype = ptype_tok ? ptype_tok->text : "int";
+						token_stream_advance(s); /* consume param type */
+
+						token_stream_skip_newlines(s);
+						token_t* pname_tok = token_stream_current(s);
+						char* pname = "arg";
+						if (pname_tok && pname_tok->type == TOK_IDENT)
+						{
+							pname = pname_tok->text;
+							token_stream_advance(s); /* consume param name */
+						}
+
+						if (pcount < 32)
+						{
+							params[pcount].type_name = ptype;
+							params[pcount].name = pname;
+							pcount++;
+						}
+
+						token_stream_skip_newlines(s);
+						if (token_stream_check(s, TOK_COMMA))
+						{
+							token_stream_advance(s);
+						}
+						else
+						{
+							break;
+						}
+					}
+					token_stream_skip_newlines(s);
+					token_stream_match(s, TOK_RPAREN);
+				}
+
+				/* Optional trailing semicolon */
+				token_stream_skip_newlines(s);
+				while (token_stream_match(s, TOK_SEMICOLON)) token_stream_skip_newlines(s);
+
+				AstStmt* fs = ast_stmt_func_decl(arena, fn_name, ret_type, params, pcount, NULL, false, NULL, f_line, f_col);
+				if (func_count < 128)
+				{
+					func_decls[func_count++] = fs;
+				}
+			}
+			token_stream_skip_newlines(s);
+			token_stream_match(s, TOK_RBRACE);
+		}
+
+		AstStmt* ext_stmt = ast_stmt_extern_block(arena, lib_name, func_decls, func_count, line, col);
+		xffi_process_extern_block(ext_stmt);
+		return ext_stmt;
 	}
 
 	/* CLASS Declaration */

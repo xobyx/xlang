@@ -1,0 +1,64 @@
+// ============================================================================
+// Direct C-ABI FFI: Zlib Compression & Checksum Library (Tier 2 & Tier 3)
+// ============================================================================
+// Demonstrates zero-wrapper binding to libz.so:
+// - zlibVersion()
+// - crc32() checksum calculation
+// - adler32() checksum calculation
+//
+// Run in VM:
+//   xlang examples/ffi_c_abi/zlib_demo.xb
+//
+// Compile to native standalone binary:
+//   xlang build examples/ffi_c_abi/zlib_demo.xb -lz -o zlib_demo_bin
+//   ./zlib_demo_bin
+// ============================================================================
+
+extern "libz.so" {
+    string zlibVersion()
+    long crc32(long crc, string buf, int len)
+    long adler32(long adler, string buf, int len)
+}
+
+print("==================================================")
+print("  zlib Direct C-ABI FFI Zero-Wrapper Binding      ")
+print("==================================================")
+
+// 1. Library Version
+string ver = zlibVersion()
+print("zlib version : %s", ver)
+assert(strlen(ver) > 0, "zlib version string must not be empty")
+
+// 2. CRC32 Checksum Calculation
+// Standard test string: "The quick brown fox jumps over the lazy dog"
+// Expected CRC32: 0x414FA339 = 1095738169
+string msg = "The quick brown fox jumps over the lazy dog"
+int len = strlen(msg)
+
+long crc_initial = 0
+long crc_val = crc32(crc_initial, msg, len)
+print("Data string  : '%s'", msg)
+print("CRC32        : %d (0x414FA339)", crc_val)
+assert(crc_val == 1095738169, "CRC32 checksum must match standard vector")
+
+// 3. Adler-32 Checksum Calculation
+// Expected Adler32: 0x5BDC0FDA = 1541148634
+long adler_initial = 1
+long adler_val = adler32(adler_initial, msg, len)
+print("Adler32      : %d (0x5BDC0FDA)", adler_val)
+assert(adler_val == 1541148634, "Adler32 checksum must match standard vector")
+
+// 4. Incremental CRC32 across chunks
+string chunk1 = "The quick brown fox "
+string chunk2 = "jumps over the lazy dog"
+long inc_crc = crc32(0, chunk1, strlen(chunk1))
+inc_crc = crc32(inc_crc, chunk2, strlen(chunk2))
+print("Combined CRC : %d", inc_crc)
+assert(inc_crc == crc_val, "Incremental CRC32 must match single-pass CRC32")
+
+// 5. Namespaced calls via module alias
+string ver_namespaced = z.zlibVersion()
+print("Namespaced   : z.zlibVersion() = %s", ver_namespaced)
+assert(ver_namespaced == ver, "Namespaced call must match direct call")
+
+print("\nzlib FFI demonstration completed successfully!")

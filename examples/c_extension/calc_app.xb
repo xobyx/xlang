@@ -1,0 +1,44 @@
+// ============================================================================
+// Tier 2 & Tier 3 Demo: Custom C Shared Library Binding
+// ============================================================================
+// Consumes libmylib.so (compiled from examples/c_extension/mylib.c)
+//
+// Build the C library:
+//   make -C examples/c_extension
+//
+// Run in VM:
+//   xlang -Llib examples/c_extension/calc_app.xb
+//
+// Compile to native standalone binary:
+//   xlang build examples/c_extension/calc_app.xb -Llib -lmylib -o calc_app
+//   ./calc_app
+// ============================================================================
+
+extern "libmylib.so" {
+    int c_custom_calc(int a, int b)
+}
+
+print("==================================================")
+print("  xlang Native Integration: Custom C Library      ")
+print("==================================================")
+
+// Direct call
+int a = 10
+int b = 25
+int result = c_custom_calc(a, b)
+print("c_custom_calc(%d, %d) = %d", a, b, result)
+assert(result == 95, "Calculation should be 10*2 + 25*3 = 95")
+
+// Namespaced call (using module alias 'mylib')
+int r2 = mylib.c_custom_calc(7, 3)
+print("mylib.c_custom_calc(7, 3) = %d", r2)
+assert(r2 == 23, "Calculation should be 7*2 + 3*3 = 23")
+
+// Loop performing multiple calculations
+print("\nBatch calculation table:")
+for (int i = 1, i++, i <= 5) {
+    int val = c_custom_calc(i, i * 2)
+    print("  i=%d: c_custom_calc(%d, %d) = %d", i, i, i * 2, val)
+}
+
+print("\nCustom calculation completed successfully!")

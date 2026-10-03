@@ -1,0 +1,38 @@
+// Vectorcall Extension Tests: Zlib Engine
+import "zlib"
+
+// 1. Version
+string ver = zlib.version()
+assert(strlen(ver) > 0, "zlib version check")
+
+// 2. Checksums
+string data = "The quick brown fox jumps over the lazy dog"
+int crc = zlib.crc32(0, data)
+assert(crc == 1095738169, "crc32 check")
+
+int adler = zlib.adler32(1, data)
+assert(adler == 1541148634, "adler32 check")
+
+// 3. Compression & Decompression
+string text = "Hello xlang Vectorcall Zlib Compression! Repeated data: "
+text = text + text + text
+
+int bound = zlib.compress_bound(strlen(text))
+assert(bound > strlen(text), "compress_bound check")
+
+string hex_comp = zlib.compress(text)
+assert(strlen(hex_comp) > 0, "compress check")
+
+string decomp = zlib.uncompress(hex_comp)
+assert(decomp == text, "uncompress check")
+
+// 4. Gzip File I/O
+string gz_file = "test_unit.gz"
+int written = zlib.gz_write(gz_file, text)
+assert(written == strlen(text), "gz_write check")
+
+string read_text = zlib.gz_read(gz_file)
+assert(read_text == text, "gz_read check")
+file_remove(gz_file)
+
+print("Zlib Vectorcall Tests PASSED!")

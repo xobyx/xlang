@@ -1,0 +1,94 @@
+// Test complete telemetry pipeline
+import "sqlite3"
+import "zlib"
+
+extern "libm.so" {
+    float sqrt(float x)
+    float pow(float base, float exp)
+    float log(float x)
+}
+
+extern "libc.so.6" {
+    int abs(int x)
+}
+
+class TelemetryPoint() {
+    string id
+    float temp_c
+    float humidity_pct
+    float vx
+    float vy
+    float vz
+    float vib_mag
+    float dew_point
+
+    TelemetryPoint(string dev, float t, float h, float x, float y, float z) {
+        id = dev
+        temp_c = t
+        humidity_pct = h
+        vx = x
+        vy = y
+        vz = z
+
+        // 3D Euclidean magnitude via libm.so
+        vib_mag = sqrt(pow(vx, 2.0) + pow(vy, 2.0) + pow(vz, 2.0))
+
+        // Magnus-Tetens dew point via libm.so
+        float a = 17.27
+        float b = 237.7
+        float alpha = ((a * t) / (b + t)) + log(h / 100.0)
+        dew_point = (b * alpha) / (a - alpha)
+    }
+}
+
+// 1. OOP Physics calculations
+TelemetryPoint pt = new TelemetryPoint("PUMP-01", 65.0, 50.0, 3.0, 4.0, 0.0)
+assert(pt.vib_mag == 5.0, "3D vector magnitude should be 5.0")
+assert(pt.dew_point > 49.0 && pt.dew_point < 51.0, "Dew point calculation check")
+
+// 2. Database Ingestion & Transactions via SQLite3 Extension
+int db = sqlite3.connect(":memory:")
+assert(db > 0, "DB connect check")
+
+sqlite3.execute(db, "CREATE TABLE telemetry (dev TEXT, temp REAL, vib REAL, dew REAL)")
+sqlite3.execute(db, "BEGIN TRANSACTION")
+sqlite3.execute(db, "INSERT INTO telemetry VALUES ('PUMP-01', 65.0, 5.0, 53.2)")
+sqlite3.execute(db, "INSERT INTO telemetry VALUES ('TURB-01', 88.0, 14.2, 45.1)")
+sqlite3.execute(db, "INSERT INTO telemetry VALUES ('FAN-01', 32.0, 2.1, 15.0)")
+sqlite3.execute(db, "COMMIT")
+
+int count = sqlite3.query_int(db, "SELECT count(*) FROM telemetry")
+assert(count == 3, "Record count check")
+
+float max_vib = sqlite3.query_float(db, "SELECT max(vib) FROM telemetry")
+assert(max_vib == 14.2, "Max vibration check")
+
+string top_dev = sqlite3.query_value(db, "SELECT dev FROM telemetry ORDER BY vib DESC LIMIT 1")
+assert(top_dev == "TURB-01", "Top dev check")
+
+string json = sqlite3.query_json(db, "SELECT dev, vib FROM telemetry WHERE vib > 4.0 ORDER BY vib DESC")
+assert(strlen(json) > 10, "JSON query check")
+
+string csv = sqlite3.query_csv(db, "SELECT dev, temp FROM telemetry ORDER BY temp")
+assert(strlen(csv) > 10, "CSV query check")
+
+sqlite3.disconnect(db)
+
+// 3. Compression, Checksums & Archiving via Zlib Extension
+int crc = zlib.crc32(0, json)
+assert(crc != 0, "CRC32 check")
+
+int adler = zlib.adler32(1, json)
+assert(adler != 0, "Adler32 check")
+
+string comp = zlib.compress(json)
+string restored = zlib.uncompress(comp)
+assert(restored == json, "Decompressed JSON check")
+
+string archive = "test_pipe.gz"
+zlib.gz_write(archive, json)
+string read_back = zlib.gz_read(archive)
+assert(read_back == json, "Gzip archive read-back check")
+file_remove(archive)
+
+print("Telemetry Pipeline End-to-End Test PASSED!")

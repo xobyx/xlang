@@ -31,6 +31,7 @@ const char* token_type_name(token_type_t type)
 		case TOK_KW_STATIC: return "static";
 		case TOK_KW_NEW: return "new";
 		case TOK_KW_IN: return "in";
+		case TOK_KW_EXTERN: return "extern";
 		case TOK_TYPE_INT: return "int";
 		case TOK_TYPE_FLOAT: return "float";
 		case TOK_TYPE_STRING: return "string";
@@ -211,6 +212,7 @@ static token_type_t check_keyword(const char* text, int len)
 			if (strncmp(text, "return", 6) == 0) return TOK_KW_RETURN;
 			if (strncmp(text, "import", 6) == 0) return TOK_KW_IMPORT;
 			if (strncmp(text, "static", 6) == 0) return TOK_KW_STATIC;
+			if (strncmp(text, "extern", 6) == 0) return TOK_KW_EXTERN;
 			if (strncmp(text, "string", 6) == 0) return TOK_TYPE_STRING;
 			if (strncmp(text, "double", 6) == 0) return TOK_TYPE_DOUBLE;
 			break;

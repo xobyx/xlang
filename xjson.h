@@ -1,15 +1,13 @@
 #ifndef XJSON_H
 #define XJSON_H
 
-#include "types.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-void x_json_parse(fcall* fc);
-void x_json_stringify(fcall* fc);
-void x_json_is_valid(fcall* fc);
+int x_json_parse_to_id(const char* json_str, int* out_is_list);
+char* x_json_stringify_id(int id, int is_list);
+int x_json_validate(const char* json_str);
 
 #ifdef __cplusplus
 }

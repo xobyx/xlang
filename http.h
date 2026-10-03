@@ -13,5 +13,3 @@ struct URL
 
 	};
 
-
-void http(fcall * s);

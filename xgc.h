@@ -15,7 +15,6 @@ extern "C" {
 typedef enum {
 	GC_KIND_RAW = 0,        /* Generic raw buffer (e.g. primitive values) */
 	GC_KIND_VAR,            /* struct var */
-	GC_KIND_FCALL,          /* struct fcall */
 	GC_KIND_STRING,         /* Dynamic string buffer */
 	GC_KIND_INSTANCE,       /* struct type_instance */
 	GC_KIND_ARRAY,          /* Array buffer */
@@ -44,10 +43,6 @@ typedef struct {
 	bool enabled;
 	gc_block_t* blocks_head;
 
-	/* Active call frames stack */
-	fcall* call_stack[256];
-	int call_depth;
-
 	/* Explicitly pinned root pointers */
 	void* roots[256];
 	int roots_count;
@@ -73,11 +68,6 @@ void  gc_unpin(void* ptr);
 void  gc_add_root(void* ptr);
 void  gc_remove_root(void* ptr);
 
-/* Call frame stack tracking */
-void  gc_push_frame(fcall* fc);
-void  gc_pop_frame(void);
-fcall* gc_peek_frame(void);
-
 /* Mark and Sweep */
 void  gc_mark_ptr(void* ptr);
 void  gc_mark_var(var* v);
@@ -95,15 +85,6 @@ size_t gc_get_threshold(void);
 size_t gc_allocated_bytes(void);
 size_t gc_total_objects(void);
 void   gc_dump(void);
-
-/* Native simple function bindings (callable from xlang scripts) */
-void x_gc_collect(fcall* fc);
-void x_gc_allocated_bytes(fcall* fc);
-void x_gc_total_objects(fcall* fc);
-void x_gc_enable(fcall* fc);
-void x_gc_disable(fcall* fc);
-void x_gc_set_threshold(fcall* fc);
-void x_gc_dump(fcall* fc);
 
 #ifdef __cplusplus
 }

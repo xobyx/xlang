@@ -1,0 +1,149 @@
+import "raylib"
+
+// ============================================================================
+// Raylib Bouncing Balls Demo
+// Shows window lifecycle, 2D shape drawing, OOP classes, and mouse interaction
+// ============================================================================
+
+class Ball() {
+    float x
+    float y
+    float vx
+    float vy
+    float radius
+    int col
+
+    Ball() {
+        x = 400.0
+        y = 300.0
+        vx = 4.0
+        vy = 3.0
+        radius = 24.0
+        col = raylib.red()
+    }
+
+    void set(float init_x, float init_y, float init_vx, float init_vy, float r, int c) {
+        x = init_x
+        y = init_y
+        vx = init_vx
+        vy = init_vy
+        radius = r
+        col = c
+    }
+
+    void update(float screen_w, float screen_h) {
+        x = x + vx
+        y = y + vy
+
+        // Bounce on horizontal walls
+        if (x - radius <= 0.0) {
+            x = radius
+            vx = 0.0 - vx
+        }
+        if (x + radius >= screen_w) {
+            x = screen_w - radius
+            vx = 0.0 - vx
+        }
+
+        // Bounce on vertical walls
+        if (y - radius <= 0.0) {
+            y = radius
+            vy = 0.0 - vy
+        }
+        if (y + radius >= screen_h) {
+            y = screen_h - radius
+            vy = 0.0 - vy
+        }
+    }
+
+    void draw() {
+        int ix = x
+        int iy = y
+        raylib.draw_circle(ix, iy, radius, col)
+        raylib.draw_circle_lines(ix, iy, radius, raylib.white())
+    }
+}
+
+int screen_w = 800
+int screen_h = 600
+
+// Initialize Raylib window with 4x MSAA anti-aliasing and V-Sync
+raylib.set_config_flags(raylib.flag_msaa_4x() + raylib.flag_vsync())
+raylib.init_window(screen_w, screen_h, "xlang + Raylib: Bouncing Balls Demo")
+raylib.set_target_fps(60)
+
+// Initialize four balls with different positions, velocities, and colors
+Ball b1 = new Ball()
+b1.set(150.0, 150.0, 4.5, 3.2, 28.0, raylib.red())
+
+Ball b2 = new Ball()
+b2.set(400.0, 250.0, -3.8, 4.8, 22.0, raylib.skyblue())
+
+Ball b3 = new Ball()
+b3.set(650.0, 400.0, 5.2, -3.9, 34.0, raylib.gold())
+
+Ball b4 = new Ball()
+b4.set(300.0, 500.0, -4.2, -3.6, 18.0, raylib.green())
+
+int bg_color = raylib.color(24, 28, 36, 255)
+int panel_color = raylib.color(38, 43, 56, 230)
+int grid_color = raylib.color(35, 41, 54, 255)
+
+print("Starting Raylib animation loop (800x600 @ 60 FPS)...\n")
+
+// Main animation and render loop
+while (true) {
+    float sw = 800.0
+    float sh = 600.0
+
+    // Update ball physics positions
+    b1.update(sw, sh)
+    b2.update(sw, sh)
+    b3.update(sw, sh)
+    b4.update(sw, sh)
+
+    // Interactive mouse teleportation: Left click teleports red ball
+    if (raylib.is_mouse_button_pressed(raylib.mouse_button_left()) != 0) {
+        int mx = raylib.get_mouse_x()
+        int my = raylib.get_mouse_y()
+        b1.x = mx
+        b1.y = my
+    }
+
+    // Begin drawing frame
+    raylib.begin_drawing()
+    raylib.clear_background(bg_color)
+
+    // Draw background decorative grid
+    int gx = 0
+    while (gx < screen_w) {
+        raylib.draw_line(gx, 0, gx, screen_h, grid_color)
+        gx = gx + 40
+    }
+    int gy = 0
+    while (gy < screen_h) {
+        raylib.draw_line(0, gy, screen_w, gy, grid_color)
+        gy = gy + 40
+    }
+
+    // Draw all balls
+    b1.draw()
+    b2.draw()
+    b3.draw()
+    b4.draw()
+
+    // Draw HUD info panel
+    raylib.draw_rectangle(20, 20, 360, 115, panel_color)
+    raylib.draw_rectangle_lines(20, 20, 360, 115, raylib.color(80, 95, 120, 255))
+
+    raylib.draw_text("xlang + Raylib 2D Engine", 35, 32, 20, raylib.raywhite())
+    raylib.draw_text("Left Click: Teleport the red ball", 35, 62, 14, raylib.lightgray())
+    raylib.draw_text("Press ESC or Close Window to exit", 35, 82, 14, raylib.lightgray())
+    raylib.draw_fps(35, 105)
+
+    
+}
+
+// Clean up resources and close window
+raylib.close_window()
+print("Window closed. Raylib demo complete!\n")

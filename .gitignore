@@ -1,6 +1,7 @@
 /Debug
 /Release
 /bin
+/.bin
 /pcre
 
 /.vscode
@@ -18,3 +19,24 @@
 *.ir.html
 *:Zone.Identifier
 .zed/
+examples/http_server/server_daemon.xb.ll
+whil.asm
+tests/get_fibonacci_sequence.html
+tests/test_do_while
+tests/test_do_while.xb.ll
+tests/test_echo
+tests/test_fib_seq_demo
+tests/test_regex_oop
+fib_after
+fib_before
+tests/*_bin
+tests/*.xb.ll
+tests/*.ll
+examples/c_extension/*.so
+examples/c_extension/*/*.so
+lib/*.so
+vendor/
+*.png
+tests/*.png
+unnamed.*
+dino_run

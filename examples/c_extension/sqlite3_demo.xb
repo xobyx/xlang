@@ -1,0 +1,100 @@
+// ============================================================================
+// Tier 1 Demo: High-Performance SQLite3 Engine Vectorcall C Extension
+// ============================================================================
+// Demonstrates rich database interaction with SQLite3 using xlang's
+// native extension SDK:
+// - Database lifecycle: connect(), disconnect(), open_db(), close_db()
+// - DDL & DML execution: execute() for CREATE TABLE, INSERT, UPDATE, DELETE
+// - Metadata & diagnostics: last_id(), changes_count(), version(), memory_usage()
+// - Typed scalar queries: query_value(), query_int(), query_float()
+// - Structured result export: query_json(), query_csv()
+// - Transactions: BEGIN, COMMIT
+// - Dual namespace support: both 'sqlite3' and 'sqlite' modules
+//
+// Run in VM:
+//   xlang examples/c_extension/sqlite3_demo.xb
+//
+// Compile to native standalone binary:
+//   xlang build examples/c_extension/sqlite3_demo.xb -o sqlite3_demo_bin
+//   ./sqlite3_demo_bin
+// ============================================================================
+
+import "sqlite3"
+
+print("==================================================")
+print("  xlang Vectorcall C Extension: SQLite3 Engine    ")
+print("==================================================")
+
+// 1. Engine Metadata
+string ver = sqlite3.engine_version()
+print("SQLite Engine Version: %s", ver)
+assert(strlen(ver) > 0, "SQLite version should not be empty")
+
+// 2. Connect to In-Memory Database
+int db = sqlite3.connect(":memory:")
+print("Connected to in-memory database, handle = %d", db)
+assert(db > 0, "Database handle must be valid (> 0)")
+
+// 3. Create Schema
+int rc1 = sqlite3.execute(db, "CREATE TABLE employees (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, department TEXT, salary REAL)")
+print("CREATE TABLE employees result: %d", rc1)
+assert(rc1 == 0, "CREATE TABLE should succeed")
+
+// 4. Insert Records using execute()
+sqlite3.execute(db, "INSERT INTO employees (name, department, salary) VALUES ('Alice Martin', 'Engineering', 95000.50)")
+int id1 = sqlite3.last_id(db)
+print("Inserted Alice Martin -> rowid = %d", id1)
+assert(id1 == 1, "First inserted rowid should be 1")
+
+sqlite3.execute(db, "INSERT INTO employees (name, department, salary) VALUES ('Bob Vance', 'Sales', 72000.00)")
+int id2 = sqlite3.last_id(db)
+print("Inserted Bob Vance -> rowid = %d", id2)
+assert(id2 == 2, "Second inserted rowid should be 2")
+
+sqlite3.execute(db, "INSERT INTO employees (name, department, salary) VALUES ('Charlie Day', 'Engineering', 88500.75)")
+sqlite3.execute(db, "INSERT INTO employees (name, department, salary) VALUES ('Diana Prince', 'Management', 120000.00)")
+
+int changes = sqlite3.changes_count(db)
+print("Last insert changes: %d", changes)
+assert(changes == 1, "Last insert affected 1 row")
+
+// 5. Scalar Queries: query_int, query_value, query_float
+int emp_count = sqlite3.query_int(db, "SELECT count(*) FROM employees")
+print("\nTotal employees: %d", emp_count)
+assert(emp_count == 4, "Total employees should be 4")
+
+string top_earner = sqlite3.query_value(db, "SELECT name FROM employees ORDER BY salary DESC LIMIT 1")
+print("Highest paid employee: %s", top_earner)
+assert(top_earner == "Diana Prince", "Top earner should be Diana Prince")
+
+float avg_salary = sqlite3.query_float(db, "SELECT avg(salary) FROM employees WHERE department = 'Engineering'")
+print("Average Engineering Salary: %.2f", avg_salary)
+assert(avg_salary > 91000.0 && avg_salary < 92000.0, "Average salary check")
+
+// 6. Structured Query: JSON Export
+print("\n--- JSON Query Export ---")
+string json_res = sqlite3.query_json(db, "SELECT id, name, department, salary FROM employees ORDER BY id")
+print("JSON Employees: %s", json_res)
+assert(strlen(json_res) > 20, "JSON result should be populated")
+
+// 7. Structured Query: CSV Export
+print("\n--- CSV Query Export ---")
+string csv_res = sqlite3.query_csv(db, "SELECT id, name, department, salary FROM employees WHERE salary >= 90000 ORDER BY salary DESC")
+print("CSV (Salary >= 90k):\n%s", csv_res)
+assert(strlen(csv_res) > 10, "CSV result should be populated")
+
+// 8. Transactions: Atomic Batch
+sqlite3.execute(db, "BEGIN TRANSACTION")
+sqlite3.execute(db, "UPDATE employees SET salary = salary * 1.05 WHERE department = 'Engineering'")
+sqlite3.execute(db, "COMMIT")
+
+float new_avg = sqlite3.query_float(db, "SELECT avg(salary) FROM employees WHERE department = 'Engineering'")
+print("Engineering Salary after 5%% raise: %.2f", new_avg)
+assert(new_avg > avg_salary, "Salary should have increased")
+
+// 9. Close Database
+int rc_close = sqlite3.disconnect(db)
+print("\nDatabase closed with code: %d", rc_close)
+assert(rc_close == 0, "Disconnect should return 0")
+
+print("\nSQLite3 Vectorcall extension demo completed successfully!")

@@ -9,11 +9,14 @@
 #endif
 
 #include "xllvm.h"
+#include "xextension.h"
+#include "xffi.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
 #include <ctype.h>
+#include <stdint.h>  /* SIZE_MAX, used by buf_emit's overflow guard */
 
 #define MAX_LOCALS 512
 #define MAX_STR_CONSTS 1024
@@ -135,6 +138,15 @@ static void buf_emit(XLLVMEmitter* e, const char* fmt, ...)
 		if (e->code_buf_len + needed + 1 > e->code_buf_cap)
 		{
 			size_t new_cap = (e->code_buf_cap == 0) ? 16384 : e->code_buf_cap * 2;
+			/* Guard against size_t wrap: if code_buf_cap is already past
+			 * SIZE_MAX/2, doubling can wrap to 0 and the subsequent
+			 * vsnprintf writes past a tiny allocation. */
+			if (e->code_buf_cap > SIZE_MAX / 2)
+			{
+				fprintf(stderr, "xllvm: fatal: code buffer too large (cap=%zu)\n", e->code_buf_cap);
+				free(e->code_buf);
+				exit(1);
+			}
 			while (new_cap < e->code_buf_len + needed + 1)
 				new_cap *= 2;
 			char* grown = (char*)realloc(e->code_buf, new_cap);
@@ -147,8 +159,14 @@ static void buf_emit(XLLVMEmitter* e, const char* fmt, ...)
 			e->code_buf = grown;
 			e->code_buf_cap = new_cap;
 		}
-		vsnprintf(e->code_buf + e->code_buf_len, needed + 1, fmt, args_copy);
-		e->code_buf_len += needed;
+		int written = vsnprintf(e->code_buf + e->code_buf_len, needed + 1, fmt, args_copy);
+		if (written < 0)
+		{
+			fprintf(stderr, "xllvm: fatal: vsnprintf failed formatting code buffer\n");
+			free(e->code_buf);
+			exit(1);
+		}
+		e->code_buf_len += (size_t)written;
 	}
 	va_end(args_copy);
 }
@@ -231,9 +249,27 @@ static const char* xlang_type_to_llvm(XLLVMEmitter* e, const char* type_name)
 	{
 		if (strcmp(e->classes[i].name, type_name) == 0)
 		{
-			static char class_ptr_buf[128];
-			snprintf(class_ptr_buf, sizeof(class_ptr_buf), "%%struct.%s*", type_name);
-			return class_ptr_buf;
+			static char class_ptr_bufs[4][128];
+			static int buf_idx = 0;
+			char* buf = class_ptr_bufs[buf_idx++ & 3];
+			snprintf(buf, 128, "%%struct.%s*", type_name);
+			return buf;
+		}
+	}
+	/* Also check e->prog in case classes are in AstProgram */
+	if (e->prog)
+	{
+		for (int i = 0; i < e->prog->statement_count; i++)
+		{
+			const AstStmt* stmt = e->prog->statements[i];
+			if (stmt->type == AST_STMT_CLASS_DECL && strcmp(stmt->as.class_decl.name, type_name) == 0)
+			{
+				static char class_ptr_bufs[4][128];
+				static int buf_idx = 0;
+				char* buf = class_ptr_bufs[buf_idx++ & 3];
+				snprintf(buf, 128, "%%struct.%s*", type_name);
+				return buf;
+			}
 		}
 	}
 	return "i8*"; /* Generic pointer fallback */
@@ -255,12 +291,23 @@ static int get_string_const_id(XLLVMEmitter* e, const char* str)
 	if (e->string_constant_count < MAX_STR_CONSTS)
 	{
 		int id = e->string_constant_count++;
-		e->string_constants[id].text = strdup(str);
+		char* dup = strdup(str);
+		if (dup == NULL)
+		{
+			/* Do not leave a NULL .text in the pool: a later lookup does
+			 * strcmp(pool[i].text, str) and would segfault. Bail loudly. */
+			fprintf(stderr, "xllvm: fatal: out of memory duplicating string constant\n");
+			exit(1);
+		}
+		e->string_constants[id].text = dup;
 		e->string_constants[id].len = (int)strlen(str) + 1;
 		e->string_constants[id].id = id;
 		return id;
 	}
-	return 0;
+	/* Pool full. Returning 0 here silently aliases every over-cap string to
+	 * @.str.0, which is worse than failing. */
+	fprintf(stderr, "xllvm: fatal: string constant pool exceeded (max=%d)\n", MAX_STR_CONSTS);
+	exit(1);
 }
 
 static void escape_llvm_string(const char* in, char* out, size_t out_cap)
@@ -302,6 +349,23 @@ static const AstStmt* find_function_in_stmt(const AstStmt* stmt, const char* nam
 		{
 			const AstStmt* found = find_function_in_stmt(stmt->as.block.stmts[i], name);
 			if (found) return found;
+		}
+	}
+	if (stmt->type == AST_STMT_EXTERN_BLOCK)
+	{
+		const char* dot = strchr(name, '.');
+		const char* fn_only = dot ? dot + 1 : name;
+		for (int i = 0; i < stmt->as.extern_block.func_count; i++)
+		{
+			const AstStmt* fs = stmt->as.extern_block.func_decls[i];
+			if (fs && fs->type == AST_STMT_FUNC_DECL)
+			{
+				if (strcmp(fs->as.func_decl.name, name) == 0 ||
+				    (dot && strcmp(fs->as.func_decl.name, fn_only) == 0))
+				{
+					return fs;
+				}
+			}
 		}
 	}
 	return NULL;
@@ -358,7 +422,8 @@ static const char* resolve_builtin_callee(const char* name)
 	if (strcmp(name, "trim") == 0) return "_trim";
 	if (strcmp(name, "lower") == 0 || strcmp(name, "to_lower") == 0) return "_lower";
 	if (strcmp(name, "upper") == 0 || strcmp(name, "to_upper") == 0) return "_upper";
-	if (strcmp(name, "len") == 0) return "_len";
+	if (strcmp(name, "len") == 0 || strcmp(name, "strlen") == 0) return "_len";
+	if (strcmp(name, "readline") == 0 || strcmp(name, "read_line") == 0 || strcmp(name, "gets") == 0) return "x_readline";
 
 	/* System aliases */
 	if (strcmp(name, "exec") == 0) return "system_exec";
@@ -376,6 +441,7 @@ static const char* get_builtin_ret_type(const char* name)
 	    strcmp(name, "_trim") == 0 ||
 	    strcmp(name, "substr") == 0 ||
 	    strcmp(name, "chr") == 0 ||
+	    strcmp(name, "x_readline") == 0 ||
 	    strcmp(name, "_str_concat") == 0 ||
 	    strcmp(name, "_str_from_int") == 0 ||
 	    strcmp(name, "_str_from_float") == 0 ||
@@ -794,6 +860,34 @@ static LLVMValue coerce_value(XLLVMEmitter* e, LLVMValue val, const char* target
 		buf_emit(e, "  %s = sitofp i32 %s to double\n", res.repr, val.repr);
 		return res;
 	}
+	if (strcmp(val.type, "i64") == 0 && strcmp(target_type, "double") == 0)
+	{
+		int t = new_temp_id(e);
+		snprintf(res.repr, sizeof(res.repr), "%%t%d", t);
+		buf_emit(e, "  %s = sitofp i64 %s to double\n", res.repr, val.repr);
+		return res;
+	}
+	if (strcmp(val.type, "double") == 0 && strcmp(target_type, "i64") == 0)
+	{
+		int t = new_temp_id(e);
+		snprintf(res.repr, sizeof(res.repr), "%%t%d", t);
+		buf_emit(e, "  %s = fptosi double %s to i64\n", res.repr, val.repr);
+		return res;
+	}
+	if (strcmp(val.type, "i64") == 0 && strcmp(target_type, "i32") == 0)
+	{
+		int t = new_temp_id(e);
+		snprintf(res.repr, sizeof(res.repr), "%%t%d", t);
+		buf_emit(e, "  %s = trunc i64 %s to i32\n", res.repr, val.repr);
+		return res;
+	}
+	if (strcmp(val.type, "i32") == 0 && strcmp(target_type, "i64") == 0)
+	{
+		int t = new_temp_id(e);
+		snprintf(res.repr, sizeof(res.repr), "%%t%d", t);
+		buf_emit(e, "  %s = sext i32 %s to i64\n", res.repr, val.repr);
+		return res;
+	}
 	if (strcmp(val.type, "double") == 0 && strcmp(target_type, "i32") == 0)
 	{
 		int t = new_temp_id(e);
@@ -840,7 +934,16 @@ static LLVMValue coerce_value(XLLVMEmitter* e, LLVMValue val, const char* target
 		snprintf(res.repr, sizeof(res.repr), "%%t%d", t_i32);
 		return res;
 	}
-	return val;
+	/* Reached only for a conversion this function does not implement. The
+	 * previous `return val` handed the caller a value whose .type did not
+	 * match target_type, which then got emitted into an instruction with the
+	 * wrong operand type (e.g. i8/i64, for char/long, have no rules here).
+	 * That was already a guaranteed llvm-as-time failure, just a confusing
+	 * one; fail loudly and immediately instead. This does not add the
+	 * missing i8/i64 coercion rules themselves -- that's separate, still-open
+	 * work. */
+	fprintf(stderr, "xllvm: fatal: unhandled coercion from %s to %s\n", val.type, target_type);
+	exit(1);
 }
 
 /* -------------------------------------------------------------------------
@@ -1416,29 +1519,142 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 			const char* callee = expr->as.call.name;
 			int argc = expr->as.call.arg_count;
 
-			/* Standard Output Builtins: print / println / echo */
-			if (strcmp(callee, "print") == 0 || strcmp(callee, "println") == 0 || strcmp(callee, "echo") == 0)
+			/* Standard Output Builtins: print / println / echo / print_f / printf */
+			if (strcmp(callee, "print") == 0 || strcmp(callee, "println") == 0 || strcmp(callee, "echo") == 0 ||
+			    strcmp(callee, "print_f") == 0 || strcmp(callee, "printf") == 0)
 			{
+				if (argc == 0)
+				{
+					int fmt_id = get_string_const_id(e, "\n");
+					buf_emit(e, "  call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([2 x i8], [2 x i8]* @.str.%d, i64 0, i64 0))\n", fmt_id);
+					strcpy(val.repr, "0");
+					strcpy(val.type, "i32");
+					return val;
+				}
+
+				/* Formatted print:
+				 * Triggered when callee is print_f/printf OR when argc >= 2 and args[0] is a string literal containing '%' */
+				bool is_fmt = (strcmp(callee, "print_f") == 0 || strcmp(callee, "printf") == 0) ||
+				              (argc >= 2 && expr->as.call.args[0]->type == AST_EXPR_LITERAL_STRING &&
+				               strchr(expr->as.call.args[0]->as.string_val, '%') != NULL);
+
+				if (is_fmt && expr->as.call.args[0]->type == AST_EXPR_LITERAL_STRING)
+				{
+					const char* raw_fmt = expr->as.call.args[0]->as.string_val;
+					char fmt_buf[2048];
+					snprintf(fmt_buf, sizeof(fmt_buf), "%s", raw_fmt);
+					size_t flen = strlen(fmt_buf);
+					if (strcmp(callee, "printf") != 0 && (flen == 0 || fmt_buf[flen - 1] != '\n'))
+					{
+						if (flen + 1 < sizeof(fmt_buf))
+						{
+							fmt_buf[flen] = '\n';
+							fmt_buf[flen + 1] = '\0';
+							flen++;
+						}
+					}
+
+					int fmt_id = get_string_const_id(e, fmt_buf);
+
+					LLVMValue eval_args[32];
+					int spec_idx = 0;
+					const char* p = fmt_buf;
+
+					for (int i = 1; i < argc && i < 32; i++)
+					{
+						/* Find i-th format specifier */
+						char spec = 0;
+						while (*p != '\0')
+						{
+							if (*p == '%' && *(p + 1) != '\0')
+							{
+								p++;
+								if (*p == '%') { p++; continue; }
+								while (*p != '\0' && !isalpha((unsigned char)*p) && *p != '%') p++;
+								if (*p != '\0' && isalpha((unsigned char)*p))
+								{
+									spec_idx++;
+									if (spec_idx == i)
+									{
+										spec = *p;
+										p++;
+										break;
+									}
+								}
+							}
+							else
+							{
+								p++;
+							}
+						}
+
+						const char* target_type = NULL;
+						if (spec == 'd' || spec == 'i' || spec == 'u' || spec == 'x' || spec == 'X' || spec == 'c')
+							target_type = "i32";
+						else if (spec == 'f' || spec == 'g' || spec == 'G' || spec == 'e' || spec == 'E')
+							target_type = "double";
+						else if (spec == 's' || spec == 'p')
+							target_type = "i8*";
+
+						LLVMValue a = emit_expr(e, expr->as.call.args[i]);
+						if (target_type)
+							a = coerce_value(e, a, target_type);
+						else if (strcmp(a.type, "i1") == 0)
+							a = coerce_value(e, a, "i32");
+
+						eval_args[i] = a;
+					}
+
+					buf_emit(e, "  call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([%d x i8], [%d x i8]* @.str.%d, i64 0, i64 0)",
+					         (int)flen + 1, (int)flen + 1, fmt_id);
+					for (int i = 1; i < argc && i < 32; i++)
+					{
+						buf_emit(e, ", %s %s", eval_args[i].type, eval_args[i].repr);
+					}
+					buf_emit(e, ")\n");
+
+					strcpy(val.repr, "0");
+					strcpy(val.type, "i32");
+					return val;
+				}
+
+				/* Unformatted print / single-arg print */
 				for (int i = 0; i < argc; i++)
 				{
+					/* Check if single string literal ends with newline */
+					bool str_has_newline = false;
+					if (argc == 1 && expr->as.call.args[i]->type == AST_EXPR_LITERAL_STRING)
+					{
+						const char* sv = expr->as.call.args[i]->as.string_val;
+						size_t svl = strlen(sv);
+						if (svl > 0 && sv[svl - 1] == '\n')
+							str_has_newline = true;
+					}
+
 					LLVMValue arg = emit_expr(e, expr->as.call.args[i]);
+					bool is_last = (i + 1 == argc);
+
 					if (strcmp(arg.type, "i32") == 0)
 					{
-						int fmt_id = get_string_const_id(e, "%d\n");
+						const char* fmt_str = is_last ? "%d\n" : "%d ";
+						int fmt_id = get_string_const_id(e, fmt_str);
 						buf_emit(e, "  call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([4 x i8], [4 x i8]* @.str.%d, i64 0, i64 0), i32 %s)\n",
 						         fmt_id, arg.repr);
 					}
 					else if (strcmp(arg.type, "double") == 0)
 					{
-						int fmt_id = get_string_const_id(e, "%g\n");
+						const char* fmt_str = is_last ? "%g\n" : "%g ";
+						int fmt_id = get_string_const_id(e, fmt_str);
 						buf_emit(e, "  call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([4 x i8], [4 x i8]* @.str.%d, i64 0, i64 0), double %s)\n",
 						         fmt_id, arg.repr);
 					}
 					else if (strcmp(arg.type, "i8*") == 0)
 					{
-						int fmt_id = get_string_const_id(e, "%s\n");
-						buf_emit(e, "  call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([4 x i8], [4 x i8]* @.str.%d, i64 0, i64 0), i8* %s)\n",
-						         fmt_id, arg.repr);
+						const char* fmt_str = str_has_newline ? "%s" : (is_last ? "%s\n" : "%s ");
+						int fl = (int)strlen(fmt_str) + 1;
+						int fmt_id = get_string_const_id(e, fmt_str);
+						buf_emit(e, "  call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([%d x i8], [%d x i8]* @.str.%d, i64 0, i64 0), i8* %s)\n",
+						         fl, fl, fmt_id, arg.repr);
 					}
 					else if (strcmp(arg.type, "i1") == 0)
 					{
@@ -1447,9 +1663,11 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 						int str_f = get_string_const_id(e, "False");
 						buf_emit(e, "  %%t%d = select i1 %s, i8* getelementptr inbounds ([5 x i8], [5 x i8]* @.str.%d, i64 0, i64 0), i8* getelementptr inbounds ([6 x i8], [6 x i8]* @.str.%d, i64 0, i64 0)\n",
 						         t_str, arg.repr, str_t, str_f);
-						int fmt_id = get_string_const_id(e, "%s\n");
-						buf_emit(e, "  call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([4 x i8], [4 x i8]* @.str.%d, i64 0, i64 0), i8* %%t%d)\n",
-						         fmt_id, t_str);
+						const char* fmt_str = is_last ? "%s\n" : "%s ";
+						int fl = (int)strlen(fmt_str) + 1;
+						int fmt_id = get_string_const_id(e, fmt_str);
+						buf_emit(e, "  call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([%d x i8], [%d x i8]* @.str.%d, i64 0, i64 0), i8* %%t%d)\n",
+						         fl, fl, fmt_id, t_str);
 					}
 				}
 				strcpy(val.repr, "0");
@@ -1472,6 +1690,14 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 				if (argc > 1)
 				{
 					LLVMValue msg = emit_expr(e, expr->as.call.args[1]);
+					/* The message is passed to printf as i8*. If the user wrote
+					 * assert(x, 42) or assert(x, true), the value's type is
+					 * i32/i1 and the emitted call has an i32/i1 where i8* is
+					 * declared, which is not verifier-clean. Coerce to i8* so
+					 * the IR is at least type-correct; a numeric message will
+					 * be a garbage pointer at runtime, but that is the user's
+					 * choice and does not produce invalid IR. */
+					msg = coerce_value(e, msg, "i8*");
 					snprintf(msg_repr, sizeof(msg_repr), "%s", msg.repr);
 				}
 				else
@@ -1596,7 +1822,12 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 			}
 
 			const char* emit_callee = callee;
-			if (strcmp(callee, "main") == 0 && fn_decl != NULL)
+			const char* dot_pos = strchr(callee, '.');
+			if (dot_pos != NULL)
+			{
+				emit_callee = dot_pos + 1;
+			}
+			else if (strcmp(callee, "main") == 0 && fn_decl != NULL)
 			{
 				emit_callee = "_user_main";
 			}
@@ -1656,7 +1887,11 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 			int t_obj = new_temp_id(e);
 			buf_emit(e, "  %%t%d = getelementptr %%struct.%s, %%struct.%s* null, i32 1\n", t_size_ptr, cname, cname);
 			buf_emit(e, "  %%t%d = ptrtoint %%struct.%s* %%t%d to i64\n", t_size, cname, t_size_ptr);
-			buf_emit(e, "  %%t%d = call i8* @malloc(i64 %%t%d)\n", t_raw, t_size);
+			/* calloc, not malloc: fields without an explicit initializer must
+			 * default to zero/null, matching AST_STMT_VAR_DECL's default-init
+			 * behavior for locals. malloc leaves them holding whatever was on
+			 * the heap, violating the language's default-zero semantics. */
+			buf_emit(e, "  %%t%d = call i8* @calloc(i64 1, i64 %%t%d)\n", t_raw, t_size);
 			buf_emit(e, "  %%t%d = bitcast i8* %%t%d to %%struct.%s*\n", t_obj, t_raw, cname);
 
 			/* Find AST class declaration for default field inits & nested class inits */
@@ -1703,16 +1938,40 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 							}
 							else if (mem->as.var_decl.type_name && strncmp(fty, "%struct.", 8) == 0)
 							{
-								/* Nested class instance initialization */
-								AstExpr dummy_new;
-								memset(&dummy_new, 0, sizeof(dummy_new));
-								dummy_new.type = AST_EXPR_NEW;
-								dummy_new.as.new_expr.class_name = (char*)mem->as.var_decl.type_name;
-								LLVMValue nested_obj = emit_expr(e, &dummy_new);
-								int t_slot = new_temp_id(e);
-								buf_emit(e, "  %%t%d = getelementptr inbounds %%struct.%s, %%struct.%s* %%t%d, i32 0, i32 %d\n",
-								         t_slot, cname, cname, t_obj, slot);
-								buf_emit(e, "  store %s %s, %s* %%t%d, align 8\n", fty, nested_obj.repr, fty, t_slot);
+								static const char* s_llvm_instantiating[64];
+								static int s_llvm_instantiating_depth = 0;
+
+								bool cycle = false;
+								for (int d = 0; d < s_llvm_instantiating_depth; d++)
+								{
+									if (s_llvm_instantiating[d] && strcmp(s_llvm_instantiating[d], mem->as.var_decl.type_name) == 0)
+									{
+										cycle = true;
+										break;
+									}
+								}
+								if (strcmp(mem->as.var_decl.type_name, cname) == 0)
+								{
+									cycle = true;
+								}
+
+								if (!cycle)
+								{
+									if (s_llvm_instantiating_depth < 64)
+										s_llvm_instantiating[s_llvm_instantiating_depth++] = cname;
+									/* Nested class instance initialization */
+									AstExpr dummy_new;
+									memset(&dummy_new, 0, sizeof(dummy_new));
+									dummy_new.type = AST_EXPR_NEW;
+									dummy_new.as.new_expr.class_name = (char*)mem->as.var_decl.type_name;
+									LLVMValue nested_obj = emit_expr(e, &dummy_new);
+									int t_slot = new_temp_id(e);
+									buf_emit(e, "  %%t%d = getelementptr inbounds %%struct.%s, %%struct.%s* %%t%d, i32 0, i32 %d\n",
+									         t_slot, cname, cname, t_obj, slot);
+									buf_emit(e, "  store %s %s, %s* %%t%d, align 8\n", fty, nested_obj.repr, fty, t_slot);
+									if (s_llvm_instantiating_depth > 0)
+										s_llvm_instantiating_depth--;
+								}
 							}
 						}
 					}
@@ -1763,6 +2022,10 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 						break;
 					}
 				}
+				if (static_class == NULL && (xextension_is_module(id_name) || xffi_is_module(id_name)))
+				{
+					static_class = id_name;
+				}
 			}
 
 			if (static_class != NULL)
@@ -1773,20 +2036,63 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 				const AstStmt* m_decl = find_class_method_defining_class(e, static_class, mname, argc, def_class, sizeof(def_class));
 				const char* actual_class = def_class[0] ? def_class : static_class;
 				const char* ret_llvm = "i32";
-				if (m_decl)
-				{
-					const char* ret_name = m_decl->as.func_decl.return_type ? m_decl->as.func_decl.return_type : "void";
-					ret_llvm = xlang_type_to_llvm(e, ret_name);
-				}
-
 				char sym_name[128];
-				get_method_symbol_name(e, actual_class, mname, argc, sym_name, sizeof(sym_name));
+
+				const XExtensionFunc* ext_fn = xextension_find_func(static_class, mname);
+				const XFFIFunc* ffi_fn = xffi_find_func(mname);
+				if (ext_fn != NULL)
+				{
+					snprintf(sym_name, sizeof(sym_name), "%s_%s", static_class, mname);
+					switch (ext_fn->return_type)
+					{
+					case XLANG_TYPE_INT:    ret_llvm = "i32"; break;
+					case XLANG_TYPE_FLOAT:  ret_llvm = "double"; break;
+					case XLANG_TYPE_STRING: ret_llvm = "i8*"; break;
+					case XLANG_TYPE_BOOL:   ret_llvm = "i1"; break;
+					case XLANG_TYPE_OBJECT: ret_llvm = "i8*"; break;
+					case XLANG_TYPE_VOID:   ret_llvm = "void"; break;
+					default: ret_llvm = "i32"; break;
+					}
+				}
+				else if (ffi_fn != NULL)
+				{
+					snprintf(sym_name, sizeof(sym_name), "%s", mname);
+					ret_llvm = xlang_type_to_llvm(e, ffi_fn->ret_type_name);
+				}
+				else
+				{
+					if (m_decl)
+					{
+						const char* ret_name = m_decl->as.func_decl.return_type ? m_decl->as.func_decl.return_type : "void";
+						ret_llvm = xlang_type_to_llvm(e, ret_name);
+					}
+					get_method_symbol_name(e, actual_class, mname, argc, sym_name, sizeof(sym_name));
+				}
 
 				LLVMValue evaluated_args[32];
 				for (int i = 0; i < argc && i < 32; i++)
 				{
 					evaluated_args[i] = emit_expr(e, expr->as.method_call.args[i]);
-					if (m_decl && i < m_decl->as.func_decl.param_count)
+					if (ext_fn && i < ext_fn->arity)
+					{
+						const char* pty = "i32";
+						switch (ext_fn->param_types[i])
+						{
+						case XLANG_TYPE_INT:    pty = "i32"; break;
+						case XLANG_TYPE_FLOAT:  pty = "double"; break;
+						case XLANG_TYPE_STRING: pty = "i8*"; break;
+						case XLANG_TYPE_BOOL:   pty = "i1"; break;
+						case XLANG_TYPE_OBJECT: pty = "i8*"; break;
+						default: pty = "i32"; break;
+						}
+						evaluated_args[i] = coerce_value(e, evaluated_args[i], pty);
+					}
+					else if (ffi_fn && i < ffi_fn->arity)
+					{
+						const char* pty = xlang_type_to_llvm(e, ffi_fn->param_type_names[i]);
+						evaluated_args[i] = coerce_value(e, evaluated_args[i], pty);
+					}
+					else if (m_decl && i < m_decl->as.func_decl.param_count)
 					{
 						const char* pty = xlang_type_to_llvm(e, m_decl->as.func_decl.params[i].type_name);
 						evaluated_args[i] = coerce_value(e, evaluated_args[i], pty);
@@ -1942,10 +2248,18 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 					a0 = coerce_value(e, a0, "i8*");
 					int t_lid = new_temp_id(e);
 					buf_emit(e, "  %%t%d = call i32 @str_split(i8* %s, i8* %s)\n", t_lid, obj.repr, a0.repr);
+					/* Use the LLVM sizeof idiom rather than a hardcoded 4 --
+					 * same fix as new and the list-literal case, so this copy
+					 * of the identical List-wrapping pattern tracks
+					 * %struct.List's real layout too. */
+					int t_size_ptr = new_temp_id(e);
+					int t_size = new_temp_id(e);
 					int t_raw = new_temp_id(e);
 					int t_cast = new_temp_id(e);
 					int t_field = new_temp_id(e);
-					buf_emit(e, "  %%t%d = call i8* @malloc(i64 4)\n", t_raw);
+					buf_emit(e, "  %%t%d = getelementptr %%struct.List, %%struct.List* null, i32 1\n", t_size_ptr);
+					buf_emit(e, "  %%t%d = ptrtoint %%struct.List* %%t%d to i64\n", t_size, t_size_ptr);
+					buf_emit(e, "  %%t%d = call i8* @malloc(i64 %%t%d)\n", t_raw, t_size);
 					buf_emit(e, "  %%t%d = bitcast i8* %%t%d to %%struct.List*\n", t_cast, t_raw);
 					buf_emit(e, "  %%t%d = getelementptr inbounds %%struct.List, %%struct.List* %%t%d, i32 0, i32 0\n", t_field, t_cast);
 					buf_emit(e, "  store i32 %%t%d, i32* %%t%d, align 4\n", t_lid, t_field);
@@ -2131,10 +2445,17 @@ static LLVMValue emit_expr(XLLVMEmitter* e, const AstExpr* expr)
 					buf_emit(e, "  call i32 @list_add_int(i32 %%t%d, i32 %s)\n", t_lid, elem.repr);
 				}
 			}
+			/* Use the LLVM sizeof idiom rather than a hardcoded 4, so the
+			 * allocation tracks %struct.List's real layout if it ever grows
+			 * past { i32 }. */
+			int t_size_ptr = new_temp_id(e);
+			int t_size = new_temp_id(e);
 			int t_raw = new_temp_id(e);
 			int t_cast = new_temp_id(e);
 			int t_field = new_temp_id(e);
-			buf_emit(e, "  %%t%d = call i8* @malloc(i64 4)\n", t_raw);
+			buf_emit(e, "  %%t%d = getelementptr %%struct.List, %%struct.List* null, i32 1\n", t_size_ptr);
+			buf_emit(e, "  %%t%d = ptrtoint %%struct.List* %%t%d to i64\n", t_size, t_size_ptr);
+			buf_emit(e, "  %%t%d = call i8* @malloc(i64 %%t%d)\n", t_raw, t_size);
 			buf_emit(e, "  %%t%d = bitcast i8* %%t%d to %%struct.List*\n", t_cast, t_raw);
 			buf_emit(e, "  %%t%d = getelementptr inbounds %%struct.List, %%struct.List* %%t%d, i32 0, i32 0\n", t_field, t_cast);
 			buf_emit(e, "  store i32 %%t%d, i32* %%t%d, align 4\n", t_lid, t_field);
@@ -2631,6 +2952,7 @@ static void emit_stmt(XLLVMEmitter* e, const AstStmt* stmt)
 
 	case AST_STMT_FUNC_DECL:
 	case AST_STMT_CLASS_DECL:
+	case AST_STMT_EXTERN_BLOCK:
 		break;
 
 	default:
@@ -2728,6 +3050,7 @@ static void resolve_class_inheritance(XLLVMEmitter* e, LLVMClassDesc* cd)
 static void collect_classes(XLLVMEmitter* e)
 {
 	e->class_count = 0;
+	/* Pass 1: Pre-register all class declarations so types can be resolved */
 	for (int i = 0; i < e->prog->statement_count; i++)
 	{
 		const AstStmt* stmt = e->prog->statements[i];
@@ -2755,32 +3078,52 @@ static void collect_classes(XLLVMEmitter* e)
 
 				cd->field_count = 0;
 				cd->static_field_count = 0;
-				for (int m = 0; m < stmt->as.class_decl.member_count; m++)
+			}
+		}
+	}
+
+	/* Pass 2: Populate fields now that all class types are known */
+	for (int i = 0; i < e->prog->statement_count; i++)
+	{
+		const AstStmt* stmt = e->prog->statements[i];
+		if (stmt->type == AST_STMT_CLASS_DECL)
+		{
+			LLVMClassDesc* cd = NULL;
+			for (int c = 0; c < e->class_count; c++)
+			{
+				if (strcmp(e->classes[c].name, stmt->as.class_decl.name) == 0)
 				{
-					const AstStmt* mem = stmt->as.class_decl.members[m];
-					if (mem->type == AST_STMT_VAR_DECL)
+					cd = &e->classes[c];
+					break;
+				}
+			}
+			if (!cd) continue;
+
+			for (int m = 0; m < stmt->as.class_decl.member_count; m++)
+			{
+				const AstStmt* mem = stmt->as.class_decl.members[m];
+				if (mem->type == AST_STMT_VAR_DECL)
+				{
+					if (mem->as.var_decl.is_static)
 					{
-						if (mem->as.var_decl.is_static)
+						if (cd->static_field_count < MAX_FIELDS_PER_CLASS)
 						{
-							if (cd->static_field_count < MAX_FIELDS_PER_CLASS)
-							{
-								LLVMStaticFieldDesc* sfd = &cd->static_fields[cd->static_field_count++];
-								snprintf(sfd->name, sizeof(sfd->name), "%s", mem->as.var_decl.var_name);
-								snprintf(sfd->type_name, sizeof(sfd->type_name), "%s", mem->as.var_decl.type_name ? mem->as.var_decl.type_name : "int");
-								snprintf(sfd->llvm_type, sizeof(sfd->llvm_type), "%s", xlang_type_to_llvm(e, sfd->type_name));
-							}
+							LLVMStaticFieldDesc* sfd = &cd->static_fields[cd->static_field_count++];
+							snprintf(sfd->name, sizeof(sfd->name), "%s", mem->as.var_decl.var_name);
+							snprintf(sfd->type_name, sizeof(sfd->type_name), "%s", mem->as.var_decl.type_name ? mem->as.var_decl.type_name : "int");
+							snprintf(sfd->llvm_type, sizeof(sfd->llvm_type), "%s", xlang_type_to_llvm(e, sfd->type_name));
 						}
-						else
+					}
+					else
+					{
+						if (cd->field_count < MAX_FIELDS_PER_CLASS)
 						{
-							if (cd->field_count < MAX_FIELDS_PER_CLASS)
-							{
-								LLVMFieldDesc* fd = &cd->fields[cd->field_count];
-								snprintf(fd->name, sizeof(fd->name), "%s", mem->as.var_decl.var_name);
-								snprintf(fd->type_name, sizeof(fd->type_name), "%s", mem->as.var_decl.type_name ? mem->as.var_decl.type_name : "int");
-								snprintf(fd->llvm_type, sizeof(fd->llvm_type), "%s", xlang_type_to_llvm(e, fd->type_name));
-								fd->slot = cd->field_count;
-								cd->field_count++;
-							}
+							LLVMFieldDesc* fd = &cd->fields[cd->field_count];
+							snprintf(fd->name, sizeof(fd->name), "%s", mem->as.var_decl.var_name);
+							snprintf(fd->type_name, sizeof(fd->type_name), "%s", mem->as.var_decl.type_name ? mem->as.var_decl.type_name : "int");
+							snprintf(fd->llvm_type, sizeof(fd->llvm_type), "%s", xlang_type_to_llvm(e, fd->type_name));
+							fd->slot = cd->field_count;
+							cd->field_count++;
 						}
 					}
 				}
@@ -2914,6 +3257,7 @@ static void emit_nested_functions(XLLVMEmitter* e, const AstStmt* stmt)
 
 static void emit_function(XLLVMEmitter* e, const AstStmt* fn_stmt, const char* class_prefix)
 {
+	if (!fn_stmt || fn_stmt->type != AST_STMT_FUNC_DECL || fn_stmt->as.func_decl.body == NULL) return;
 	const char* fn_name = fn_stmt->as.func_decl.name;
 	const char* ret_type_name = fn_stmt->as.func_decl.return_type ? fn_stmt->as.func_decl.return_type : "void";
 	if (class_prefix != NULL && strcmp(fn_name, class_prefix) == 0)
@@ -3099,7 +3443,8 @@ bool xllvm_emit_program(const AstProgram* prog, const char* source_file, FILE* o
 			        cd->name, cd->static_fields[sf].name, fty, init_val, llvm_type_align(fty));
 		}
 	}
-	fprintf(out, "@base = global i32 0, align 4\n\n");
+	/* (removed) "@base = global i32 0" -- leftover global, confirmed
+	 * unreferenced by any code this emitter generates. */
 	if (emitter.class_count > 0)
 		fprintf(out, "\n");
 
@@ -3207,6 +3552,7 @@ bool xllvm_emit_program(const AstProgram* prog, const char* source_file, FILE* o
 		{ "i32", "puts", "i8*" },
 		{ "void", "exit", "i32" },
 		{ "i8*", "malloc", "i64" },
+		{ "i8*", "calloc", "i64, i64" },
 		{ "void", "free", "i8*" },
 		{ "i8*", "gc_malloc", "i64, i32" },
 		{ "i8*", "gc_calloc", "i64, i64, i32" },
@@ -3224,6 +3570,7 @@ bool xllvm_emit_program(const AstProgram* prog, const char* source_file, FILE* o
 		{ "i8*", "_upper", "i8*" },
 		{ "i8*", "substr", "i8*, i32, i32" },
 		{ "i8*", "chr", "i32" },
+		{ "i8*", "x_readline", "" },
 		{ "i32", "index_of", "i8*, i8*" },
 		{ "i32", "str_eq", "i8*, i8*" },
 	};
@@ -3414,6 +3761,75 @@ bool xllvm_emit_program(const AstProgram* prog, const char* source_file, FILE* o
 		}
 		fprintf(out, "\n");
 	}
+
+	xextension_emit_llvm_declarations(out);
+
+	/* Emit Direct C-ABI FFI Declarations */
+	bool has_extern_decls = false;
+	char emitted_extern_decls[256][128];
+	int emitted_extern_count = 0;
+
+	for (int s = 0; s < prog->statement_count; s++)
+	{
+		AstStmt* stmt = prog->statements[s];
+		if (stmt && stmt->type == AST_STMT_EXTERN_BLOCK)
+		{
+			if (!has_extern_decls)
+			{
+				fprintf(out, "\n; Direct C-ABI FFI External Declarations\n");
+				has_extern_decls = true;
+			}
+			fprintf(out, "; From \"%s\"\n", stmt->as.extern_block.lib_name);
+			for (int f = 0; f < stmt->as.extern_block.func_count; f++)
+			{
+				AstStmt* fs = stmt->as.extern_block.func_decls[f];
+				if (fs && fs->type == AST_STMT_FUNC_DECL)
+				{
+					const char* fname = fs->as.func_decl.name;
+					/* Check if already declared in runtime groups */
+					bool already_declared = false;
+					for (size_t g = 0; g < sizeof(s_rt_groups) / sizeof(s_rt_groups[0]); g++)
+					{
+						const XLLVMRuntimeGroup* grp = &s_rt_groups[g];
+						for (size_t k = 0; k < grp->count; k++)
+						{
+							if (strcmp(grp->funcs[k].name, fname) == 0)
+							{
+								already_declared = true;
+								break;
+							}
+						}
+						if (already_declared) break;
+					}
+					for (int i = 0; !already_declared && i < emitted_extern_count; i++)
+					{
+						if (strcmp(emitted_extern_decls[i], fname) == 0)
+						{
+							already_declared = true;
+							break;
+						}
+					}
+					if (already_declared) continue;
+
+					if (emitted_extern_count < 256)
+					{
+						snprintf(emitted_extern_decls[emitted_extern_count++], sizeof(emitted_extern_decls[0]), "%s", fname);
+					}
+
+					const char* ret_llvm = xlang_type_to_llvm(&emitter, fs->as.func_decl.return_type);
+					fprintf(out, "declare %s @%s(", ret_llvm, fname);
+					for (int p = 0; p < fs->as.func_decl.param_count; p++)
+					{
+						const char* pty = xlang_type_to_llvm(&emitter, fs->as.func_decl.params[p].type_name);
+						if (p > 0) fprintf(out, ", ");
+						fprintf(out, "%s", pty);
+					}
+					fprintf(out, ")\n");
+				}
+			}
+		}
+	}
+	if (has_extern_decls) fprintf(out, "\n");
 
 	/* 6. Write Functions IR */
 	fprintf(out, "%s", functions_ir);

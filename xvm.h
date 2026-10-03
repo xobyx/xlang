@@ -113,10 +113,38 @@ typedef struct XVm {
 	int global_count;
 
 	bool print_trace;
+	struct XVmTraceLog* trace_log;
 	bool jit_enabled;
 	int jit_threshold;
 	void* jit_engine;
 } XVm;
+
+typedef struct XVmTraceStep {
+	int step_index;
+	char func_name[64];
+	int offset;
+	int line;
+	char op_name[48];
+	char operands[128];
+	char stack_summary[512];
+	int stack_depth;
+	int call_depth;
+} XVmTraceStep;
+
+typedef struct XVmTraceLog {
+	XVmTraceStep* steps;
+	int count;
+	int capacity;
+	int max_steps;
+	bool truncated;
+	char exit_status[32];
+	char* captured_output;
+	size_t output_len;
+} XVmTraceLog;
+
+XVmTraceLog* xvm_trace_log_create(int max_steps);
+void xvm_trace_log_free(XVmTraceLog* log);
+void xvm_trace_record_step(XVm* vm, XVmTraceLog* log, XIrChunk* chunk, int offset);
 
 void xvm_init(XVm* vm);
 void xvm_free(XVm* vm);
@@ -139,6 +167,10 @@ XValue xvm_peek(XVm* vm, int distance);
 struct var;
 XValue var_to_xvalue(const struct var* v);
 void xvalue_to_var(XValue xv, struct var* out_v);
+
+/* Vectorcall builtins management */
+void xvec_builtins_init(void);
+void xvm_register_vector_func(const char* name, XVectorFn fn, int arity);
 
 #ifdef __cplusplus
 }

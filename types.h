@@ -15,7 +15,6 @@
 #endif
 
 struct func_deftion;
-struct fcall;
 #define KNRM  "\x1B[0m"
 #define KRED  "\x1B[31m"
 #define KGRN  "\x1B[32m"
@@ -24,7 +23,6 @@ struct fcall;
 #define KMAG  "\x1B[35m"
 #define KCYN  "\x1B[36m"
 #define KWHT  "\x1B[37m"
-typedef void(*function_node)(struct fcall*);
 #define t_long 0
 #define t_string 1
 #define t_char 2
@@ -54,7 +52,8 @@ typedef enum key_word_enum
 	_static_,
 	_import_,
 	_new_,
-	_in_
+	_in_,
+	_extern_
 } key_word_enum;
 
 // long[0],string[1],char[2],int[3]
@@ -139,6 +138,12 @@ typedef struct var_stack
 	struct type_instance* stack_holder;
 }var_stack;
 
+typedef enum XNativeKind {
+	NATIVE_KIND_VECTORCALL = 0,    /* Fast Vectorcall: XVectorFn */
+	NATIVE_KIND_C_ABI,             /* Pure C ABI pointer */
+	NATIVE_KIND_FFI                /* Dynamic C-ABI FFI via libffi */
+} XNativeKind;
+
 typedef struct func_deftion
 {
 	union
@@ -156,7 +161,6 @@ typedef struct func_deftion
 		int start_parm_count;
 		int start_param_count;
 	};
-	function_node func_code;
 	char* func_name;
 	function_type function_type;
 	struct type_def* return_type;
@@ -164,29 +168,11 @@ typedef struct func_deftion
 	enum var_access access;
 	//unused
 	struct func_deftion* stack_next;
-}func_deftion;
-typedef struct fcall
-{
-	union
-	{
-		var func_parmeters[100];
-		var func_parameters[100];
-	};
 
-	union
-	{
-		int parm_count_c;
-		int param_count;
-	};
-	union
-	{
-		struct func_deftion* deftion;
-		struct func_deftion* definition;
-	};
-	struct var _return;
-	struct var* context;
-	bool has_returned;
-}fcall;
+	XNativeKind native_kind;
+	void* vector_func;
+	void* ffi_func;
+}func_deftion;
 typedef struct func_stack
 {
 

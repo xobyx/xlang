@@ -118,6 +118,21 @@ XValue xval_obj(void* o)
 	return v;
 }
 
+XValue xval_pointer(void* ptr)
+{
+	XValue v;
+	v.type = VAL_INT;
+	v.as.ival = (int64_t)(uintptr_t)ptr;
+	return v;
+}
+
+void* xval_as_pointer(XValue v)
+{
+	if (v.type == VAL_INT) return (void*)(uintptr_t)v.as.ival;
+	if (v.type == VAL_OBJECT) return v.as.oval;
+	return NULL;
+}
+
 XValue xval_func(XFunction* fn)
 {
 	XValue v;
@@ -172,6 +187,40 @@ void xval_print(XValue v)
 		break;
 	case VAL_CLOSURE:
 		printf("<closure %p>", (void*)v.as.closureval);
+		break;
+	}
+}
+
+void xval_snprint(char* buf, size_t size, XValue v)
+{
+	if (!buf || size == 0) return;
+	switch (v.type)
+	{
+	case VAL_NULL:   snprintf(buf, size, "null"); break;
+	case VAL_BOOL:   snprintf(buf, size, "%s", v.as.bval ? "true" : "false"); break;
+	case VAL_INT:    snprintf(buf, size, "%" PRId64, v.as.ival); break;
+	case VAL_FLOAT:  snprintf(buf, size, "%g", v.as.fval); break;
+	case VAL_STRING:
+		{
+			const char* s = v.as.sval ? v.as.sval : "";
+			if (strlen(s) > 32)
+				snprintf(buf, size, "\"%.29s...\"", s);
+			else
+				snprintf(buf, size, "\"%s\"", s);
+			break;
+		}
+	case VAL_OBJECT: snprintf(buf, size, "[object %p]", v.as.oval); break;
+	case VAL_FUNCTION:
+		if (v.as.fnval)
+			snprintf(buf, size, "<fn %s/%d>", v.as.fnval->name ? v.as.fnval->name : "fn", v.as.fnval->arity);
+		else
+			snprintf(buf, size, "<fn null>");
+		break;
+	case VAL_CLOSURE:
+		snprintf(buf, size, "<closure %p>", (void*)v.as.closureval);
+		break;
+	default:
+		snprintf(buf, size, "?");
 		break;
 	}
 }
@@ -615,6 +664,197 @@ int xir_disassemble_instruction(const XIrChunk* chunk, int offset)
 	default:
 		printf("Unknown opcode 0x%02x\n", opcode);
 		return offset + 1;
+	}
+}
+
+void xir_disassemble_instruction_text(const XIrChunk* chunk, int offset,
+                                      char* op_name, size_t op_size,
+                                      char* operands, size_t opnd_size)
+{
+	if (!chunk || offset < 0 || offset >= chunk->count)
+	{
+		if (op_name && op_size > 0) snprintf(op_name, op_size, "OP_UNKNOWN");
+		if (operands && opnd_size > 0) operands[0] = '\0';
+		return;
+	}
+
+	uint8_t opcode = chunk->code[offset];
+	const char* name = xir_opcode_name((XIrOpCode)opcode);
+	if (op_name && op_size > 0) snprintf(op_name, op_size, "%s", name);
+	if (operands && opnd_size > 0) operands[0] = '\0';
+
+	if (!operands || opnd_size == 0) return;
+
+	switch (opcode)
+	{
+	case OP_CONST_INT:
+		if (offset + 4 < chunk->count)
+		{
+			int32_t val = (chunk->code[offset + 1] << 24) |
+			              (chunk->code[offset + 2] << 16) |
+			              (chunk->code[offset + 3] << 8)  |
+			              (chunk->code[offset + 4]);
+			snprintf(operands, opnd_size, "%d", val);
+		}
+		break;
+
+	case OP_CONST_FLOAT:
+	case OP_CONST_STR:
+		if (offset + 2 < chunk->count)
+		{
+			uint16_t idx = (chunk->code[offset + 1] << 8) | chunk->code[offset + 2];
+			if (idx < chunk->constants.count)
+			{
+				char vbuf[64];
+				xval_snprint(vbuf, sizeof(vbuf), chunk->constants.values[idx]);
+				snprintf(operands, opnd_size, "[%d] %s", idx, vbuf);
+			}
+			else
+			{
+				snprintf(operands, opnd_size, "[%d]", idx);
+			}
+		}
+		break;
+
+	case OP_LOAD_GLOBAL:
+	case OP_STORE_GLOBAL:
+	case OP_LOAD_FIELD:
+	case OP_STORE_FIELD:
+		if (offset + 2 < chunk->count)
+		{
+			uint16_t s_idx = (chunk->code[offset + 1] << 8) | chunk->code[offset + 2];
+			const char* sym = (s_idx < chunk->symbols.count) ? chunk->symbols.symbols[s_idx] : "?";
+			snprintf(operands, opnd_size, "'%s' (#%d)", sym, s_idx);
+		}
+		break;
+
+	case OP_LOAD_LOCAL:
+	case OP_STORE_LOCAL:
+		if (offset + 2 < chunk->count)
+		{
+			uint16_t slot = (chunk->code[offset + 1] << 8) | chunk->code[offset + 2];
+			snprintf(operands, opnd_size, "slot %d", slot);
+		}
+		break;
+
+	case OP_BUILD_LIST:
+		if (offset + 2 < chunk->count)
+		{
+			uint16_t count = (chunk->code[offset + 1] << 8) | chunk->code[offset + 2];
+			snprintf(operands, opnd_size, "%d items", count);
+		}
+		break;
+
+	case OP_GET_FIELD_INDEX:
+	case OP_SET_FIELD_INDEX:
+		if (offset + 2 < chunk->count)
+		{
+			uint16_t slot = (chunk->code[offset + 1] << 8) | chunk->code[offset + 2];
+			snprintf(operands, opnd_size, "slot [%d]", slot);
+		}
+		break;
+
+	case OP_CLASS:
+		if (offset + 6 < chunk->count)
+		{
+			uint16_t s_cls = (chunk->code[offset + 1] << 8) | chunk->code[offset + 2];
+			uint16_t s_base = (chunk->code[offset + 3] << 8) | chunk->code[offset + 4];
+			uint16_t fcount = (chunk->code[offset + 5] << 8) | chunk->code[offset + 6];
+			const char* cname = (s_cls < chunk->symbols.count) ? chunk->symbols.symbols[s_cls] : "?";
+			const char* bname = (s_base != 0xFFFF && s_base < chunk->symbols.count) ? chunk->symbols.symbols[s_base] : "Object";
+			snprintf(operands, opnd_size, "%s : %s (%d fields)", cname, bname, fcount);
+		}
+		break;
+
+	case OP_METHOD:
+		if (offset + 5 < chunk->count)
+		{
+			uint16_t s_cls = (chunk->code[offset + 1] << 8) | chunk->code[offset + 2];
+			uint16_t s_m = (chunk->code[offset + 3] << 8) | chunk->code[offset + 4];
+			uint8_t arity = chunk->code[offset + 5];
+			const char* cname = (s_cls < chunk->symbols.count) ? chunk->symbols.symbols[s_cls] : "?";
+			const char* mname = (s_m < chunk->symbols.count) ? chunk->symbols.symbols[s_m] : "?";
+			snprintf(operands, opnd_size, "%s.%s (%d args)", cname, mname, arity);
+		}
+		break;
+
+	case OP_NEW_INSTANCE:
+		if (offset + 3 < chunk->count)
+		{
+			uint16_t s_idx = (chunk->code[offset + 1] << 8) | chunk->code[offset + 2];
+			uint8_t arg_count = chunk->code[offset + 3];
+			const char* sym = (s_idx < chunk->symbols.count) ? chunk->symbols.symbols[s_idx] : "?";
+			snprintf(operands, opnd_size, "%s (%d args)", sym, arg_count);
+		}
+		break;
+
+	case OP_JUMP:
+	case OP_JUMP_IF_FALSE:
+	case OP_JUMP_IF_TRUE:
+	case OP_LOOP:
+		if (offset + 2 < chunk->count)
+		{
+			uint16_t target = (chunk->code[offset + 1] << 8) | chunk->code[offset + 2];
+			snprintf(operands, opnd_size, "-> %04d", target);
+		}
+		break;
+
+	case OP_CALL:
+		if (offset + 3 < chunk->count)
+		{
+			uint16_t s_idx = (chunk->code[offset + 1] << 8) | chunk->code[offset + 2];
+			uint8_t args = chunk->code[offset + 3];
+			const char* sym = (s_idx < chunk->symbols.count) ? chunk->symbols.symbols[s_idx] : "?";
+			snprintf(operands, opnd_size, "'%s' (%d args)", sym, args);
+		}
+		break;
+
+	case OP_CALL_METHOD:
+		if (offset + 3 < chunk->count)
+		{
+			uint16_t s_idx = (chunk->code[offset + 1] << 8) | chunk->code[offset + 2];
+			uint8_t args = chunk->code[offset + 3];
+			const char* sym = (s_idx < chunk->symbols.count) ? chunk->symbols.symbols[s_idx] : "?";
+			snprintf(operands, opnd_size, ".%s (%d args)", sym, args);
+		}
+		break;
+
+	case OP_PRINT:
+		if (offset + 1 < chunk->count)
+		{
+			uint8_t args = chunk->code[offset + 1];
+			snprintf(operands, opnd_size, "%d args", args);
+		}
+		break;
+
+	case OP_CLOSURE:
+		if (offset + 2 < chunk->count)
+		{
+			uint16_t c_idx = (chunk->code[offset + 1] << 8) | chunk->code[offset + 2];
+			if (c_idx < chunk->constants.count && chunk->constants.values[c_idx].type == VAL_FUNCTION)
+			{
+				XFunction* fn = chunk->constants.values[c_idx].as.fnval;
+				snprintf(operands, opnd_size, "<fn %s arity=%d>", fn ? fn->name : "?", fn ? fn->arity : 0);
+			}
+			else
+			{
+				snprintf(operands, opnd_size, "[%d]", c_idx);
+			}
+		}
+		break;
+
+	case OP_GET_UPVALUE:
+	case OP_SET_UPVALUE:
+		if (offset + 1 < chunk->count)
+		{
+			uint8_t slot = chunk->code[offset + 1];
+			snprintf(operands, opnd_size, "upvalue %d", slot);
+		}
+		break;
+
+	default:
+		operands[0] = '\0';
+		break;
 	}
 }
 

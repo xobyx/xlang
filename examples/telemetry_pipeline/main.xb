@@ -1,0 +1,326 @@
+// ============================================================================
+// Real-Life Production Architecture Example:
+// Industrial IoT Telemetry Ingestion, Analytics & Archival Pipeline
+// ============================================================================
+// This application demonstrates the seamless integration of ALL major xlang
+// architectural tiers and features in a unified real-world scenario:
+//
+// 1. Tier 1: SQLite3 Engine Vectorcall Extension (xsqlite3.so)
+//    - High-throughput relational storage, schema definition, indexes
+//    - Multi-statement atomic transactions (BEGIN / COMMIT)
+//    - Real-time analytical aggregations (query_int, query_float, query_value)
+//    - Serialized data exports (query_json for APIs, query_csv for reporting)
+//
+// 2. Tier 1: Zlib Compression Vectorcall Extension (xzlib.so)
+//    - Stream data integrity via IEEE 802.3 CRC-32 & Adler-32 checksums
+//    - In-memory Deflate compression & Inflate decompression
+//    - Direct disk streaming to Gzip (.gz) archives and disaster recovery
+//
+// 3. Tier 2: Direct C-ABI FFI Zero-Wrapper System Bindings
+//    - libm.so: Euclidean 3D vibration vector magnitude (sqrt, pow)
+//    - libm.so: Magnus-Tetens atmospheric Dew Point calculation (log, pow)
+//    - libc.so.6: String parsing and numerical utilities (abs, atoi, atof)
+//
+// 4. Object-Oriented Programming (OOP)
+//    - Classes with constructors, private fields, and analytical methods
+//
+// 5. Native AOT Compilation (Tier 3: xlang build)
+//    - Executes both in Bytecode VM and as an optimized standalone ELF binary
+// ============================================================================
+
+import "sqlite3"
+import "zlib"
+
+extern "libm.so" {
+    float sqrt(float x)
+    float pow(float base, float exp)
+    float log(float x)
+}
+
+extern "libc.so.6" {
+    int abs(int x)
+    int atoi(string s)
+    double atof(string s)
+}
+
+// ----------------------------------------------------------------------------
+// 1. Domain Modeling: Sensor Device & Telemetry Reading Classes
+// ----------------------------------------------------------------------------
+
+class SensorDevice() {
+    string device_id
+    string device_name
+    string location_zone
+    string sensor_type
+    int sample_rate_hz
+
+    SensorDevice(string id, string name, string zone, string stype, int rate) {
+        device_id = id
+        device_name = name
+        location_zone = zone
+        sensor_type = stype
+        sample_rate_hz = rate
+    }
+
+    void display_info() {
+        print("  [%s] %s | Zone: %s | Type: %s (%d Hz)", device_id, device_name, location_zone, sensor_type, sample_rate_hz)
+    }
+}
+
+class TelemetryReading() {
+    int timestamp
+    string device_id
+    float temp_c
+    float humidity_pct
+    float pressure_hpa
+    float vibration_mag
+    float dew_point_c
+    float power_watts
+
+    TelemetryReading(int ts, string id, float t, float h, float p, float vx, float vy, float vz, float watts) {
+        timestamp = ts
+        device_id = id
+        temp_c = t
+        humidity_pct = h
+        pressure_hpa = p
+        power_watts = watts
+
+        // Physics Calculation 1: 3D Euclidean Vibration Magnitude via libm.so
+        // V_mag = sqrt(vx^2 + vy^2 + vz^2)
+        vibration_mag = sqrt(pow(vx, 2.0) + pow(vy, 2.0) + pow(vz, 2.0))
+
+        // Physics Calculation 2: Magnus-Tetens Atmospheric Dew Point via libm.so
+        // alpha = ((a * T) / (b + T)) + ln(RH / 100)
+        // DewPoint = (b * alpha) / (a - alpha)
+        float a = 17.27
+        float b = 237.7
+        float alpha = ((a * t) / (b + t)) + log(h / 100.0)
+        dew_point_c = (b * alpha) / (a - alpha)
+    }
+
+    bool has_anomaly() {
+        if (vibration_mag > 8.0 || temp_c > 80.0) {
+            return true
+        }
+        return false
+    }
+}
+
+// ----------------------------------------------------------------------------
+// 2. Application Pipeline Header & System Diagnostics
+// ----------------------------------------------------------------------------
+
+print("==================================================================")
+print("  Industrial IoT Telemetry Ingestion & Predictive Analytics Engine")
+print("==================================================================")
+
+string sqlite_ver = sqlite3.engine_version()
+string zlib_ver = zlib.version()
+print("Runtime Engines : SQLite3 v%s | Zlib v%s | libm & libc C-ABI", sqlite_ver, zlib_ver)
+assert(strlen(sqlite_ver) > 0, "SQLite engine version must be available")
+assert(strlen(zlib_ver) > 0, "Zlib engine version must be available")
+
+// ----------------------------------------------------------------------------
+// 3. Database Initialization & Schema Creation
+// ----------------------------------------------------------------------------
+
+print("\n--- [Phase 1] Database Initialization & Schema Setup ---")
+int db = sqlite3.connect(":memory:")
+print("Connected to in-memory telemetry database (handle: %d)", db)
+assert(db > 0, "Database handle must be valid")
+
+// Create Devices table
+int rc_dev = sqlite3.execute(db, "CREATE TABLE devices (device_id TEXT PRIMARY KEY, name TEXT, zone TEXT, sensor_type TEXT, sample_rate_hz INT)")
+assert(rc_dev == 0, "Failed to create devices table")
+
+// Create Telemetry table
+int rc_tel = sqlite3.execute(db, "CREATE TABLE telemetry (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp INT, device_id TEXT, temp_c REAL, humidity_pct REAL, pressure_hpa REAL, vibration_mag REAL, dew_point_c REAL, power_watts REAL)")
+assert(rc_tel == 0, "Failed to create telemetry table")
+
+// Create Index for fast temporal & zone queries
+sqlite3.execute(db, "CREATE INDEX idx_tel_dev ON telemetry(device_id)")
+sqlite3.execute(db, "CREATE INDEX idx_tel_ts ON telemetry(timestamp)")
+print("Schema and indices successfully created.")
+
+// ----------------------------------------------------------------------------
+// 4. Device Fleet Registration
+// ----------------------------------------------------------------------------
+
+print("\n--- [Phase 2] Sensor Device Fleet Registration ---")
+
+SensorDevice dev1 = new SensorDevice("DEV-01", "Furnace Core Thermal Probe", "Zone-A", "Thermal/Radiation", 100)
+SensorDevice dev2 = new SensorDevice("DEV-02", "Turbine Shaft 1 Main Bearing", "Zone-B", "Vibration/Triaxial", 1000)
+SensorDevice dev3 = new SensorDevice("DEV-03", "Cleanroom Climate Sensor", "Zone-C", "Environmental/RH", 10)
+SensorDevice dev4 = new SensorDevice("DEV-04", "Exhaust Duct Extraction Fan", "Zone-A", "Thermal/Airflow", 50)
+SensorDevice dev5 = new SensorDevice("DEV-05", "High-Pressure Hydraulic Pump", "Zone-B", "Pressure/Vibration", 250)
+
+dev1.display_info()
+dev2.display_info()
+dev3.display_info()
+dev4.display_info()
+dev5.display_info()
+
+sqlite3.execute(db, "INSERT INTO devices VALUES ('DEV-01', 'Furnace Core Thermal Probe', 'Zone-A', 'Thermal/Radiation', 100)")
+sqlite3.execute(db, "INSERT INTO devices VALUES ('DEV-02', 'Turbine Shaft 1 Main Bearing', 'Zone-B', 'Vibration/Triaxial', 1000)")
+sqlite3.execute(db, "INSERT INTO devices VALUES ('DEV-03', 'Cleanroom Climate Sensor', 'Zone-C', 'Environmental/RH', 10)")
+sqlite3.execute(db, "INSERT INTO devices VALUES ('DEV-04', 'Exhaust Duct Extraction Fan', 'Zone-A', 'Thermal/Airflow', 50)")
+sqlite3.execute(db, "INSERT INTO devices VALUES ('DEV-05', 'High-Pressure Hydraulic Pump', 'Zone-B', 'Pressure/Vibration', 250)")
+
+int total_devs = sqlite3.query_int(db, "SELECT count(*) FROM devices")
+print("Registered %d sensor devices in fleet.", total_devs)
+assert(total_devs == 5, "Device count should be 5")
+
+// ----------------------------------------------------------------------------
+// 5. Ingestion of Multi-Channel Telemetry Stream
+// ----------------------------------------------------------------------------
+
+print("\n--- [Phase 3] Batch Telemetry Ingestion & Scientific Computation ---")
+
+// Use an atomic transaction for batch throughput
+sqlite3.execute(db, "BEGIN TRANSACTION")
+
+int base_time = 1727960000
+
+// Ingest baseline normal cycles across 4 time-steps
+for (int step = 1, step++, step <= 4) {
+    int cur_time = base_time + (step * 15)
+
+    // DEV-01: Furnace normal: ~72 C, low humidity, low vib
+    TelemetryReading r1 = new TelemetryReading(cur_time, "DEV-01", 72.5 + (step * 0.4), 18.0, 1012.8, 0.4, 0.5, 0.2, 3450.0)
+    // DEV-02: Turbine normal: ~45 C, moderate vib ~3.5 mm/s^2
+    TelemetryReading r2 = new TelemetryReading(cur_time, "DEV-02", 45.2 + (step * 0.2), 48.5, 1013.0, 2.0, 2.5, 1.2, 8200.0)
+    // DEV-03: Cleanroom: ~21 C, controlled 45% humidity, negligible vib
+    TelemetryReading r3 = new TelemetryReading(cur_time, "DEV-03", 21.0 + (step * 0.1), 45.0, 1014.2, 0.05, 0.05, 0.05, 450.0)
+    // DEV-04: Exhaust fan: ~38 C, moderate vib
+    TelemetryReading r4 = new TelemetryReading(cur_time, "DEV-04", 38.0 + (step * 0.3), 35.0, 1012.0, 1.5, 1.8, 0.9, 1200.0)
+    // DEV-05: Pump: ~52 C, vib ~4.2 mm/s^2
+    TelemetryReading r5 = new TelemetryReading(cur_time, "DEV-05", 52.0 + (step * 0.5), 40.0, 1011.5, 2.5, 3.0, 1.8, 5600.0)
+
+    // Insert records
+    sqlite3.execute(db, "INSERT INTO telemetry (timestamp, device_id, temp_c, humidity_pct, pressure_hpa, vibration_mag, dew_point_c, power_watts) VALUES (" + r1.timestamp + ", '" + r1.device_id + "', " + r1.temp_c + ", " + r1.humidity_pct + ", " + r1.pressure_hpa + ", " + r1.vibration_mag + ", " + r1.dew_point_c + ", " + r1.power_watts + ")")
+    sqlite3.execute(db, "INSERT INTO telemetry (timestamp, device_id, temp_c, humidity_pct, pressure_hpa, vibration_mag, dew_point_c, power_watts) VALUES (" + r2.timestamp + ", '" + r2.device_id + "', " + r2.temp_c + ", " + r2.humidity_pct + ", " + r2.pressure_hpa + ", " + r2.vibration_mag + ", " + r2.dew_point_c + ", " + r2.power_watts + ")")
+    sqlite3.execute(db, "INSERT INTO telemetry (timestamp, device_id, temp_c, humidity_pct, pressure_hpa, vibration_mag, dew_point_c, power_watts) VALUES (" + r3.timestamp + ", '" + r3.device_id + "', " + r3.temp_c + ", " + r3.humidity_pct + ", " + r3.pressure_hpa + ", " + r3.vibration_mag + ", " + r3.dew_point_c + ", " + r3.power_watts + ")")
+    sqlite3.execute(db, "INSERT INTO telemetry (timestamp, device_id, temp_c, humidity_pct, pressure_hpa, vibration_mag, dew_point_c, power_watts) VALUES (" + r4.timestamp + ", '" + r4.device_id + "', " + r4.temp_c + ", " + r4.humidity_pct + ", " + r4.pressure_hpa + ", " + r4.vibration_mag + ", " + r4.dew_point_c + ", " + r4.power_watts + ")")
+    sqlite3.execute(db, "INSERT INTO telemetry (timestamp, device_id, temp_c, humidity_pct, pressure_hpa, vibration_mag, dew_point_c, power_watts) VALUES (" + r5.timestamp + ", '" + r5.device_id + "', " + r5.temp_c + ", " + r5.humidity_pct + ", " + r5.pressure_hpa + ", " + r5.vibration_mag + ", " + r5.dew_point_c + ", " + r5.power_watts + ")")
+}
+
+// Ingest Step 5: Critical Machine Anomaly (Turbine bearing failure surge + Furnace overheat)
+int alert_time = base_time + 75
+TelemetryReading anom_vib = new TelemetryReading(alert_time, "DEV-02", 78.4, 42.0, 1011.0, 8.5, 9.2, 5.4, 14500.0)
+TelemetryReading anom_temp = new TelemetryReading(alert_time, "DEV-01", 94.8, 12.0, 1009.5, 1.2, 1.5, 0.8, 5100.0)
+
+assert(anom_vib.has_anomaly() == true, "Vibration anomaly flag should trigger")
+assert(anom_temp.has_anomaly() == true, "Temperature anomaly flag should trigger")
+
+sqlite3.execute(db, "INSERT INTO telemetry (timestamp, device_id, temp_c, humidity_pct, pressure_hpa, vibration_mag, dew_point_c, power_watts) VALUES (" + anom_vib.timestamp + ", '" + anom_vib.device_id + "', " + anom_vib.temp_c + ", " + anom_vib.humidity_pct + ", " + anom_vib.pressure_hpa + ", " + anom_vib.vibration_mag + ", " + anom_vib.dew_point_c + ", " + anom_vib.power_watts + ")")
+sqlite3.execute(db, "INSERT INTO telemetry (timestamp, device_id, temp_c, humidity_pct, pressure_hpa, vibration_mag, dew_point_c, power_watts) VALUES (" + anom_temp.timestamp + ", '" + anom_temp.device_id + "', " + anom_temp.temp_c + ", " + anom_temp.humidity_pct + ", " + anom_temp.pressure_hpa + ", " + anom_temp.vibration_mag + ", " + anom_temp.dew_point_c + ", " + anom_temp.power_watts + ")")
+
+sqlite3.execute(db, "COMMIT")
+
+int total_readings = sqlite3.query_int(db, "SELECT count(*) FROM telemetry")
+print("Ingestion complete: %d records stored in database.", total_readings)
+assert(total_readings == 22, "Expected 22 telemetry records")
+
+// ----------------------------------------------------------------------------
+// 6. Real-Time SQL Analytics & Statistical Intelligence
+// ----------------------------------------------------------------------------
+
+print("\n--- [Phase 4] Real-Time Analytical Aggregations ---")
+
+float avg_temp = sqlite3.query_float(db, "SELECT avg(temp_c) FROM telemetry")
+float max_vib = sqlite3.query_float(db, "SELECT max(vibration_mag) FROM telemetry")
+float total_kw = sqlite3.query_float(db, "SELECT sum(power_watts) / 1000.0 FROM telemetry")
+string peak_vib_dev = sqlite3.query_value(db, "SELECT d.name FROM telemetry t JOIN devices d ON t.device_id = d.device_id ORDER BY t.vibration_mag DESC LIMIT 1")
+int alert_count = sqlite3.query_int(db, "SELECT count(*) FROM telemetry WHERE vibration_mag > 8.0 OR temp_c > 85.0")
+
+print("Fleet Average Temperature  : %.2f C", avg_temp)
+print("Peak Vibration Observed    : %.3f mm/s^2", max_vib)
+print("Device with Peak Vibration : %s", peak_vib_dev)
+print("Total Energy Consumption   : %.2f kW", total_kw)
+print("Critical Safety Alarms     : %d event(s)", alert_count)
+
+assert(max_vib > 13.0, "Turbine peak vibration calculation check")
+assert(alert_count == 2, "Alarm count check (1 vib + 1 temp)")
+
+// Zone-level summary table using CSV export
+print("\n--- [Phase 5] Tabular Zone Summary Export (CSV) ---")
+string zone_csv = sqlite3.query_csv(db, "SELECT d.zone, count(*) as readings, round(avg(t.temp_c), 1) as avg_temp, round(max(t.vibration_mag), 2) as max_vib, round(sum(t.power_watts)/1000.0, 1) as energy_kw FROM telemetry t JOIN devices d ON t.device_id = d.device_id GROUP BY d.zone ORDER BY d.zone")
+print("%s", zone_csv)
+
+// Detailed anomalies payload using JSON export
+print("--- [Phase 6] Incident Triage Payload (JSON) ---")
+string incident_json = sqlite3.query_json(db, "SELECT t.id, t.device_id, d.name, d.zone, round(t.temp_c, 1) as temp_c, round(t.vibration_mag, 2) as vib_mag, round(t.dew_point_c, 1) as dew_c FROM telemetry t JOIN devices d ON t.device_id = d.device_id WHERE t.vibration_mag > 8.0 OR t.temp_c > 85.0 ORDER BY t.vibration_mag DESC")
+print("%s", incident_json)
+assert(strlen(incident_json) > 50, "Incident JSON payload should be populated")
+
+// ----------------------------------------------------------------------------
+// 7. Data Stream Integrity & Checksum Hashing (Zlib)
+// ----------------------------------------------------------------------------
+
+print("\n--- [Phase 7] Data Stream Integrity & Checksum Verification ---")
+
+int raw_bytes_len = strlen(incident_json)
+int crc = zlib.crc32(0, incident_json)
+int adler = zlib.adler32(1, incident_json)
+
+print("Incident Payload Size : %d bytes", raw_bytes_len)
+print("IEEE 802.3 CRC-32     : %d (0x%X)", crc, crc)
+print("Adler-32 Checksum     : %d (0x%X)", adler, adler)
+
+// ----------------------------------------------------------------------------
+// 8. In-Memory Deflate Compression & Decompression
+// ----------------------------------------------------------------------------
+
+print("\n--- [Phase 8] In-Memory Deflate Compression ---")
+
+string comp_hex = zlib.compress(incident_json)
+int comp_len_bytes = strlen(comp_hex) / 2
+int bound_size = zlib.compress_bound(raw_bytes_len)
+
+print("Upper Bound Estimation : %d bytes", bound_size)
+print("Compressed Raw Size    : %d bytes (encoded as %d hex characters)", comp_len_bytes, strlen(comp_hex))
+
+// Decompress in-memory and verify bit-for-bit equivalence
+string restored_json = zlib.uncompress(comp_hex)
+assert(restored_json == incident_json, "Decompressed payload must equal original JSON exactly")
+print("Integrity Check        : PASSED (Decompressed string matches original)")
+
+// ----------------------------------------------------------------------------
+// 9. Persistent Snapshot Archival & Disaster Recovery (Gzip Streaming)
+// ----------------------------------------------------------------------------
+
+print("\n--- [Phase 9] Persistent Snapshot Archival & Recovery ---")
+
+string archive_file = "telemetry_incident_snapshot.json.gz"
+int bytes_written = zlib.gz_write(archive_file, incident_json)
+print("Serialized snapshot to : '%s' (%d uncompressed bytes written)", archive_file, bytes_written)
+assert(bytes_written == raw_bytes_len, "All uncompressed bytes should be written to archive")
+
+// Disaster Recovery Simulation: Read back from Gzip archive
+string recovered_json = zlib.gz_read(archive_file)
+print("Recovered snapshot from: '%s' (%d bytes restored)", archive_file, strlen(recovered_json))
+
+// Validate Checksum of recovered payload
+int recovered_crc = zlib.crc32(0, recovered_json)
+print("Recovered CRC-32       : %d", recovered_crc)
+assert(recovered_crc == crc, "Disaster recovery CRC-32 must match original")
+
+// Clean up temporary archive file
+file_remove(archive_file)
+print("Archival validation    : PASSED (Temporary archive file cleanly removed)")
+
+// ----------------------------------------------------------------------------
+// 10. Clean Database Teardown & Final Report
+// ----------------------------------------------------------------------------
+
+int memory_used = sqlite3.memory_usage()
+print("\n--- [Phase 10] Clean Teardown ---")
+print("SQLite Engine Memory Used Before Exit : %d bytes", memory_used)
+
+int rc_close = sqlite3.disconnect(db)
+assert(rc_close == 0, "Database should close cleanly")
+print("Telemetry database disconnected cleanly.")
+
+print("\n==================================================================")
+print("  Industrial IoT Telemetry Pipeline Run Complete (All Tests PASS)  ")
+print("==================================================================")

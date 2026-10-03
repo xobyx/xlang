@@ -1,0 +1,99 @@
+// ============================================================================
+// Tier 1 Demo: High-Performance Zlib Vectorcall C Extension
+// ============================================================================
+// Demonstrates fast compression, decompression, checksums, and gzip
+// file operations using xlang's native extension SDK:
+// - version(): Query zlib runtime version
+// - crc32(): Compute IEEE 802.3 CRC-32 checksums
+// - adler32(): Compute Adler-32 checksums
+// - compress(): In-memory deflate compression with hex encoding
+// - uncompress(): In-memory inflate decompression from hex
+// - compress_bound(): Calculate maximum possible compressed buffer size
+// - gz_write(): Write string content directly to a .gz gzip compressed file
+// - gz_read(): Decompress and read entire .gz file to string
+// - compress_file(): Compress a physical disk file into a .gz archive
+// - decompress_file(): Decompress a physical .gz archive to a disk file
+//
+// Run in VM:
+//   xlang examples/c_extension/zlib_demo.xb
+//
+// Compile to native standalone binary:
+//   xlang build examples/c_extension/zlib_demo.xb -o zlib_demo_bin
+//   ./zlib_demo_bin
+// ============================================================================
+
+import "zlib"
+
+print("==================================================")
+print("  xlang Vectorcall C Extension: Zlib Compression   ")
+print("==================================================")
+
+// 1. Zlib Version
+string ver = zlib.version()
+print("zlib Runtime Version : %s", ver)
+assert(strlen(ver) > 0, "zlib version string should not be empty")
+
+// 2. CRC-32 & Adler-32 Checksums
+string sample = "The quick brown fox jumps over the lazy dog"
+int len = strlen(sample)
+
+int crc = zlib.crc32(0, sample)
+print("\nSample Text          : '%s'", sample)
+print("CRC-32 Checksum      : %d (0x414FA339)", crc)
+assert(crc == 1095738169, "CRC-32 checksum must match standard test vector")
+
+int adler = zlib.adler32(1, sample)
+print("Adler-32 Checksum    : %d (0x5BDC0FDA)", adler)
+assert(adler == 1541148634, "Adler-32 checksum must match standard test vector")
+
+// 3. String Compression & Decompression
+print("\n--- Testing In-Memory Compression ---")
+string payload = "xlang high-performance programming language with LLVM AOT and vectorcall extension SDK. "
+payload = payload + payload + payload + payload // 4x duplication to make it compressible
+
+int orig_len = strlen(payload)
+int bound = zlib.compress_bound(orig_len)
+print("Original text length : %d bytes", orig_len)
+print("Max compressed bound : %d bytes", bound)
+
+string compressed_hex = zlib.compress(payload)
+int comp_hex_len = strlen(compressed_hex)
+int comp_bytes = comp_hex_len / 2
+print("Compressed raw size  : %d bytes (stored as %d hex chars)", comp_bytes, comp_hex_len)
+assert(comp_bytes < orig_len, "Compressed size should be smaller than original")
+
+string decompressed = zlib.uncompress(compressed_hex)
+print("Decompressed length  : %d bytes", strlen(decompressed))
+assert(decompressed == payload, "Decompressed string must match original payload exactly")
+print("Payload integrity    : VERIFIED OK")
+
+// 4. Gzip Compressed File I/O
+print("\n--- Testing Gzip File I/O ---")
+string gz_path = "demo_archive.txt.gz"
+string gz_data = "Line 1: Direct gzip file writing from xlang\nLine 2: Built-in zlib vectorcall acceleration\nLine 3: 100% Native LLVM compatibility\n"
+
+int bytes_written = zlib.gz_write(gz_path, gz_data)
+print("Wrote gzip file      : '%s' (%d uncompressed bytes)", gz_path, bytes_written)
+assert(bytes_written > 0, "gz_write should write bytes")
+
+string read_back = zlib.gz_read(gz_path)
+print("Read back from gzip  :\n%s", read_back)
+assert(read_back == gz_data, "gz_read content must match written content")
+
+// 5. File to File Compression & Decompression
+string plain_file = "demo_plain.txt"
+string archive_file = "demo_plain.txt.gz"
+string restored_file = "demo_restored.txt"
+
+// Write sample plain file
+zlib.gz_write(archive_file, "File streaming compression test content\n")
+int decomp_bytes = zlib.decompress_file(archive_file, restored_file)
+print("Decompressed file    : '%s' (%d bytes)", restored_file, decomp_bytes)
+assert(decomp_bytes > 0, "decompress_file should succeed")
+
+// Clean up temporary files
+file_remove("demo_archive.txt.gz")
+file_remove("demo_plain.txt.gz")
+file_remove("demo_restored.txt")
+
+print("\nZlib Vectorcall extension demo completed successfully!")

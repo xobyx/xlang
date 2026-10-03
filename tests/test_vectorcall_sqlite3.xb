@@ -1,0 +1,49 @@
+// Vectorcall Extension Tests: SQLite3 Engine
+import "sqlite3"
+
+// 1. Version
+string ver = sqlite3.engine_version()
+assert(strlen(ver) > 0, "engine_version check")
+
+// 2. Connect & Disconnect
+int db = sqlite3.connect(":memory:")
+assert(db > 0, "connect check")
+
+// 3. Schema & DDL
+int rc = sqlite3.execute(db, "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INT, score REAL)")
+assert(rc == 0, "CREATE TABLE check")
+
+// 4. Inserts & Last ID
+sqlite3.execute(db, "INSERT INTO users (name, age, score) VALUES ('Alice', 30, 95.5)")
+assert(sqlite3.last_id(db) == 1, "last_id check 1")
+assert(sqlite3.changes_count(db) == 1, "changes_count check")
+
+sqlite3.execute(db, "INSERT INTO users (name, age, score) VALUES ('Bob', 25, 82.0)")
+assert(sqlite3.last_id(db) == 2, "last_id check 2")
+
+sqlite3.execute(db, "INSERT INTO users (name, age, score) VALUES ('Charlie', 35, 91.2)")
+assert(sqlite3.last_id(db) == 3, "last_id check 3")
+
+// 5. Scalar queries
+int count = sqlite3.query_int(db, "SELECT count(*) FROM users")
+assert(count == 3, "query_int count check")
+
+string name = sqlite3.query_value(db, "SELECT name FROM users WHERE id = 2")
+assert(name == "Bob", "query_value name check")
+
+float avg_score = sqlite3.query_float(db, "SELECT avg(score) FROM users")
+assert(avg_score > 89.0 && avg_score < 90.0, "query_float avg check")
+
+// 6. JSON query
+string json = sqlite3.query_json(db, "SELECT id, name FROM users ORDER BY id")
+assert(strlen(json) > 10, "query_json check")
+
+// 7. CSV query
+string csv = sqlite3.query_csv(db, "SELECT id, name FROM users ORDER BY id")
+assert(strlen(csv) > 10, "query_csv check")
+
+// 8. Disconnect
+int close_rc = sqlite3.disconnect(db)
+assert(close_rc == 0, "disconnect check")
+
+print("SQLite3 Vectorcall Tests PASSED!")

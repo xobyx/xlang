@@ -1,0 +1,216 @@
+import "raylib"
+
+// ============================================================================
+// Raylib Bouncing Balls Demo
+// Shows window lifecycle, 2D shape drawing, OOP classes, elastic 2D physics,
+// and mouse interaction with ball-to-ball collision reflection.
+// ============================================================================
+
+class Ball() {
+    float x
+    float y
+    float vx
+    float vy
+    float radius
+    int col
+
+    Ball() {
+        x = 400.0
+        y = 300.0
+        vx = 4.0
+        vy = 3.0
+        radius = 24.0
+        col = raylib.red()
+    }
+
+    void set(float init_x, float init_y, float init_vx, float init_vy, float r, int c) {
+        x = init_x
+        y = init_y
+        vx = init_vx
+        vy = init_vy
+        radius = r
+        col = c
+    }
+
+    void update(float screen_w, float screen_h) {
+        x = x + vx
+        y = y + vy
+
+        // Bounce on horizontal walls
+        if (x - radius <= 0.0) {
+            x = radius
+            vx = 0.0 - vx
+        }
+        if (x + radius >= screen_w) {
+            x = screen_w - radius
+            vx = 0.0 - vx
+        }
+
+        // Bounce on vertical walls
+        if (y - radius <= 0.0) {
+            y = radius
+            vy = 0.0 - vy
+        }
+        if (y + radius >= screen_h) {
+            y = screen_h - radius
+            vy = 0.0 - vy
+        }
+    }
+
+    // Resolve elastic 2D collision between this ball and another ball
+    void resolve_collision(Ball other) {
+        float dx = other.x - x
+        float dy = other.y - y
+        float dist2 = dx * dx + dy * dy
+        float min_dist = radius + other.radius
+
+        if (dist2 < min_dist * min_dist) {
+            if (dist2 > 0.0001) {
+                float dist = sqrt(dist2)
+
+                // Normal unit vector from this ball pointing to other ball
+                float nx = dx / dist
+                float ny = dy / dist
+
+                // Relative velocity vector (other - this)
+                float rvx = other.vx - vx
+                float rvy = other.vy - vy
+
+                // Velocity component projected along the contact normal
+                float vel_along_normal = rvx * nx + rvy * ny
+
+                // Only bounce if balls are moving towards each other
+                if (vel_along_normal < 0.0) {
+                    // Masses proportional to circle area (radius^2)
+                    float m1 = radius * radius
+                    float m2 = other.radius * other.radius
+
+                    // Elastic collision impulse scalar (coefficient of restitution = 1.0)
+                    float impulse = (0.0 - 2.0 * vel_along_normal) / (m1 + m2)
+
+                    // Apply momentum impulses along the contact normal
+                    vx = vx - impulse * m2 * nx
+                    vy = vy - impulse * m2 * ny
+                    other.vx = other.vx + impulse * m1 * nx
+                    other.vy = other.vy + impulse * m1 * ny
+
+                    // Positional separation to prevent balls from overlapping / sinking
+                    float overlap = 0.5 * (min_dist - dist)
+                    x = x - overlap * nx
+                    y = y - overlap * ny
+                    other.x = other.x + overlap * nx
+                    other.y = other.y + overlap * ny
+                }
+            }
+        }
+    }
+
+    void draw() {
+        int ix = x
+        int iy = y
+        raylib.draw_circle(ix, iy, radius, col)
+        raylib.draw_circle_lines(ix, iy, radius, raylib.white())
+    }
+}
+
+int screen_w = 800
+int screen_h = 600
+
+// Initialize Raylib window with 4x MSAA anti-aliasing and V-Sync
+raylib.set_config_flags(raylib.flag_msaa_4x() + raylib.flag_vsync())
+raylib.init_window(screen_w, screen_h, "xlang + Raylib: Bouncing Balls Demo")
+raylib.set_target_fps(60)
+
+// Initialize five balls with different positions, velocities, radii, and colors
+Ball b1 = new Ball()
+b1.set(150.0, 150.0, 4.5, 3.2, 28.0, raylib.red())
+
+Ball b2 = new Ball()
+b2.set(400.0, 250.0, -3.8, 4.8, 22.0, raylib.skyblue())
+
+Ball b3 = new Ball()
+b3.set(650.0, 400.0, 5.2, -3.9, 34.0, raylib.gold())
+
+Ball b4 = new Ball()
+b4.set(300.0, 500.0, -4.2, -3.6, 18.0, raylib.green())
+
+Ball b5 = new Ball()
+b5.set(520.0, 180.0, -3.5, 4.1, 26.0, raylib.color(200, 80, 240, 255))
+
+int bg_color = raylib.color(24, 28, 36, 255)
+int panel_color = raylib.color(38, 43, 56, 230)
+int grid_color = raylib.color(35, 41, 54, 255)
+
+print("Starting Raylib animation loop (800x600 @ 60 FPS)...\n")
+
+// Main animation and render loop
+while (raylib.window_should_close() == 0) {
+    float sw = 800.0
+    float sh = 600.0
+
+    // 1. Update ball positions and bounce against walls
+    b1.update(sw, sh)
+    b2.update(sw, sh)
+    b3.update(sw, sh)
+    b4.update(sw, sh)
+    b5.update(sw, sh)
+
+    // 2. Resolve elastic 2D collisions between all ball pairs
+    b1.resolve_collision(b2)
+    b1.resolve_collision(b3)
+    b1.resolve_collision(b4)
+    b1.resolve_collision(b5)
+    b2.resolve_collision(b3)
+    b2.resolve_collision(b4)
+    b2.resolve_collision(b5)
+    b3.resolve_collision(b4)
+    b3.resolve_collision(b5)
+    b4.resolve_collision(b5)
+
+    // 3. Interactive mouse teleportation: Left click teleports red ball
+    if (raylib.is_mouse_button_pressed(raylib.mouse_button_left()) != 0) {
+        int mx = raylib.get_mouse_x()
+        int my = raylib.get_mouse_y()
+        b1.x = mx
+        b1.y = my
+    }
+
+    // 4. Begin drawing frame
+    raylib.begin_drawing()
+    raylib.clear_background(bg_color)
+
+    // Draw background decorative grid
+    int gx = 0
+    while (gx < screen_w) {
+        raylib.draw_line(gx, 0, gx, screen_h, grid_color)
+        gx = gx + 40
+    }
+    int gy = 0
+    while (gy < screen_h) {
+        raylib.draw_line(0, gy, screen_w, gy, grid_color)
+        gy = gy + 40
+    }
+
+    // Draw all balls
+    b1.draw()
+    b2.draw()
+    b3.draw()
+    b4.draw()
+    b5.draw()
+
+    // Draw HUD info panel
+    raylib.draw_rectangle(20, 20, 430, 130, panel_color)
+    raylib.draw_rectangle_lines(20, 20, 430, 130, raylib.color(80, 95, 120, 255))
+
+    raylib.draw_text("xlang + Raylib 2D Physics Demo", 35, 32, 20, raylib.raywhite())
+    raylib.draw_text("Elastic Collisions: Balls bounce off walls & each other", 35, 60, 13, raylib.lightgray())
+    raylib.draw_text("Left Click: Teleport the red ball to cursor", 35, 80, 13, raylib.lightgray())
+    raylib.draw_text("Press ESC or Close Window to exit", 35, 100, 13, raylib.lightgray())
+    raylib.draw_fps(35, 122)
+
+    raylib.end_drawing()
+}
+
+// Clean up resources and close window
+raylib.close_window()
+print("Window closed. Raylib demo complete!\n")

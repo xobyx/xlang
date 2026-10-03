@@ -7,14 +7,25 @@ __  __   ___   | |__    _   _  __  __
 						 __/ |
 						|___/        */
 #include "xlang_main.h"
-#if defined (_MSC_VER)
+#if defined (_MSC_VER) || defined(_WIN32)
 #include <direct.h>
+#include <io.h>
+#define x_dup _dup
+#define x_dup2 _dup2
+#define x_fileno _fileno
+#define x_close _close
 #else
-#include<unistd.h>
+#include <unistd.h>
+#define x_dup dup
+#define x_dup2 dup2
+#define x_fileno fileno
+#define x_close close
 #endif
 #include <time.h>
 #include "xsys.h"
 #include "xcollection.h"
+#include "xextension.h"
+#include "xffi.h"
 #include "ximport.h"
 #include "xgc.h"
 #include "xast.h"
@@ -113,6 +124,8 @@ void int_xlang()
 	install_default_types();
 	install_default_functions();
 	x_collections_init();
+	xextension_init();
+	xffi_init();
 	x_import_init();
 	gc_init();
 }
@@ -468,6 +481,7 @@ int main(const int argc, char** argv)
 	bool flag_build = false;
 	bool flag_release = false;
 	bool flag_debug = false;
+	char extra_linker_flags[1024] = {0};
 	const char* script_path = NULL;
 	int script_idx = -1;
 
@@ -531,11 +545,57 @@ int main(const int argc, char** argv)
 		{
 			flag_stats = true;
 		}
+		else if (strcmp(argv[i], "-L") == 0)
+		{
+			i++;
+			if (i < argc)
+			{
+				char abs_buf[1024];
+				const char* p = realpath(argv[i], abs_buf) ? abs_buf : argv[i];
+				xffi_add_search_path(p);
+				strncat(extra_linker_flags, " -L\"", sizeof(extra_linker_flags) - strlen(extra_linker_flags) - 1);
+				strncat(extra_linker_flags, p, sizeof(extra_linker_flags) - strlen(extra_linker_flags) - 1);
+				strncat(extra_linker_flags, "\" -Wl,-rpath,\"", sizeof(extra_linker_flags) - strlen(extra_linker_flags) - 1);
+				strncat(extra_linker_flags, p, sizeof(extra_linker_flags) - strlen(extra_linker_flags) - 1);
+				strncat(extra_linker_flags, "\"", sizeof(extra_linker_flags) - strlen(extra_linker_flags) - 1);
+			}
+		}
+		else if (strncmp(argv[i], "-L", 2) == 0)
+		{
+			char abs_buf[1024];
+			const char* raw = argv[i] + 2;
+			const char* p = realpath(raw, abs_buf) ? abs_buf : raw;
+			xffi_add_search_path(p);
+			strncat(extra_linker_flags, " -L\"", sizeof(extra_linker_flags) - strlen(extra_linker_flags) - 1);
+			strncat(extra_linker_flags, p, sizeof(extra_linker_flags) - strlen(extra_linker_flags) - 1);
+			strncat(extra_linker_flags, "\" -Wl,-rpath,\"", sizeof(extra_linker_flags) - strlen(extra_linker_flags) - 1);
+			strncat(extra_linker_flags, p, sizeof(extra_linker_flags) - strlen(extra_linker_flags) - 1);
+			strncat(extra_linker_flags, "\"", sizeof(extra_linker_flags) - strlen(extra_linker_flags) - 1);
+		}
+		else if (strcmp(argv[i], "-l") == 0)
+		{
+			i++;
+			if (i < argc)
+			{
+				strncat(extra_linker_flags, " -l", sizeof(extra_linker_flags) - strlen(extra_linker_flags) - 1);
+				strncat(extra_linker_flags, argv[i], sizeof(extra_linker_flags) - strlen(extra_linker_flags) - 1);
+			}
+		}
+		else if (strncmp(argv[i], "-l", 2) == 0)
+		{
+			strncat(extra_linker_flags, " ", sizeof(extra_linker_flags) - strlen(extra_linker_flags) - 1);
+			strncat(extra_linker_flags, argv[i], sizeof(extra_linker_flags) - strlen(extra_linker_flags) - 1);
+		}
+		else if (strncmp(argv[i], "-Wl,", 4) == 0)
+		{
+			strncat(extra_linker_flags, " ", sizeof(extra_linker_flags) - strlen(extra_linker_flags) - 1);
+			strncat(extra_linker_flags, argv[i], sizeof(extra_linker_flags) - strlen(extra_linker_flags) - 1);
+		}
 		else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0)
 		{
 			printf("xlang 0.4.0 - Language & Runtime\n");
 			printf("Usage: xlang [options] <script.xb | bytecode.xbc> [args...]\n");
-			printf("       xlang build [--debug|--release] <script.xb> [-o <binary>]\n\n");
+			printf("       xlang build [--debug|--release] <script.xb> [-o <binary>] [-L<dir>] [-l<lib>]\n\n");
 			printf("Options:\n");
 			printf("  -c, --compile   Compile script to bytecode (.xbc)\n");
 			printf("  -o <file>       Specify output file path (bytecode, LLVM IR, or binary)\n");
@@ -543,6 +603,8 @@ int main(const int argc, char** argv)
 			printf("  build           Compile script to standalone native binary via LLVM\n");
 			printf("  --debug, -g     Build debug binary with assertions and debug symbols (default)\n");
 			printf("  --release       Build optimized release binary with assertions elided\n");
+			printf("  -L<dir>         Add directory to linker search path (for build)\n");
+			printf("  -l<lib>         Link native library (for build)\n");
 			printf("  --jit           Execute script via in-process LLVM ORC JIT\n");
 			printf("  --dump-ast      Parse script and display Structured AST\n");
 			printf("  --dump-ir       Compile/load bytecode and disassemble\n");
@@ -805,12 +867,65 @@ int main(const int argc, char** argv)
 				rt_obj = "/usr/local/lib/xlang/xllvm_rt.o";
 		}
 
+		char ext_link_flags[2048] = {0};
+		int loaded_count = xextension_get_loaded_lib_count();
+		for (int k = 0; k < loaded_count; k++)
+		{
+			const char* libp = xextension_get_loaded_lib_path(k);
+			if (libp && *libp)
+			{
+				strncat(ext_link_flags, " \"", sizeof(ext_link_flags) - strlen(ext_link_flags) - 1);
+				strncat(ext_link_flags, libp, sizeof(ext_link_flags) - strlen(ext_link_flags) - 1);
+				strncat(ext_link_flags, "\"", sizeof(ext_link_flags) - strlen(ext_link_flags) - 1);
+			}
+		}
+		int ffi_loaded_count = xffi_get_loaded_lib_count();
+		for (int k = 0; k < ffi_loaded_count; k++)
+		{
+			const char* libp = xffi_get_loaded_lib_path(k);
+			if (libp && *libp)
+			{
+				if (access(libp, R_OK) == 0)
+				{
+					strncat(ext_link_flags, " \"", sizeof(ext_link_flags) - strlen(ext_link_flags) - 1);
+					strncat(ext_link_flags, libp, sizeof(ext_link_flags) - strlen(ext_link_flags) - 1);
+					strncat(ext_link_flags, "\"", sizeof(ext_link_flags) - strlen(ext_link_flags) - 1);
+				}
+				else
+				{
+					const char* base = strrchr(libp, '/');
+					base = base ? base + 1 : libp;
+					if (strstr(base, ".so.") != NULL)
+					{
+						/* Versioned shared object (e.g. libsqlite3.so.0 -> -l:libsqlite3.so.0) */
+						strncat(ext_link_flags, " -l:", sizeof(ext_link_flags) - strlen(ext_link_flags) - 1);
+						strncat(ext_link_flags, base, sizeof(ext_link_flags) - strlen(ext_link_flags) - 1);
+					}
+					else
+					{
+						char mod_buf[256];
+						snprintf(mod_buf, sizeof(mod_buf), "%s", base);
+						char* dot = strstr(mod_buf, ".so");
+						if (dot) *dot = '\0';
+						const char* link_name = mod_buf;
+						if (strncmp(link_name, "lib", 3) == 0) link_name += 3;
+						strncat(ext_link_flags, " -l", sizeof(ext_link_flags) - strlen(ext_link_flags) - 1);
+						strncat(ext_link_flags, link_name, sizeof(ext_link_flags) - strlen(ext_link_flags) - 1);
+					}
+				}
+			}
+		}
+		if (loaded_count > 0 || ffi_loaded_count > 0)
+		{
+			strncat(ext_link_flags, " -Wl,-rpath,'$ORIGIN' -Wl,-rpath,'$ORIGIN/lib' -Wl,-rpath,./lib -Wl,-rpath,lib", sizeof(ext_link_flags) - strlen(ext_link_flags) - 1);
+		}
+
 		const char* opt_flags = is_release_build ? "-O2 -s" : "-g -O0";
-		char compile_cmd[1280];
+		char compile_cmd[8192];
 		if (rt_obj)
-			snprintf(compile_cmd, sizeof(compile_cmd), "clang %s -Wno-override-module \"%s\" \"%s\" -L. -lpcre -lm -o \"%s\"", opt_flags, ll_path, rt_obj, bin_target);
+			snprintf(compile_cmd, sizeof(compile_cmd), "clang %s -Wno-override-module \"%s\" \"%s\"%s%s -L. -Llib -L./lib -lpcre -lm -ldl -lffi -o \"%s\"", opt_flags, ll_path, rt_obj, ext_link_flags, extra_linker_flags, bin_target);
 		else
-			snprintf(compile_cmd, sizeof(compile_cmd), "clang %s -Wno-override-module \"%s\" -L. -lpcre -lm -o \"%s\"", opt_flags, ll_path, bin_target);
+			snprintf(compile_cmd, sizeof(compile_cmd), "clang %s -Wno-override-module \"%s\"%s%s -L. -Llib -L./lib -lpcre -lm -ldl -lffi -o \"%s\"", opt_flags, ll_path, ext_link_flags, extra_linker_flags, bin_target);
 		int compile_res = system(compile_cmd);
 		if (compile_res == 0)
 		{
@@ -908,7 +1023,55 @@ int main(const int argc, char** argv)
 		if (dot) strcpy(dot, ".ir.html");
 		else strcat(html_path, ".ir.html");
 
-		bool ok = xdis_html_write(&chunk, script_path, html_path);
+		/* Run VM with execution tracing enabled and capture console output */
+		XVm vm;
+		xvm_init(&vm);
+		vm.print_trace = false;
+		XVmTraceLog* trace_log = xvm_trace_log_create(25000);
+		vm.trace_log = trace_log;
+
+		FILE* temp_out = tmpfile();
+		int saved_stdout = -1;
+		if (temp_out)
+		{
+			fflush(stdout);
+			saved_stdout = x_dup(x_fileno(stdout));
+			x_dup2(x_fileno(temp_out), x_fileno(stdout));
+		}
+
+		XVmResult vm_res = xvm_run(&vm, &chunk);
+
+		if (temp_out)
+		{
+			fflush(stdout);
+			if (saved_stdout >= 0)
+			{
+				x_dup2(saved_stdout, x_fileno(stdout));
+				x_close(saved_stdout);
+			}
+			long out_len = ftell(temp_out);
+			if (out_len > 0)
+			{
+				rewind(temp_out);
+				if (out_len > 64 * 1024) out_len = 64 * 1024;
+				trace_log->captured_output = (char*)malloc(out_len + 1);
+				if (trace_log->captured_output)
+				{
+					size_t bytes_read = fread(trace_log->captured_output, 1, out_len, temp_out);
+					trace_log->captured_output[bytes_read] = '\0';
+					trace_log->output_len = bytes_read;
+				}
+			}
+			fclose(temp_out);
+		}
+
+		if (trace_log && !trace_log->truncated)
+		{
+			snprintf(trace_log->exit_status, sizeof(trace_log->exit_status), "%s",
+			         vm_res == VM_OK ? "VM_OK" : "RUNTIME_ERROR");
+		}
+
+		bool ok = xdis_html_write_full(&chunk, prog, script_path, html_path, trace_log);
 		if (ok)
 		{
 			printf("IR viewer written to: %s\n", html_path);
@@ -931,6 +1094,8 @@ int main(const int argc, char** argv)
 			fprintf(stderr, "Failed to write IR viewer HTML to '%s'\n", html_path);
 		}
 
+		if (trace_log) xvm_trace_log_free(trace_log);
+		xvm_free(&vm);
 		xir_chunk_free(&chunk);
 		ast_program_destroy(prog);
 		free(buff);
@@ -1017,6 +1182,8 @@ void clean_memory(void)
 		free(types);
 	free(t_varss);
 	free(t_funcs);
+	xextension_cleanup();
+	xffi_cleanup();
 	x_collections_cleanup();
 	x_import_cleanup();
 	gc_cleanup();

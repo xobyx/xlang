@@ -22,7 +22,7 @@ extern type_def SIMPLE_TYPE[];
 #define T_FUNC      (&SIMPLE_TYPE[9])
 #define T_TYPE_INFO (&SIMPLE_TYPE[10])
 
-#define SIMPLE_FUNC_COUNT 158
+#define SIMPLE_FUNC_COUNT 163
 extern func_stack base_function;
 
 /* Type System & Object Model */
@@ -54,8 +54,6 @@ func_deftion* get_obj_function(var* object_var, char* name);
 var* new_var(char* name, type_def* vtype);
 var* new_temp_var(type_def* typ);
 var* get_global_var_by_name(char* name);
-var* get_function_var_by_name(char* name, fcall* func_call);
-var* find_var_in_scope(char* name, fcall* called_function, var* called_var);
 
 /* Memory & Values */
 int* new_int(int count, int value);
@@ -67,7 +65,6 @@ void set_value_copy_var(var* dest, var* src);
 void install_default_functions(void);
 func_deftion* new_func(void);
 func_deftion* get_func_by_name(char* name);
-fcall* create_fcall(func_deftion* i);
 
 /* String & Buffer Utilities */
 int starts_with_keyword(const char* text, const char* keyword);
@@ -81,25 +78,11 @@ void assign_array_index(var* nvalue, var* marray, int index);
 var* get_array_item(var* name, int index);
 bool copy_array(var* out, void* out_memory, var* src);
 
-/* Standard Built-in Functions */
-void print(fcall* temp);
-void print_f(fcall* temp);
-void eval(fcall* temp);
-void xassert(fcall* fcall);
-void int_add(fcall* fcall);
-void xeql(fcall* y);
-void len(fcall* y);
-void xreplace(fcall* y);
-void str(fcall* d);
-void time_x(fcall* d);
-
 /* Assertion Configuration */
 void set_assert_enabled(bool enabled);
 bool is_assert_enabled(void);
 
 /* Deprecated Compatibility Aliases */
 static inline var* get_globle_var_by_name(char* name) { return get_global_var_by_name(name); }
-static inline var* fget_var_by_name_fc(char* name, fcall* y) { return get_function_var_by_name(name, y); }
-static inline var* all_get_var_by_name(char* name, fcall* f, var* v) { return find_var_in_scope(name, f, v); }
 static inline void scap_string(char* m) { unescape_string(m); }
 static inline func_deftion* get_obj_function2(var* o, char* n) { return get_obj_function(o, n); }

@@ -21,10 +21,13 @@ class HttpServer() {
         port = 8080
         is_running = 0
         request_count = 0
-        items_list.id = list_new()
-        req.headers.id = map_new()
-        req.params.id = map_new()
-        resp.custom_headers.id = map_new()
+        items_list = new List()
+		req = new HttpRequest()         
+        resp = new HttpResponse()
+		
+        req.headers = new Map()
+        req.params = new Map()
+        resp.custom_headers= new Map()
     }
 
     int init(string host_ip, int listen_port) {
